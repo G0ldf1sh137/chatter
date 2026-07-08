@@ -33,6 +33,38 @@ class RegistrationTests(TestCase):
         self.assertEqual(user.email, "bob@example.com")
         self.assertTrue(Profile.objects.filter(user=user).exists())
 
+    def test_signup_accepts_optional_first_and_last_name(self):
+        response = self.client.post(
+            reverse("register"),
+            {
+                "username": "bob",
+                "email": "bob@example.com",
+                "first_name": "Bob",
+                "last_name": "Smith",
+                "password1": "correct-horse-battery-staple",
+                "password2": "correct-horse-battery-staple",
+            },
+        )
+        self.assertRedirects(response, reverse("feed"))
+        user = User.objects.get(username="bob")
+        self.assertEqual(user.first_name, "Bob")
+        self.assertEqual(user.last_name, "Smith")
+
+    def test_signup_without_first_and_last_name_still_works(self):
+        response = self.client.post(
+            reverse("register"),
+            {
+                "username": "bob",
+                "email": "bob@example.com",
+                "password1": "correct-horse-battery-staple",
+                "password2": "correct-horse-battery-staple",
+            },
+        )
+        self.assertRedirects(response, reverse("feed"))
+        user = User.objects.get(username="bob")
+        self.assertEqual(user.first_name, "")
+        self.assertEqual(user.last_name, "")
+
     def test_signup_logs_the_user_in(self):
         self.client.post(
             reverse("register"),
