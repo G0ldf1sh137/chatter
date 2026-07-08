@@ -40,6 +40,14 @@ Registration and login also support "Continue with Google" alongside the regular
 
 A Google-created account gets a `Profile` automatically, same as username/password registration, and lands in the same `User` table — there's no separate "social user" model to manage.
 
+## Email verification
+
+Registering with username/password sends a verification link and does **not** log you in immediately — logging in is blocked until you click it. Google sign-in skips this, since Google already verified that email for you.
+
+In dev (no `EMAIL_HOST` set in `.env`), verification emails aren't actually sent — they print to the `runserver`/`docker compose logs web` console instead (`EMAIL_BACKEND` falls back to Django's console backend). Grab the verification link from there. Set `EMAIL_HOST`, `EMAIL_PORT`, `EMAIL_HOST_USER`, `EMAIL_HOST_PASSWORD` in `.env` to send real emails via SMTP. Links expire after 3 days (`EMAIL_VERIFICATION_MAX_AGE` in settings); an expired or invalid link offers a resend option.
+
+Accounts that existed before this feature was added (created via `docker compose exec web python manage.py createsuperuser`, direct DB access, etc.) are grandfathered in as verified by a data migration — only new registrations go through the gate.
+
 ## Profiles
 
 Users can set a bio and avatar image at `/settings/profile/`, and follow/unfollow other users from their profile page. Profiles show recent posts, recent comments, and post/comment/follower/following counts.

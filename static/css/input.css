@@ -124,4 +124,14 @@
         color: var(--color-muted);
         font-size: 0.875rem;
     }
+
+    form ul.errorlist {
+        margin: 0 0 0.5rem;
+        padding: 0.5rem 0.75rem;
+        list-style: none;
+        border-radius: 0.5rem;
+        background: color-mix(in srgb, var(--color-downvote) 12%, transparent);
+        color: var(--color-downvote);
+        font-size: 0.875rem;
+    }
 }

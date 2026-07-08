@@ -131,6 +131,25 @@ if not DEBUG:
     SECURE_CONTENT_TYPE_NOSNIFF = True
 
 
+# Email
+# Console backend in dev prints verification emails to the runserver log
+# instead of requiring real SMTP. Set EMAIL_HOST for a real backend (prod).
+if os.environ.get("EMAIL_HOST"):
+    EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
+    EMAIL_HOST = os.environ["EMAIL_HOST"]
+    EMAIL_PORT = int(os.environ.get("EMAIL_PORT", "587"))
+    EMAIL_HOST_USER = os.environ.get("EMAIL_HOST_USER", "")
+    EMAIL_HOST_PASSWORD = os.environ.get("EMAIL_HOST_PASSWORD", "")
+    EMAIL_USE_TLS = env_bool("EMAIL_USE_TLS", True)
+else:
+    EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
+
+DEFAULT_FROM_EMAIL = os.environ.get("DEFAULT_FROM_EMAIL", "noreply@chatter.local")
+
+# How long an email verification link stays valid.
+EMAIL_VERIFICATION_MAX_AGE = 3 * 24 * 60 * 60  # 3 days, in seconds
+
+
 # django-allauth
 # Google is the only social provider for v1; username/password (accounts app)
 # remains the primary flow, so allauth's own account templates are unused.

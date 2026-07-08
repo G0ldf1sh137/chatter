@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+
+{% block title %}Resend verification — Chatter{% endblock %}
+
+{% block content %}
+    <div class="mx-auto max-w-sm rounded-2xl border border-border bg-surface p-6 shadow-sm sm:p-8">
+        <h1 class="mb-2 text-xl font-extrabold tracking-tight">Resend verification email</h1>
+        <p class="mb-6 text-sm text-muted">Enter the email address you registered with and we'll send a new verification link if it needs one.</p>
+        <form method="post">
+            {% csrf_token %}
+            {{ form.as_p }}
+            <button type="submit" class="w-full">Send link</button>
+        </form>
+    </div>
+{% endblock %}

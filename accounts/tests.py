@@ -2,6 +2,7 @@ import shutil
 import tempfile
 
 from django.contrib.auth.models import User
+from django.core import mail
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase, override_settings
 from django.urls import reverse
@@ -9,6 +10,8 @@ from django.urls import reverse
 from posts.models import Comment, CommentVote, Post, PostVote
 
 from .models import Follow, Profile
+from .signals import mark_social_signup_verified
+from .tokens import generate_verification_token
 
 # Smallest valid GIF, used to exercise ImageField validation without a real file.
 TINY_GIF = (
@@ -18,7 +21,7 @@ TINY_GIF = (
 
 
 class RegistrationTests(TestCase):
-    def test_valid_signup_creates_user_and_profile(self):
+    def test_valid_signup_creates_unverified_user_and_profile(self):
         response = self.client.post(
             reverse("register"),
             {
@@ -28,10 +31,11 @@ class RegistrationTests(TestCase):
                 "password2": "correct-horse-battery-staple",
             },
         )
-        self.assertRedirects(response, reverse("feed"))
+        self.assertRedirects(response, reverse("verification-sent"))
         user = User.objects.get(username="bob")
         self.assertEqual(user.email, "bob@example.com")
         self.assertTrue(Profile.objects.filter(user=user).exists())
+        self.assertFalse(user.profile.email_verified)
 
     def test_signup_accepts_optional_first_and_last_name(self):
         response = self.client.post(
@@ -45,7 +49,7 @@ class RegistrationTests(TestCase):
                 "password2": "correct-horse-battery-staple",
             },
         )
-        self.assertRedirects(response, reverse("feed"))
+        self.assertRedirects(response, reverse("verification-sent"))
         user = User.objects.get(username="bob")
         self.assertEqual(user.first_name, "Bob")
         self.assertEqual(user.last_name, "Smith")
@@ -60,12 +64,12 @@ class RegistrationTests(TestCase):
                 "password2": "correct-horse-battery-staple",
             },
         )
-        self.assertRedirects(response, reverse("feed"))
+        self.assertRedirects(response, reverse("verification-sent"))
         user = User.objects.get(username="bob")
         self.assertEqual(user.first_name, "")
         self.assertEqual(user.last_name, "")
 
-    def test_signup_logs_the_user_in(self):
+    def test_signup_does_not_log_the_user_in(self):
         self.client.post(
             reverse("register"),
             {
@@ -76,7 +80,21 @@ class RegistrationTests(TestCase):
             },
         )
         response = self.client.get(reverse("feed"))
-        self.assertTrue(response.wsgi_request.user.is_authenticated)
+        self.assertFalse(response.wsgi_request.user.is_authenticated)
+
+    def test_signup_sends_verification_email(self):
+        self.client.post(
+            reverse("register"),
+            {
+                "username": "bob",
+                "email": "bob@example.com",
+                "password1": "correct-horse-battery-staple",
+                "password2": "correct-horse-battery-staple",
+            },
+        )
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertEqual(mail.outbox[0].to, ["bob@example.com"])
+        self.assertIn("verify-email", mail.outbox[0].body)
 
     def test_duplicate_username_rejected(self):
         User.objects.create_user(username="bob", password="correct-horse-battery-staple")
@@ -105,6 +123,78 @@ class RegistrationTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertFalse(User.objects.filter(username="bob").exists())
         self.assertFormError(response.context["form"], "email", "This field is required.")
+
+
+class EmailVerificationTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(username="bob", email="bob@example.com", password="correct-horse-battery-staple")
+        # create_user doesn't go through RegisterView, so the post_save signal
+        # already made a Profile, but leave it explicitly unverified like a
+        # fresh registration would.
+        self.user.profile.email_verified = False
+        self.user.profile.save(update_fields=["email_verified"])
+
+    def test_valid_token_verifies_and_logs_in(self):
+        token = generate_verification_token(self.user)
+        response = self.client.get(reverse("verify-email", args=[token]))
+        self.assertRedirects(response, reverse("feed"))
+        self.user.profile.refresh_from_db()
+        self.assertTrue(self.user.profile.email_verified)
+        self.assertTrue(response.wsgi_request.user.is_authenticated)
+
+    def test_invalid_token_shows_failure_page(self):
+        response = self.client.get(reverse("verify-email", args=["not-a-real-token"]))
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, "accounts/verification_failed.html")
+        self.user.profile.refresh_from_db()
+        self.assertFalse(self.user.profile.email_verified)
+
+    def test_expired_token_shows_failure_page(self):
+        token = generate_verification_token(self.user)
+        # max_age=-1 forces signing.SignatureExpired regardless of real elapsed time.
+        with override_settings(EMAIL_VERIFICATION_MAX_AGE=-1):
+            response = self.client.get(reverse("verify-email", args=[token]))
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, "accounts/verification_failed.html")
+        self.assertContains(response, "expired")
+
+    def test_unverified_user_cannot_log_in(self):
+        response = self.client.post(
+            reverse("login"), {"username": "bob", "password": "correct-horse-battery-staple"}
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(response.wsgi_request.user.is_authenticated)
+        self.assertFormError(response.context["form"], None, [
+            "Please verify your email before logging in. Check your inbox, or request a new verification link."
+        ])
+
+    def test_verified_user_can_log_in(self):
+        self.user.profile.email_verified = True
+        self.user.profile.save(update_fields=["email_verified"])
+        response = self.client.post(
+            reverse("login"), {"username": "bob", "password": "correct-horse-battery-staple"}
+        )
+        self.assertRedirects(response, reverse("feed"))
+
+    def test_resend_sends_email_for_unverified_account(self):
+        self.client.post(reverse("resend-verification"), {"email": "bob@example.com"})
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertEqual(mail.outbox[0].to, ["bob@example.com"])
+
+    def test_resend_is_silent_for_unknown_email(self):
+        response = self.client.post(reverse("resend-verification"), {"email": "nobody@example.com"})
+        self.assertRedirects(response, reverse("verification-sent"))
+        self.assertEqual(len(mail.outbox), 0)
+
+    def test_social_signup_is_auto_verified(self):
+        mark_social_signup_verified(request=None, user=self.user, sociallogin=object())
+        self.user.profile.refresh_from_db()
+        self.assertTrue(self.user.profile.email_verified)
+
+    def test_regular_signal_call_without_sociallogin_is_ignored(self):
+        mark_social_signup_verified(request=None, user=self.user)
+        self.user.profile.refresh_from_db()
+        self.assertFalse(self.user.profile.email_verified)
 
 
 class ProfileViewTests(TestCase):
