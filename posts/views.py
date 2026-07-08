@@ -63,10 +63,23 @@ class FeedView(ListView):
     template_name = "posts/feed.html"
     context_object_name = "posts"
     paginate_by = 20
+    active_feed = "all"
 
     def get_queryset(self):
         queryset = Post.objects.select_related("author", "author__profile")
         return annotate_votes(queryset, PostVote, "post", self.request.user)
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["active_feed"] = self.active_feed
+        return context
+
+
+class FollowingFeedView(LoginRequiredMixin, FeedView):
+    active_feed = "following"
+
+    def get_queryset(self):
+        return super().get_queryset().filter(author__followers__follower=self.request.user)
 
 
 class PostCreateView(LoginRequiredMixin, CreateView):

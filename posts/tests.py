@@ -2,6 +2,8 @@ from django.contrib.auth.models import User
 from django.test import TestCase
 from django.urls import reverse
 
+from accounts.models import Follow
+
 from .markdown import render_markdown
 from .models import Comment, CommentVote, Post, PostVote
 from .views import build_comment_tree
@@ -45,6 +47,33 @@ class PostTests(TestCase):
         second = Post.objects.create(author=user, body="second")
         response = self.client.get(reverse("feed"))
         self.assertEqual(list(response.context["posts"]), [second, first])
+
+    def test_following_feed_requires_login(self):
+        response = self.client.get(reverse("following-feed"))
+        self.assertRedirects(response, f"{reverse('login')}?next={reverse('following-feed')}")
+
+    def test_following_feed_shows_only_followed_authors(self):
+        viewer = make_user("alice")
+        followed = make_user("bob")
+        stranger = make_user("mallory")
+        followed_post = Post.objects.create(author=followed, body="from bob")
+        Post.objects.create(author=stranger, body="from mallory")
+        Follow.objects.create(follower=viewer, followed=followed)
+
+        self.client.force_login(viewer)
+        response = self.client.get(reverse("following-feed"))
+
+        self.assertEqual(list(response.context["posts"]), [followed_post])
+
+    def test_following_feed_empty_when_following_nobody(self):
+        viewer = make_user("alice")
+        make_user("bob")
+        Post.objects.create(author=User.objects.get(username="bob"), body="hello")
+
+        self.client.force_login(viewer)
+        response = self.client.get(reverse("following-feed"))
+
+        self.assertEqual(list(response.context["posts"]), [])
 
     def test_author_can_edit_own_post(self):
         user = make_user("alice")

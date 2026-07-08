@@ -5,6 +5,7 @@ from .models import CommentVote, PostVote
 
 urlpatterns = [
     path("", views.FeedView.as_view(), name="feed"),
+    path("following/", views.FollowingFeedView.as_view(), name="following-feed"),
     path("posts/new/", views.PostCreateView.as_view(), name="post-create"),
     path("posts/<int:pk>/", views.PostDetailView.as_view(), name="post-detail"),
     path("posts/<int:pk>/edit/", views.PostEditView.as_view(), name="post-edit"),

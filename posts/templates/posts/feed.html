@@ -5,6 +5,14 @@
 
 {% block content %}
     <h1>Feed</h1>
+
+    {% if user.is_authenticated %}
+        <nav class="feed-tabs">
+            <a href="{% url 'feed' %}" class="{% if active_feed == 'all' %}feed-tab-active{% endif %}">All</a>
+            <a href="{% url 'following-feed' %}" class="{% if active_feed == 'following' %}feed-tab-active{% endif %}">Following</a>
+        </nav>
+    {% endif %}
+
     {% for post in posts %}
         <article class="post">
             <div class="post-layout">
@@ -21,7 +29,11 @@
             </div>
         </article>
     {% empty %}
-        <p>No posts yet. <a href="{% url 'post-create' %}">Be the first to post.</a></p>
+        {% if active_feed == 'following' %}
+            <p>No posts from people you follow yet. <a href="{% url 'feed' %}">Browse all posts</a> to find people to follow.</p>
+        {% else %}
+            <p>No posts yet. <a href="{% url 'post-create' %}">Be the first to post.</a></p>
+        {% endif %}
     {% endfor %}
 
     {% if is_paginated %}
