@@ -8,6 +8,7 @@
     {% for post in posts %}
         <article class="post">
             <div class="post-meta">
+                {% include "_avatar.html" with avatar_user=post.author %}
                 <a href="{% url 'profile' post.author.username %}">{{ post.author.username }}</a>
                 &middot;
                 <a href="{% url 'post-detail' post.pk %}">{{ post.created_at }}</a>

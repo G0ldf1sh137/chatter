@@ -1,6 +1,7 @@
 {% load post_extras %}
 <div class="comment" id="comment-{{ comment.pk }}">
     <div class="comment-meta">
+        {% include "_avatar.html" with avatar_user=comment.author %}
         <a href="{% url 'profile' comment.author.username %}">{{ comment.author.username }}</a>
         &middot; {{ comment.created_at }}
     </div>

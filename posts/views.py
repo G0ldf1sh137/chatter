@@ -29,6 +29,7 @@ class FeedView(ListView):
     template_name = "posts/feed.html"
     context_object_name = "posts"
     paginate_by = 20
+    queryset = Post.objects.select_related("author", "author__profile")
 
 
 class PostCreateView(LoginRequiredMixin, CreateView):
@@ -45,10 +46,11 @@ class PostDetailView(DetailView):
     model = Post
     template_name = "posts/post_detail.html"
     context_object_name = "post"
+    queryset = Post.objects.select_related("author", "author__profile")
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        comments = list(self.object.comments.select_related("author").all())
+        comments = list(self.object.comments.select_related("author", "author__profile").all())
         context["comment_tree"] = build_comment_tree(comments)
         context["comment_form"] = CommentForm()
         return context
