@@ -4,46 +4,50 @@
 {% block title %}Feed — Chatter{% endblock %}
 
 {% block content %}
-    <h1>Feed</h1>
+    <h1 class="mb-4 text-2xl font-extrabold tracking-tight">Feed</h1>
 
     {% if user.is_authenticated %}
-        <nav class="feed-tabs">
-            <a href="{% url 'feed' %}" class="{% if active_feed == 'all' %}feed-tab-active{% endif %}">All</a>
-            <a href="{% url 'following-feed' %}" class="{% if active_feed == 'following' %}feed-tab-active{% endif %}">Following</a>
-        </nav>
+        <div class="mb-5 inline-flex rounded-full bg-surface-hover p-1">
+            <a href="{% url 'feed' %}" class="rounded-full px-4 py-1.5 text-sm font-medium no-underline transition-colors {% if active_feed == 'all' %}bg-surface text-fg shadow-sm{% else %}text-muted hover:text-fg{% endif %}">All</a>
+            <a href="{% url 'following-feed' %}" class="rounded-full px-4 py-1.5 text-sm font-medium no-underline transition-colors {% if active_feed == 'following' %}bg-surface text-fg shadow-sm{% else %}text-muted hover:text-fg{% endif %}">Following</a>
+        </div>
     {% endif %}
 
-    {% for post in posts %}
-        <article class="post">
-            <div class="post-layout">
-                {% include "_post_vote.html" %}
-                <div class="post-content">
-                    <div class="post-meta">
-                        {% include "_avatar.html" with avatar_user=post.author %}
-                        <a href="{% url 'profile' post.author.username %}">{{ post.author.username }}</a>
-                        &middot;
-                        <a href="{% url 'post-detail' post.pk %}">{{ post.created_at }}</a>
+    <div class="space-y-4">
+        {% for post in posts %}
+            <article class="rounded-2xl border border-border bg-surface p-4 shadow-sm transition-shadow hover:shadow-md sm:p-5">
+                <div class="flex gap-3">
+                    {% include "_post_vote.html" %}
+                    <div class="min-w-0 flex-1">
+                        <div class="mb-1.5 flex items-center gap-1.5 text-sm text-muted">
+                            {% include "_avatar.html" with avatar_user=post.author %}
+                            <a href="{% url 'profile' post.author.username %}" class="font-medium text-fg no-underline hover:text-accent">{{ post.author.username }}</a>
+                            <span>&middot;</span>
+                            <a href="{% url 'post-detail' post.pk %}" class="text-muted no-underline hover:text-fg">{{ post.created_at }}</a>
+                        </div>
+                        <div class="prose prose-sm max-w-none dark:prose-invert">{{ post.body|markdown }}</div>
                     </div>
-                    <div class="post-body">{{ post.body|markdown }}</div>
                 </div>
+            </article>
+        {% empty %}
+            <div class="rounded-2xl border border-dashed border-border p-8 text-center text-muted">
+                {% if active_feed == 'following' %}
+                    <p>No posts from people you follow yet. <a href="{% url 'feed' %}">Browse all posts</a> to find people to follow.</p>
+                {% else %}
+                    <p>No posts yet. <a href="{% url 'post-create' %}">Be the first to post.</a></p>
+                {% endif %}
             </div>
-        </article>
-    {% empty %}
-        {% if active_feed == 'following' %}
-            <p>No posts from people you follow yet. <a href="{% url 'feed' %}">Browse all posts</a> to find people to follow.</p>
-        {% else %}
-            <p>No posts yet. <a href="{% url 'post-create' %}">Be the first to post.</a></p>
-        {% endif %}
-    {% endfor %}
+        {% endfor %}
+    </div>
 
     {% if is_paginated %}
-        <nav class="pagination">
+        <nav class="mt-6 flex items-center justify-center gap-4 text-sm">
             {% if page_obj.has_previous %}
-                <a href="?page={{ page_obj.previous_page_number }}">Previous</a>
+                <a href="?page={{ page_obj.previous_page_number }}" class="rounded-full border border-border px-3 py-1.5 no-underline hover:bg-surface-hover">Previous</a>
             {% endif %}
-            <span>Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+            <span class="text-muted">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
             {% if page_obj.has_next %}
-                <a href="?page={{ page_obj.next_page_number }}">Next</a>
+                <a href="?page={{ page_obj.next_page_number }}" class="rounded-full border border-border px-3 py-1.5 no-underline hover:bg-surface-hover">Next</a>
             {% endif %}
         </nav>
     {% endif %}

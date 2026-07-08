@@ -4,73 +4,79 @@
 {% block title %}{{ profile_user.username }} — Chatter{% endblock %}
 
 {% block content %}
-    <div class="profile-header">
-        {% if profile.avatar %}
-            <img src="{{ profile.avatar.url }}" alt="{{ profile_user.username }}" class="avatar">
-        {% else %}
-            <div class="avatar avatar-placeholder">{{ profile_user.username|slice:":1"|upper }}</div>
+    <div class="rounded-2xl border border-border bg-surface p-5 shadow-sm sm:p-6">
+        <div class="flex flex-wrap items-start justify-between gap-4">
+            <div class="flex items-center gap-4">
+                {% include "_avatar.html" with avatar_user=profile_user size="lg" %}
+                <div>
+                    <h1 class="text-2xl font-extrabold tracking-tight">{{ profile_user.username }}</h1>
+                    <p class="text-sm text-muted">Joined {{ profile_user.date_joined|date:"F Y" }}</p>
+                </div>
+            </div>
+            {% if user.is_authenticated and user == profile_user %}
+                <a href="{% url 'profile-edit' %}" class="rounded-full border border-border px-4 py-1.5 text-sm font-medium text-fg no-underline transition-colors hover:bg-surface-hover">Edit profile</a>
+            {% elif user.is_authenticated %}
+                {% if is_following %}
+                    <form method="post" action="{% url 'unfollow' profile_user.username %}" class="inline">
+                        {% csrf_token %}
+                        <button type="submit" class="mt-0 rounded-full border border-border bg-transparent px-4 py-1.5 text-sm text-fg transition-colors hover:bg-surface-hover">Unfollow</button>
+                    </form>
+                {% else %}
+                    <form method="post" action="{% url 'follow' profile_user.username %}" class="inline">
+                        {% csrf_token %}
+                        <button type="submit" class="mt-0 rounded-full px-4 py-1.5 text-sm">Follow</button>
+                    </form>
+                {% endif %}
+            {% endif %}
+        </div>
+
+        {% if profile.bio %}
+            <p class="mt-4 text-fg">{{ profile.bio }}</p>
         {% endif %}
-        <div>
-            <h1>{{ profile_user.username }}</h1>
-            <p class="text-muted">Joined {{ profile_user.date_joined|date:"F Y" }}</p>
+
+        <div class="mt-4 flex flex-wrap gap-2">
+            <span class="rounded-full bg-surface-hover px-3 py-1 text-xs font-medium text-muted">{{ post_count }} post{{ post_count|pluralize }}</span>
+            <span class="rounded-full bg-surface-hover px-3 py-1 text-xs font-medium text-muted">{{ comment_count }} comment{{ comment_count|pluralize }}</span>
+            <span class="rounded-full bg-surface-hover px-3 py-1 text-xs font-medium text-muted">{{ followers_count }} follower{{ followers_count|pluralize }}</span>
+            <span class="rounded-full bg-surface-hover px-3 py-1 text-xs font-medium text-muted">{{ following_count }} following</span>
+            <span class="flex items-center gap-1 rounded-full bg-surface-hover px-3 py-1 text-xs font-semibold text-karma">
+                <svg viewBox="0 0 20 20" fill="currentColor" class="h-3.5 w-3.5"><path d="M10 2c1.5 2 4 4.5 4 8a4 4 0 11-8 0c0-1 .3-1.8.8-2.6.2.9.8 1.4 1.4 1.4.7 0 1-.6.7-1.3C8.3 6.6 8 5.6 8 4.5 8 3.6 8.6 2.7 10 2z"/></svg>
+                {{ karma }} karma
+            </span>
         </div>
     </div>
 
-    {% if profile.bio %}
-        <p class="bio">{{ profile.bio }}</p>
-    {% endif %}
-
-    <p class="follow-counts">
-        {{ post_count }} post{{ post_count|pluralize }}
-        &middot; {{ comment_count }} comment{{ comment_count|pluralize }}
-        &middot; {{ followers_count }} follower{{ followers_count|pluralize }}
-        &middot; {{ following_count }} following
-        &middot; {{ karma }} karma
-    </p>
-
-    {% if user.is_authenticated and user == profile_user %}
-        <p><a href="{% url 'profile-edit' %}">Edit profile</a></p>
-    {% elif user.is_authenticated %}
-        {% if is_following %}
-            <form method="post" action="{% url 'unfollow' profile_user.username %}" class="inline-form">
-                {% csrf_token %}
-                <button type="submit">Unfollow</button>
-            </form>
-        {% else %}
-            <form method="post" action="{% url 'follow' profile_user.username %}" class="inline-form">
-                {% csrf_token %}
-                <button type="submit">Follow</button>
-            </form>
-        {% endif %}
-    {% endif %}
-
-    <h2>Posts</h2>
-    {% for post in posts %}
-        <article class="post">
-            <div class="post-layout">
-                {% include "_post_vote.html" %}
-                <div class="post-content">
-                    <div class="post-meta">
-                        <a href="{% url 'post-detail' post.pk %}">{{ post.created_at }}</a>
+    <h2 class="mb-3 mt-8 text-lg font-bold">Posts</h2>
+    <div class="space-y-4">
+        {% for post in posts %}
+            <article class="rounded-2xl border border-border bg-surface p-4 shadow-sm sm:p-5">
+                <div class="flex gap-3">
+                    {% include "_post_vote.html" %}
+                    <div class="min-w-0 flex-1">
+                        <div class="mb-1.5 text-sm text-muted">
+                            <a href="{% url 'post-detail' post.pk %}" class="no-underline hover:text-fg">{{ post.created_at }}</a>
+                        </div>
+                        <div class="prose prose-sm max-w-none dark:prose-invert">{{ post.body|markdown }}</div>
                     </div>
-                    <div class="post-body">{{ post.body|markdown }}</div>
                 </div>
-            </div>
-        </article>
-    {% empty %}
-        <p>No posts yet.</p>
-    {% endfor %}
+            </article>
+        {% empty %}
+            <p class="text-muted">No posts yet.</p>
+        {% endfor %}
+    </div>
 
-    <h2>Comments</h2>
-    {% for comment in comments %}
-        <article class="comment">
-            <div class="comment-meta">
-                <a href="{% url 'post-detail' comment.post_id %}#comment-{{ comment.pk }}">{{ comment.created_at }}</a>
-                {% include "_comment_vote.html" %}
-            </div>
-            <div class="comment-body">{{ comment.body|markdown }}</div>
-        </article>
-    {% empty %}
-        <p>No comments yet.</p>
-    {% endfor %}
+    <h2 class="mb-3 mt-8 text-lg font-bold">Comments</h2>
+    <div class="space-y-4">
+        {% for comment in comments %}
+            <article class="rounded-2xl border border-border bg-surface p-4 shadow-sm sm:p-5">
+                <div class="mb-1.5 flex items-center gap-1.5 text-sm text-muted">
+                    <a href="{% url 'post-detail' comment.post_id %}#comment-{{ comment.pk }}" class="no-underline hover:text-fg">{{ comment.created_at }}</a>
+                    {% include "_comment_vote.html" %}
+                </div>
+                <div class="prose prose-sm max-w-none dark:prose-invert">{{ comment.body|markdown }}</div>
+            </article>
+        {% empty %}
+            <p class="text-muted">No comments yet.</p>
+        {% endfor %}
+    </div>
 {% endblock %}

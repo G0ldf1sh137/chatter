@@ -1,6 +1,6 @@
 from django import forms
 from django.conf import settings
-from django.contrib.auth.forms import UserCreationForm
+from django.contrib.auth.forms import AuthenticationForm, UserCreationForm
 from django.contrib.auth.models import User
 
 from .models import Profile
@@ -11,7 +11,23 @@ class RegistrationForm(UserCreationForm):
 
     class Meta(UserCreationForm.Meta):
         model = User
-        fields = ["username", "email"]
+        fields = ["username", "email", "first_name", "last_name"]
+
+
+class ResendVerificationForm(forms.Form):
+    email = forms.EmailField()
+
+
+class EmailVerifiedAuthenticationForm(AuthenticationForm):
+    def confirm_login_allowed(self, user):
+        super().confirm_login_allowed(user)
+        profile = getattr(user, "profile", None)
+        if profile is not None and not profile.email_verified:
+            raise forms.ValidationError(
+                "Please verify your email before logging in. Check your inbox, or "
+                "request a new verification link.",
+                code="email_not_verified",
+            )
 
 
 class ProfileForm(forms.ModelForm):

@@ -5,3 +5,5 @@ db.sqlite3
 .env
 staticfiles/
 media/
+/bin/
+static/css/tailwind.css

@@ -41,12 +41,26 @@ class PostTests(TestCase):
         self.assertEqual(post.author, user)
         self.assertEqual(post.body, "hello world")
 
-    def test_feed_orders_posts_newest_first(self):
+    def test_feed_orders_tied_posts_newest_first(self):
         user = make_user("alice")
         first = Post.objects.create(author=user, body="first")
         second = Post.objects.create(author=user, body="second")
         response = self.client.get(reverse("feed"))
         self.assertEqual(list(response.context["posts"]), [second, first])
+
+    def test_feed_orders_posts_by_score_first(self):
+        author = make_user("alice")
+        voter1 = make_user("bob")
+        voter2 = make_user("carol")
+        low_score = Post.objects.create(author=author, body="low score")
+        high_score = Post.objects.create(author=author, body="high score")
+        PostVote.objects.create(user=voter1, post=high_score, value=PostVote.UP)
+        PostVote.objects.create(user=voter2, post=high_score, value=PostVote.UP)
+
+        response = self.client.get(reverse("feed"))
+
+        # high_score created after low_score but outranks it: 3 upvotes vs 1.
+        self.assertEqual(list(response.context["posts"]), [high_score, low_score])
 
     def test_following_feed_requires_login(self):
         response = self.client.get(reverse("following-feed"))

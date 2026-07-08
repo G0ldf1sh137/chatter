@@ -67,7 +67,8 @@ class FeedView(ListView):
 
     def get_queryset(self):
         queryset = Post.objects.select_related("author", "author__profile")
-        return annotate_votes(queryset, PostVote, "post", self.request.user)
+        queryset = annotate_votes(queryset, PostVote, "post", self.request.user)
+        return queryset.order_by("-score", "-created_at")
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)

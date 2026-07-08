@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+
+{% block title %}Verification link — Chatter{% endblock %}
+
+{% block content %}
+    <div class="mx-auto max-w-sm rounded-2xl border border-border bg-surface p-6 text-center shadow-sm sm:p-8">
+        <div class="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-downvote/10 text-downvote">
+            <svg viewBox="0 0 20 20" fill="currentColor" class="h-6 w-6"><path fill-rule="evenodd" d="M18 10A8 8 0 11 2 10a8 8 0 0116 0zM8.28 7.22a.75.75 0 00-1.06 1.06L8.94 10l-1.72 1.72a.75.75 0 101.06 1.06L10 11.06l1.72 1.72a.75.75 0 101.06-1.06L11.06 10l1.72-1.72a.75.75 0 00-1.06-1.06L10 8.94 8.28 7.22z" clip-rule="evenodd"/></svg>
+        </div>
+        <h1 class="mb-2 text-xl font-extrabold tracking-tight">
+            {% if reason == "expired" %}This link has expired{% else %}This link isn't valid{% endif %}
+        </h1>
+        <p class="text-sm text-muted">
+            {% if reason == "expired" %}
+                Verification links expire after 3 days for security. Request a new one below.
+            {% else %}
+                This verification link is broken or has already been used. Request a new one below.
+            {% endif %}
+        </p>
+        <a href="{% url 'resend-verification' %}" class="mt-4 block w-full rounded-lg bg-accent px-4 py-2 text-center font-semibold text-accent-fg no-underline transition-opacity hover:opacity-90">Resend verification email</a>
+    </div>
+{% endblock %}

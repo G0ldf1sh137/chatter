@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+
+{% block title %}Check your email — Chatter{% endblock %}
+
+{% block content %}
+    <div class="mx-auto max-w-sm rounded-2xl border border-border bg-surface p-6 text-center shadow-sm sm:p-8">
+        <div class="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-accent/10 text-accent">
+            <svg viewBox="0 0 20 20" fill="currentColor" class="h-6 w-6"><path d="M2.94 6.412A2 2 0 002 8.108V14a2 2 0 002 2h12a2 2 0 002-2V8.108a2 2 0 00-.94-1.696l-6-3.75a2 2 0 00-2.12 0l-6 3.75zm2.615 2.163a.75.75 0 10-.79 1.275l4.5 2.813a.75.75 0 00.79 0l4.5-2.813a.75.75 0 10-.79-1.275L10 11.13 5.555 8.575z"/></svg>
+        </div>
+        <h1 class="mb-2 text-xl font-extrabold tracking-tight">Check your email</h1>
+        <p class="text-sm text-muted">
+            We sent a verification link to
+            {% if email %}<span class="font-medium text-fg">{{ email }}</span>{% else %}your email address{% endif %}.
+            Click it to finish setting up your account.
+        </p>
+        <p class="mt-4 text-sm text-muted">
+            Didn't get it? <a href="{% url 'resend-verification' %}">Resend the link</a>.
+        </p>
+    </div>
+{% endblock %}
