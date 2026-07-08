@@ -1,19 +1,27 @@
-<span class="inline-flex items-center gap-1 text-gray-500">
+<span class="inline-flex items-center gap-0.5 rounded-full bg-surface-hover px-1 py-0.5">
     {% if user.is_authenticated %}
         <form method="post" action="{% url 'comment-upvote' comment.pk %}" class="inline">
             {% csrf_token %}
-            <button type="submit" class="m-0 border-none bg-transparent p-0 py-0.5 text-sm leading-none text-gray-500 cursor-pointer {% if comment.user_vote == 1 %}text-upvote{% endif %}" aria-label="Upvote">&#9650;</button>
+            <button type="submit" class="mt-0 flex items-center justify-center rounded-full border-none bg-transparent p-1 text-muted transition-colors hover:bg-border/60 hover:text-fg {% if comment.user_vote == 1 %}text-upvote hover:text-upvote{% endif %}" aria-label="Upvote">
+                <svg viewBox="0 0 20 20" fill="currentColor" class="h-3 w-3"><path d="M10 6l6 7H4l6-7z"/></svg>
+            </button>
         </form>
     {% else %}
-        <span class="py-0.5 text-sm leading-none text-gray-300">&#9650;</span>
+        <span class="flex items-center justify-center p-1 text-border">
+            <svg viewBox="0 0 20 20" fill="currentColor" class="h-3 w-3"><path d="M10 6l6 7H4l6-7z"/></svg>
+        </span>
     {% endif %}
-    <span class="min-w-5 text-center text-xs font-semibold">{{ comment.score }}</span>
+    <span class="min-w-4 text-center text-xs font-bold text-fg">{{ comment.score }}</span>
     {% if user.is_authenticated %}
         <form method="post" action="{% url 'comment-downvote' comment.pk %}" class="inline">
             {% csrf_token %}
-            <button type="submit" class="m-0 border-none bg-transparent p-0 py-0.5 text-sm leading-none text-gray-500 cursor-pointer {% if comment.user_vote == -1 %}text-accent{% endif %}" aria-label="Downvote">&#9660;</button>
+            <button type="submit" class="mt-0 flex items-center justify-center rounded-full border-none bg-transparent p-1 text-muted transition-colors hover:bg-border/60 hover:text-fg {% if comment.user_vote == -1 %}text-downvote hover:text-downvote{% endif %}" aria-label="Downvote">
+                <svg viewBox="0 0 20 20" fill="currentColor" class="h-3 w-3"><path d="M10 14l-6-7h12l-6 7z"/></svg>
+            </button>
         </form>
     {% else %}
-        <span class="py-0.5 text-sm leading-none text-gray-300">&#9660;</span>
+        <span class="flex items-center justify-center p-1 text-border">
+            <svg viewBox="0 0 20 20" fill="currentColor" class="h-3 w-3"><path d="M10 14l-6-7h12l-6 7z"/></svg>
+        </span>
     {% endif %}
 </span>

@@ -6,28 +6,33 @@
     <title>{% block title %}Chatter{% endblock %}</title>
     <link rel="stylesheet" href="/static/css/tailwind.css">
 </head>
-<body class="mx-auto max-w-[700px] px-4 leading-relaxed text-gray-900">
-    <header class="flex items-center justify-between border-b border-gray-200 py-4">
-        <a href="{% url 'feed' %}" class="text-xl font-bold text-gray-900 no-underline">Chatter</a>
-        <nav>
-            {% if user.is_authenticated %}
-                <a href="{% url 'post-create' %}" class="ml-4">New post</a>
-                <a href="{% url 'profile' user.username %}" class="ml-4">{{ user.username }}</a>
-                <form action="{% url 'logout' %}" method="post" class="inline">
-                    {% csrf_token %}
-                    <button type="submit" class="ml-4 mt-0 border-none bg-transparent p-0 text-accent underline cursor-pointer">Log out</button>
-                </form>
-            {% else %}
-                <a href="{% url 'login' %}" class="ml-4">Log in</a>
-                <a href="{% url 'register' %}" class="ml-4">Register</a>
-            {% endif %}
-        </nav>
+<body class="min-h-screen bg-bg text-fg">
+    <header class="sticky top-0 z-10 border-b border-border bg-surface/80 backdrop-blur">
+        <div class="mx-auto flex max-w-[700px] items-center justify-between px-4 py-3">
+            <a href="{% url 'feed' %}" class="flex items-center gap-2 text-lg font-extrabold tracking-tight text-fg no-underline">
+                <span class="flex h-8 w-8 items-center justify-center rounded-xl bg-gradient-to-br from-accent to-downvote text-base font-black text-white shadow-sm">C</span>
+                Chatter
+            </a>
+            <nav class="flex items-center gap-1 text-sm font-medium">
+                {% if user.is_authenticated %}
+                    <a href="{% url 'post-create' %}" class="rounded-full px-3 py-1.5 text-fg no-underline transition-colors hover:bg-surface-hover">New post</a>
+                    <a href="{% url 'profile' user.username %}" class="rounded-full px-3 py-1.5 text-fg no-underline transition-colors hover:bg-surface-hover">{{ user.username }}</a>
+                    <form action="{% url 'logout' %}" method="post" class="inline">
+                        {% csrf_token %}
+                        <button type="submit" class="mt-0 rounded-full border-none bg-transparent px-3 py-1.5 font-medium text-muted transition-colors hover:bg-surface-hover hover:text-fg">Log out</button>
+                    </form>
+                {% else %}
+                    <a href="{% url 'login' %}" class="rounded-full px-3 py-1.5 text-fg no-underline transition-colors hover:bg-surface-hover">Log in</a>
+                    <a href="{% url 'register' %}" class="rounded-full bg-accent px-3 py-1.5 text-accent-fg no-underline transition-opacity hover:opacity-90">Register</a>
+                {% endif %}
+            </nav>
+        </div>
     </header>
-    <main class="py-4">
+    <main class="mx-auto max-w-[700px] px-4 py-6">
         {% if messages %}
-            <ul class="mb-4 list-none p-0">
+            <ul class="mb-4 list-none space-y-2 p-0">
                 {% for message in messages %}
-                    <li class="{{ message.tags }}">{{ message }}</li>
+                    <li class="rounded-xl border border-border bg-surface px-4 py-2 text-sm {{ message.tags }}">{{ message }}</li>
                 {% endfor %}
             </ul>
         {% endif %}

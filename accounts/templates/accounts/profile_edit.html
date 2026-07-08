@@ -3,13 +3,15 @@
 {% block title %}Edit profile — Chatter{% endblock %}
 
 {% block content %}
-    <h1 class="mb-4 text-2xl font-bold">Edit profile</h1>
-    {% if object.avatar %}
-        <img src="{{ object.avatar.url }}" alt="{{ request.user.username }}" class="mb-4 h-20 w-20 rounded-full object-cover">
-    {% endif %}
-    <form method="post" enctype="multipart/form-data">
-        {% csrf_token %}
-        {{ form.as_p }}
-        <button type="submit">Save</button>
-    </form>
+    <div class="mx-auto max-w-md rounded-2xl border border-border bg-surface p-6 shadow-sm sm:p-8">
+        <h1 class="mb-6 text-2xl font-extrabold tracking-tight">Edit profile</h1>
+        {% if object.avatar %}
+            <img src="{{ object.avatar.url }}" alt="{{ request.user.username }}" class="mb-4 h-20 w-20 rounded-full object-cover shadow-sm ring-4 ring-surface-hover">
+        {% endif %}
+        <form method="post" enctype="multipart/form-data">
+            {% csrf_token %}
+            {{ form.as_p }}
+            <button type="submit">Save</button>
+        </form>
+    </div>
 {% endblock %}

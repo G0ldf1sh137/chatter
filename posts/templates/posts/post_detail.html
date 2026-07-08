@@ -4,31 +4,33 @@
 {% block title %}Post — Chatter{% endblock %}
 
 {% block content %}
-    <article class="border-b border-gray-200 py-4">
+    <article class="rounded-2xl border border-border bg-surface p-4 shadow-sm sm:p-5">
         <div class="flex gap-3">
             {% include "_post_vote.html" %}
             <div class="min-w-0 flex-1">
-                <div class="mb-1 flex items-center gap-1.5 text-sm text-gray-500">
+                <div class="mb-1.5 flex items-center gap-1.5 text-sm text-muted">
                     {% include "_avatar.html" with avatar_user=post.author %}
-                    <a href="{% url 'profile' post.author.username %}">{{ post.author.username }}</a>
-                    &middot; {{ post.created_at }}
+                    <a href="{% url 'profile' post.author.username %}" class="font-medium text-fg no-underline hover:text-accent">{{ post.author.username }}</a>
+                    <span>&middot; {{ post.created_at }}</span>
                 </div>
-                <div class="prose prose-sm max-w-none">{{ post.body|markdown }}</div>
+                <div class="prose prose-sm max-w-none dark:prose-invert">{{ post.body|markdown }}</div>
             </div>
         </div>
     </article>
 
-    <h2 class="mb-3 mt-6 text-xl font-bold">Comments</h2>
-    <div>
-        {% for comment in comment_tree %}
-            {% include "posts/_comment.html" %}
-        {% empty %}
-            <p>No comments yet.</p>
-        {% endfor %}
-    </div>
+    <h2 class="mb-3 mt-8 text-lg font-bold">Comments</h2>
+    {% if comment_tree %}
+        <div class="divide-y divide-border rounded-2xl border border-border bg-surface">
+            {% for comment in comment_tree %}
+                {% include "posts/_comment.html" %}
+            {% endfor %}
+        </div>
+    {% else %}
+        <p class="text-muted">No comments yet.</p>
+    {% endif %}
 
     {% if user.is_authenticated %}
-        <form method="post" action="{% url 'comment-create' post.pk %}" id="comment-form" class="mt-4">
+        <form method="post" action="{% url 'comment-create' post.pk %}" id="comment-form" class="mt-6 rounded-2xl border border-border bg-surface p-4 sm:p-5">
             {% csrf_token %}
             {{ comment_form.as_p }}
             <button type="submit">Comment</button>

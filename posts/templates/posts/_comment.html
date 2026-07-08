@@ -1,15 +1,15 @@
 {% load post_extras %}
-<div class="border-b border-gray-200 py-4" id="comment-{{ comment.pk }}">
-    <div class="mb-1 flex items-center gap-1.5 text-sm text-gray-500">
+<div class="p-4 sm:p-5" id="comment-{{ comment.pk }}">
+    <div class="mb-1.5 flex flex-wrap items-center gap-1.5 text-sm text-muted">
         {% include "_avatar.html" with avatar_user=comment.author %}
-        <a href="{% url 'profile' comment.author.username %}">{{ comment.author.username }}</a>
-        &middot; {{ comment.created_at }}
+        <a href="{% url 'profile' comment.author.username %}" class="font-medium text-fg no-underline hover:text-accent">{{ comment.author.username }}</a>
+        <span>&middot; {{ comment.created_at }}</span>
         {% include "_comment_vote.html" %}
     </div>
-    <div class="prose prose-sm max-w-none">{{ comment.body|markdown }}</div>
+    <div class="prose prose-sm max-w-none dark:prose-invert">{{ comment.body|markdown }}</div>
     {% if user.is_authenticated %}
         <input type="checkbox" id="reply-toggle-{{ comment.pk }}" class="peer hidden">
-        <label for="reply-toggle-{{ comment.pk }}" class="mt-1 inline-block cursor-pointer text-sm underline">Reply</label>
+        <label for="reply-toggle-{{ comment.pk }}" class="mt-1.5 inline-block cursor-pointer text-sm font-medium text-accent hover:underline">Reply</label>
         <form method="post" action="{% url 'comment-create' comment.post_id %}" class="mt-2 hidden peer-checked:block">
             {% csrf_token %}
             <input type="hidden" name="parent" value="{{ comment.pk }}">
@@ -18,7 +18,7 @@
         </form>
     {% endif %}
     {% if comment.children %}
-        <div class="ml-6 border-l-2 border-gray-200 pl-4">
+        <div class="mt-3 ml-3 space-y-3 border-l-2 border-border pl-4 sm:ml-4">
             {% for child in comment.children %}
                 {% include "posts/_comment.html" with comment=child %}
             {% endfor %}

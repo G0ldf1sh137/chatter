@@ -3,10 +3,12 @@
 {% block title %}{% if object %}Edit post{% else %}New post{% endif %} — Chatter{% endblock %}
 
 {% block content %}
-    <h1 class="mb-4 text-2xl font-bold">{% if object %}Edit post{% else %}New post{% endif %}</h1>
-    <form method="post">
-        {% csrf_token %}
-        {{ form.as_p }}
-        <button type="submit">{% if object %}Save{% else %}Post{% endif %}</button>
-    </form>
+    <div class="rounded-2xl border border-border bg-surface p-5 shadow-sm sm:p-6">
+        <h1 class="mb-4 text-2xl font-extrabold tracking-tight">{% if object %}Edit post{% else %}New post{% endif %}</h1>
+        <form method="post">
+            {% csrf_token %}
+            {{ form.as_p }}
+            <button type="submit">{% if object %}Save{% else %}Post{% endif %}</button>
+        </form>
+    </div>
 {% endblock %}
