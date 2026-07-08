@@ -107,8 +107,9 @@ class ProfileViewTests(TestCase):
 
         response = self.client.get(reverse("profile", args=["carol"]))
 
-        self.assertContains(response, "1 karma")
-        self.assertEqual(response.context["karma"], 1)
+        # post: +1 self-upvote, +1 voter1, +1 voter2 = 3. comment: +1 self-upvote, -1 voter1 = 0.
+        self.assertContains(response, "3 karma")
+        self.assertEqual(response.context["karma"], 3)
 
 
 class ProfileEditTests(TestCase):

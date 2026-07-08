@@ -146,9 +146,10 @@ class VoteTests(TestCase):
         self.comment = Comment.objects.create(author=self.author, post=self.post, body="a comment")
 
     def test_anonymous_cannot_vote_on_post(self):
+        before = PostVote.objects.count()
         response = self.client.post(reverse("post-upvote", args=[self.post.pk]))
         self.assertEqual(response.status_code, 302)
-        self.assertEqual(PostVote.objects.count(), 0)
+        self.assertEqual(PostVote.objects.count(), before)
 
     def test_upvote_creates_vote(self):
         self.client.force_login(self.voter)
@@ -175,7 +176,8 @@ class VoteTests(TestCase):
         PostVote.objects.create(user=self.voter, post=self.post, value=PostVote.UP)
         PostVote.objects.create(user=third, post=self.post, value=PostVote.DOWN)
         response = self.client.get(reverse("post-detail", args=[self.post.pk]))
-        self.assertEqual(response.context["post"].score, 0)
+        # +1 from the author's automatic self-upvote, +1 voter, -1 third.
+        self.assertEqual(response.context["post"].score, 1)
 
     def test_comment_vote_toggle(self):
         self.client.force_login(self.voter)
@@ -187,9 +189,25 @@ class VoteTests(TestCase):
         self.assertFalse(CommentVote.objects.filter(user=self.voter, comment=self.comment).exists())
 
     def test_anonymous_cannot_vote_on_comment(self):
+        before = CommentVote.objects.count()
         response = self.client.post(reverse("comment-upvote", args=[self.comment.pk]))
         self.assertEqual(response.status_code, 302)
-        self.assertEqual(CommentVote.objects.count(), 0)
+        self.assertEqual(CommentVote.objects.count(), before)
+
+    def test_new_post_is_automatically_upvoted_by_its_author(self):
+        vote = PostVote.objects.get(user=self.author, post=self.post)
+        self.assertEqual(vote.value, PostVote.UP)
+        self.assertEqual(self.post.votes.count(), 1)
+
+    def test_new_comment_is_automatically_upvoted_by_its_author(self):
+        vote = CommentVote.objects.get(user=self.author, comment=self.comment)
+        self.assertEqual(vote.value, CommentVote.UP)
+        self.assertEqual(self.comment.votes.count(), 1)
+
+    def test_editing_a_post_does_not_add_a_second_self_vote(self):
+        self.post.body = "edited"
+        self.post.save()
+        self.assertEqual(PostVote.objects.filter(user=self.author, post=self.post).count(), 1)
 
 
 class MarkdownRenderingTests(TestCase):
