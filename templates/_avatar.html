@@ -1,0 +1,5 @@
+{% if avatar_user.profile.avatar %}
+    <img src="{{ avatar_user.profile.avatar.url }}" alt="{{ avatar_user.username }}" class="avatar avatar-sm">
+{% else %}
+    <div class="avatar avatar-sm avatar-placeholder">{{ avatar_user.username|slice:":1"|upper }}</div>
+{% endif %}

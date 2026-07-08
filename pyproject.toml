@@ -11,6 +11,8 @@ dependencies = [
     "linkify-it-py>=2.0",
     "nh3>=0.2",
     "python-dotenv>=1.0",
+    "django-allauth[socialaccount]>=65.0",
+    "pillow>=10.0",
 ]
 
 [dependency-groups]
