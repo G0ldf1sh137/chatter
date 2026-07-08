@@ -3,11 +3,18 @@
     <div class="comment-meta">
         <a href="{% url 'profile' comment.author.username %}">{{ comment.author.username }}</a>
         &middot; {{ comment.created_at }}
-        {% if user.is_authenticated %}
-            &middot; <a href="{% url 'post-detail' comment.post_id %}?parent={{ comment.pk }}#comment-form">Reply</a>
-        {% endif %}
     </div>
     <div class="comment-body">{{ comment.body|markdown }}</div>
+    {% if user.is_authenticated %}
+        <input type="checkbox" id="reply-toggle-{{ comment.pk }}" class="reply-toggle">
+        <label for="reply-toggle-{{ comment.pk }}" class="reply-toggle-label">Reply</label>
+        <form method="post" action="{% url 'comment-create' comment.post_id %}" class="reply-form">
+            {% csrf_token %}
+            <input type="hidden" name="parent" value="{{ comment.pk }}">
+            <textarea name="body" rows="2" placeholder="Markdown supported"></textarea>
+            <button type="submit">Reply</button>
+        </form>
+    {% endif %}
     {% if comment.children %}
         <div class="comment-replies">
             {% for child in comment.children %}

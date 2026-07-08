@@ -50,8 +50,7 @@ class PostDetailView(DetailView):
         context = super().get_context_data(**kwargs)
         comments = list(self.object.comments.select_related("author").all())
         context["comment_tree"] = build_comment_tree(comments)
-        reply_to = self.request.GET.get("parent")
-        context["comment_form"] = CommentForm(initial={"parent": reply_to} if reply_to else None)
+        context["comment_form"] = CommentForm()
         return context
 
 

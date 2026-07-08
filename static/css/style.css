@@ -73,6 +73,32 @@ a {
     padding-left: 1rem;
 }
 
+.reply-toggle {
+    display: none;
+}
+
+.reply-toggle-label {
+    display: inline-block;
+    margin-top: 0.25rem;
+    color: var(--accent);
+    text-decoration: underline;
+    cursor: pointer;
+    font-size: 0.875rem;
+}
+
+.reply-form {
+    display: none;
+    margin-top: 0.5rem;
+}
+
+.reply-toggle:checked ~ .reply-form {
+    display: block;
+}
+
+.reply-form textarea {
+    min-height: 3rem;
+}
+
 .messages {
     list-style: none;
     padding: 0;
