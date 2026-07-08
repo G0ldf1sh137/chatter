@@ -115,6 +115,12 @@ STATIC_URL = "static/"
 STATICFILES_DIRS = [BASE_DIR / "static"]
 STATIC_ROOT = BASE_DIR / "staticfiles"
 
+MEDIA_URL = "media/"
+MEDIA_ROOT = BASE_DIR / "media"
+
+# Max upload size for user-submitted images (avatars), enforced in accounts.forms.
+MAX_AVATAR_UPLOAD_SIZE = 2 * 1024 * 1024
+
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 LOGIN_URL = "login"

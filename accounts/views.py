@@ -3,11 +3,14 @@ from django.contrib.auth.forms import UserCreationForm
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.auth.models import User
 from django.shortcuts import get_object_or_404, redirect
-from django.urls import reverse_lazy
+from django.urls import reverse, reverse_lazy
 from django.views import View
-from django.views.generic import CreateView, DetailView
+from django.views.generic import CreateView, DetailView, UpdateView
 
+from .forms import ProfileForm
 from .models import Follow, Profile
+
+PROFILE_ITEM_LIMIT = 20
 
 
 class RegisterView(CreateView):
@@ -35,7 +38,12 @@ class ProfileView(DetailView):
         context = super().get_context_data(**kwargs)
         profile_user = context["profile_user"]
         context["profile"], _ = Profile.objects.get_or_create(user=profile_user)
-        context["posts"] = profile_user.posts.all()
+        context["posts"] = profile_user.posts.all()[:PROFILE_ITEM_LIMIT]
+        context["post_count"] = profile_user.posts.count()
+        context["comments"] = profile_user.comments.select_related("post").order_by("-created_at")[
+            :PROFILE_ITEM_LIMIT
+        ]
+        context["comment_count"] = profile_user.comments.count()
         context["followers_count"] = profile_user.followers.count()
         context["following_count"] = profile_user.following.count()
         if self.request.user.is_authenticated:
@@ -43,6 +51,18 @@ class ProfileView(DetailView):
                 follower=self.request.user, followed=profile_user
             ).exists()
         return context
+
+
+class ProfileEditView(LoginRequiredMixin, UpdateView):
+    form_class = ProfileForm
+    template_name = "accounts/profile_edit.html"
+
+    def get_object(self, queryset=None):
+        profile, _ = Profile.objects.get_or_create(user=self.request.user)
+        return profile
+
+    def get_success_url(self):
+        return reverse("profile", kwargs={"username": self.request.user.username})
 
 
 class FollowView(LoginRequiredMixin, View):

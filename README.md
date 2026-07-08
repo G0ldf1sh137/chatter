@@ -40,6 +40,12 @@ Registration and login also support "Continue with Google" alongside the regular
 
 A Google-created account gets a `Profile` automatically, same as username/password registration, and lands in the same `User` table — there's no separate "social user" model to manage.
 
+## Profiles
+
+Users can set a bio and avatar image at `/settings/profile/`, and follow/unfollow other users from their profile page. Profiles show recent posts, recent comments, and post/comment/follower/following counts.
+
+Avatars are stored on local disk under `media/` (gitignored) and served directly by Django in dev. That's fine for a single-container demo but won't survive a redeploy or scale past one instance — swapping in S3-compatible storage (e.g. `django-storages`) is the drop-in fix if this goes further. Max upload size is capped at 2MB (`MAX_AVATAR_UPLOAD_SIZE` in settings).
+
 ## Tests
 
 ```sh
