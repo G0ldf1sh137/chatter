@@ -3,12 +3,21 @@
 
 /*
  * Chatter palette — violet/indigo brand with warm-orange upvotes and cool-sky
- * downvotes for a clear at-a-glance signal. Raw values live on :root and swap
- * under prefers-color-scheme: dark; @theme below maps them to Tailwind
- * utilities (bg-surface, text-fg, ...) so templates never need dark: prefixes.
+ * downvotes for a clear at-a-glance signal. Raw values live on :root/.dark
+ * and @theme below maps them to Tailwind utilities (bg-surface, text-fg,
+ * ...) so templates never need dark: prefixes for color.
+ *
+ * Dark mode is class-based (a .dark class on <html>, toggled by the header
+ * button — see the inline script in base.html) rather than Tailwind's media
+ * -query default, since the toggle needs to override the OS preference and
+ * persist across page loads. The inline script applies .dark before first
+ * paint based on localStorage, falling back to prefers-color-scheme on a
+ * user's first visit.
  */
+@custom-variant dark (&:where(.dark, .dark *));
+
 :root {
-    color-scheme: light dark;
+    color-scheme: light;
 
     --bg: #f6f5fb;
     --surface: #ffffff;
@@ -23,20 +32,20 @@
     --karma: #059669;
 }
 
-@media (prefers-color-scheme: dark) {
-    :root {
-        --bg: #100e1a;
-        --surface: #1b1829;
-        --surface-hover: #221f33;
-        --fg: #f3f1fa;
-        --muted: #a09cb3;
-        --border: #2f2b42;
-        --accent: #a78bfa;
-        --accent-fg: #1b1130;
-        --upvote: #fb923c;
-        --downvote: #38bdf8;
-        --karma: #34d399;
-    }
+.dark {
+    color-scheme: dark;
+
+    --bg: #100e1a;
+    --surface: #1b1829;
+    --surface-hover: #221f33;
+    --fg: #f3f1fa;
+    --muted: #a09cb3;
+    --border: #2f2b42;
+    --accent: #a78bfa;
+    --accent-fg: #1b1130;
+    --upvote: #fb923c;
+    --downvote: #38bdf8;
+    --karma: #34d399;
 }
 
 @theme {
