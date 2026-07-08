@@ -4,23 +4,23 @@
 {% block title %}{{ profile_user.username }} — Chatter{% endblock %}
 
 {% block content %}
-    <div class="profile-header">
+    <div class="flex items-center gap-4">
         {% if profile.avatar %}
-            <img src="{{ profile.avatar.url }}" alt="{{ profile_user.username }}" class="avatar">
+            <img src="{{ profile.avatar.url }}" alt="{{ profile_user.username }}" class="h-20 w-20 flex-shrink-0 rounded-full object-cover">
         {% else %}
-            <div class="avatar avatar-placeholder">{{ profile_user.username|slice:":1"|upper }}</div>
+            <div class="flex h-20 w-20 flex-shrink-0 items-center justify-center rounded-full bg-accent text-2xl font-bold text-white">{{ profile_user.username|slice:":1"|upper }}</div>
         {% endif %}
         <div>
-            <h1>{{ profile_user.username }}</h1>
-            <p class="text-muted">Joined {{ profile_user.date_joined|date:"F Y" }}</p>
+            <h1 class="text-2xl font-bold">{{ profile_user.username }}</h1>
+            <p class="text-sm text-gray-500">Joined {{ profile_user.date_joined|date:"F Y" }}</p>
         </div>
     </div>
 
     {% if profile.bio %}
-        <p class="bio">{{ profile.bio }}</p>
+        <p class="mt-4 text-gray-700">{{ profile.bio }}</p>
     {% endif %}
 
-    <p class="follow-counts">
+    <p class="mt-4 text-sm text-gray-600">
         {{ post_count }} post{{ post_count|pluralize }}
         &middot; {{ comment_count }} comment{{ comment_count|pluralize }}
         &middot; {{ followers_count }} follower{{ followers_count|pluralize }}
@@ -29,31 +29,31 @@
     </p>
 
     {% if user.is_authenticated and user == profile_user %}
-        <p><a href="{% url 'profile-edit' %}">Edit profile</a></p>
+        <p class="mt-2"><a href="{% url 'profile-edit' %}">Edit profile</a></p>
     {% elif user.is_authenticated %}
         {% if is_following %}
-            <form method="post" action="{% url 'unfollow' profile_user.username %}" class="inline-form">
+            <form method="post" action="{% url 'unfollow' profile_user.username %}" class="inline">
                 {% csrf_token %}
                 <button type="submit">Unfollow</button>
             </form>
         {% else %}
-            <form method="post" action="{% url 'follow' profile_user.username %}" class="inline-form">
+            <form method="post" action="{% url 'follow' profile_user.username %}" class="inline">
                 {% csrf_token %}
                 <button type="submit">Follow</button>
             </form>
         {% endif %}
     {% endif %}
 
-    <h2>Posts</h2>
+    <h2 class="mb-3 mt-6 text-xl font-bold">Posts</h2>
     {% for post in posts %}
-        <article class="post">
-            <div class="post-layout">
+        <article class="border-b border-gray-200 py-4">
+            <div class="flex gap-3">
                 {% include "_post_vote.html" %}
-                <div class="post-content">
-                    <div class="post-meta">
+                <div class="min-w-0 flex-1">
+                    <div class="mb-1 flex items-center gap-1.5 text-sm text-gray-500">
                         <a href="{% url 'post-detail' post.pk %}">{{ post.created_at }}</a>
                     </div>
-                    <div class="post-body">{{ post.body|markdown }}</div>
+                    <div class="prose prose-sm max-w-none">{{ post.body|markdown }}</div>
                 </div>
             </div>
         </article>
@@ -61,14 +61,14 @@
         <p>No posts yet.</p>
     {% endfor %}
 
-    <h2>Comments</h2>
+    <h2 class="mb-3 mt-6 text-xl font-bold">Comments</h2>
     {% for comment in comments %}
-        <article class="comment">
-            <div class="comment-meta">
+        <article class="border-b border-gray-200 py-4">
+            <div class="mb-1 flex items-center gap-1.5 text-sm text-gray-500">
                 <a href="{% url 'post-detail' comment.post_id %}#comment-{{ comment.pk }}">{{ comment.created_at }}</a>
                 {% include "_comment_vote.html" %}
             </div>
-            <div class="comment-body">{{ comment.body|markdown }}</div>
+            <div class="prose prose-sm max-w-none">{{ comment.body|markdown }}</div>
         </article>
     {% empty %}
         <p>No comments yet.</p>

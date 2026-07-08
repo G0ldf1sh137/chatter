@@ -1,24 +1,24 @@
 {% load post_extras %}
-<div class="comment" id="comment-{{ comment.pk }}">
-    <div class="comment-meta">
+<div class="border-b border-gray-200 py-4" id="comment-{{ comment.pk }}">
+    <div class="mb-1 flex items-center gap-1.5 text-sm text-gray-500">
         {% include "_avatar.html" with avatar_user=comment.author %}
         <a href="{% url 'profile' comment.author.username %}">{{ comment.author.username }}</a>
         &middot; {{ comment.created_at }}
         {% include "_comment_vote.html" %}
     </div>
-    <div class="comment-body">{{ comment.body|markdown }}</div>
+    <div class="prose prose-sm max-w-none">{{ comment.body|markdown }}</div>
     {% if user.is_authenticated %}
-        <input type="checkbox" id="reply-toggle-{{ comment.pk }}" class="reply-toggle">
-        <label for="reply-toggle-{{ comment.pk }}" class="reply-toggle-label">Reply</label>
-        <form method="post" action="{% url 'comment-create' comment.post_id %}" class="reply-form">
+        <input type="checkbox" id="reply-toggle-{{ comment.pk }}" class="peer hidden">
+        <label for="reply-toggle-{{ comment.pk }}" class="mt-1 inline-block cursor-pointer text-sm underline">Reply</label>
+        <form method="post" action="{% url 'comment-create' comment.post_id %}" class="mt-2 hidden peer-checked:block">
             {% csrf_token %}
             <input type="hidden" name="parent" value="{{ comment.pk }}">
-            <textarea name="body" rows="2" placeholder="Markdown supported"></textarea>
+            <textarea name="body" rows="2" placeholder="Markdown supported" class="min-h-12"></textarea>
             <button type="submit">Reply</button>
         </form>
     {% endif %}
     {% if comment.children %}
-        <div class="comment-replies">
+        <div class="ml-6 border-l-2 border-gray-200 pl-4">
             {% for child in comment.children %}
                 {% include "posts/_comment.html" with comment=child %}
             {% endfor %}

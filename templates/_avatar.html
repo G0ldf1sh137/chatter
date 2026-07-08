@@ -1,5 +1,5 @@
 {% if avatar_user.profile.avatar %}
-    <img src="{{ avatar_user.profile.avatar.url }}" alt="{{ avatar_user.username }}" class="avatar avatar-sm">
+    <img src="{{ avatar_user.profile.avatar.url }}" alt="{{ avatar_user.username }}" class="h-6 w-6 flex-shrink-0 rounded-full object-cover">
 {% else %}
-    <div class="avatar avatar-sm avatar-placeholder">{{ avatar_user.username|slice:":1"|upper }}</div>
+    <div class="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-accent text-xs font-bold text-white">{{ avatar_user.username|slice:":1"|upper }}</div>
 {% endif %}

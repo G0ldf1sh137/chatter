@@ -4,27 +4,27 @@
 {% block title %}Feed — Chatter{% endblock %}
 
 {% block content %}
-    <h1>Feed</h1>
+    <h1 class="mb-4 text-2xl font-bold">Feed</h1>
 
     {% if user.is_authenticated %}
-        <nav class="feed-tabs">
-            <a href="{% url 'feed' %}" class="{% if active_feed == 'all' %}feed-tab-active{% endif %}">All</a>
-            <a href="{% url 'following-feed' %}" class="{% if active_feed == 'following' %}feed-tab-active{% endif %}">Following</a>
+        <nav class="mb-4 flex gap-6 border-b border-gray-200">
+            <a href="{% url 'feed' %}" class="border-b-2 border-transparent py-2 no-underline {% if active_feed == 'all' %}border-accent font-semibold text-gray-900{% else %}text-gray-500{% endif %}">All</a>
+            <a href="{% url 'following-feed' %}" class="border-b-2 border-transparent py-2 no-underline {% if active_feed == 'following' %}border-accent font-semibold text-gray-900{% else %}text-gray-500{% endif %}">Following</a>
         </nav>
     {% endif %}
 
     {% for post in posts %}
-        <article class="post">
-            <div class="post-layout">
+        <article class="border-b border-gray-200 py-4">
+            <div class="flex gap-3">
                 {% include "_post_vote.html" %}
-                <div class="post-content">
-                    <div class="post-meta">
+                <div class="min-w-0 flex-1">
+                    <div class="mb-1 flex items-center gap-1.5 text-sm text-gray-500">
                         {% include "_avatar.html" with avatar_user=post.author %}
                         <a href="{% url 'profile' post.author.username %}">{{ post.author.username }}</a>
                         &middot;
                         <a href="{% url 'post-detail' post.pk %}">{{ post.created_at }}</a>
                     </div>
-                    <div class="post-body">{{ post.body|markdown }}</div>
+                    <div class="prose prose-sm max-w-none">{{ post.body|markdown }}</div>
                 </div>
             </div>
         </article>
@@ -37,7 +37,7 @@
     {% endfor %}
 
     {% if is_paginated %}
-        <nav class="pagination">
+        <nav class="flex gap-4 py-4">
             {% if page_obj.has_previous %}
                 <a href="?page={{ page_obj.previous_page_number }}">Previous</a>
             {% endif %}

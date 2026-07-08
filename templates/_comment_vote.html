@@ -1,19 +1,19 @@
-<span class="vote-widget vote-horizontal">
+<span class="inline-flex items-center gap-1 text-gray-500">
     {% if user.is_authenticated %}
-        <form method="post" action="{% url 'comment-upvote' comment.pk %}" class="inline-form">
+        <form method="post" action="{% url 'comment-upvote' comment.pk %}" class="inline">
             {% csrf_token %}
-            <button type="submit" class="vote-button {% if comment.user_vote == 1 %}vote-active-up{% endif %}" aria-label="Upvote">&#9650;</button>
+            <button type="submit" class="m-0 border-none bg-transparent p-0 py-0.5 text-sm leading-none text-gray-500 cursor-pointer {% if comment.user_vote == 1 %}text-upvote{% endif %}" aria-label="Upvote">&#9650;</button>
         </form>
     {% else %}
-        <span class="vote-button vote-disabled">&#9650;</span>
+        <span class="py-0.5 text-sm leading-none text-gray-300">&#9650;</span>
     {% endif %}
-    <span class="vote-score">{{ comment.score }}</span>
+    <span class="min-w-5 text-center text-xs font-semibold">{{ comment.score }}</span>
     {% if user.is_authenticated %}
-        <form method="post" action="{% url 'comment-downvote' comment.pk %}" class="inline-form">
+        <form method="post" action="{% url 'comment-downvote' comment.pk %}" class="inline">
             {% csrf_token %}
-            <button type="submit" class="vote-button {% if comment.user_vote == -1 %}vote-active-down{% endif %}" aria-label="Downvote">&#9660;</button>
+            <button type="submit" class="m-0 border-none bg-transparent p-0 py-0.5 text-sm leading-none text-gray-500 cursor-pointer {% if comment.user_vote == -1 %}text-accent{% endif %}" aria-label="Downvote">&#9660;</button>
         </form>
     {% else %}
-        <span class="vote-button vote-disabled">&#9660;</span>
+        <span class="py-0.5 text-sm leading-none text-gray-300">&#9660;</span>
     {% endif %}
 </span>

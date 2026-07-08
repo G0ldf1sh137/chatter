@@ -4,11 +4,11 @@
 {% block title %}Log in — Chatter{% endblock %}
 
 {% block content %}
-    <h1>Log in</h1>
+    <h1 class="mb-4 text-2xl font-bold">Log in</h1>
     <form method="post">
         {% csrf_token %}
         {{ form.as_p }}
         <button type="submit">Log in</button>
     </form>
-    <p><a href="{% provider_login_url 'google' %}" class="button-secondary">Continue with Google</a></p>
+    <p><a href="{% provider_login_url 'google' %}" class="mt-2 inline-block rounded border border-gray-300 bg-white px-4 py-2 text-gray-900 no-underline">Continue with Google</a></p>
 {% endblock %}

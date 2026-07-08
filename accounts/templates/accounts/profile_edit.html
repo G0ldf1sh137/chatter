@@ -3,9 +3,9 @@
 {% block title %}Edit profile — Chatter{% endblock %}
 
 {% block content %}
-    <h1>Edit profile</h1>
+    <h1 class="mb-4 text-2xl font-bold">Edit profile</h1>
     {% if object.avatar %}
-        <img src="{{ object.avatar.url }}" alt="{{ request.user.username }}" class="avatar">
+        <img src="{{ object.avatar.url }}" alt="{{ request.user.username }}" class="mb-4 h-20 w-20 rounded-full object-cover">
     {% endif %}
     <form method="post" enctype="multipart/form-data">
         {% csrf_token %}

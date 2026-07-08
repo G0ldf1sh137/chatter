@@ -46,6 +46,24 @@ Users can set a bio and avatar image at `/settings/profile/`, and follow/unfollo
 
 Avatars are stored on local disk under `media/` (gitignored) and served directly by Django in dev. That's fine for a single-container demo but won't survive a redeploy or scale past one instance — swapping in S3-compatible storage (e.g. `django-storages`) is the drop-in fix if this goes further. Max upload size is capped at 2MB (`MAX_AVATAR_UPLOAD_SIZE` in settings).
 
+## Styling
+
+Styling uses [Tailwind CSS](https://tailwindcss.com) via the standalone CLI binary — no Node.js/npm anywhere in the stack. Source is `static/css/input.css`; compiled output is `static/css/tailwind.css` (gitignored, generated).
+
+Inside Docker this happens automatically: the Dockerfile downloads a pinned CLI binary and compiles the CSS at image build time, and `docker-entrypoint.sh` runs it in `--watch` mode alongside `runserver` when `DEBUG=1`, so editing a template's classes rebuilds the CSS live.
+
+Outside Docker (the `uv`/SQLite workflow), fetch the CLI once and run it in watch mode yourself alongside `manage.py runserver`:
+
+```sh
+curl -fsSL -o bin/tailwindcss https://github.com/tailwindlabs/tailwindcss/releases/download/v4.3.2/tailwindcss-linux-x64
+chmod +x bin/tailwindcss
+./bin/tailwindcss -i ./static/css/input.css -o ./static/css/tailwind.css --watch
+```
+
+(swap `linux-x64` for your platform's asset name from the [releases page](https://github.com/tailwindlabs/tailwindcss/releases) — e.g. `macos-arm64` on Apple Silicon)
+
+Markdown-rendered post/comment bodies use the bundled `@tailwindcss/typography` plugin (the `prose` class) rather than hand-styling arbitrary HTML — the standalone CLI ships official plugins like this without needing npm.
+
 ## Tests
 
 ```sh
