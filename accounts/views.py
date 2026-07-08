@@ -1,5 +1,4 @@
 from django.contrib.auth import login
-from django.contrib.auth.forms import UserCreationForm
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.auth.models import User
 from django.shortcuts import get_object_or_404, redirect
@@ -7,14 +6,14 @@ from django.urls import reverse, reverse_lazy
 from django.views import View
 from django.views.generic import CreateView, DetailView, UpdateView
 
-from .forms import ProfileForm
+from .forms import ProfileForm, RegistrationForm
 from .models import Follow, Profile
 
 PROFILE_ITEM_LIMIT = 20
 
 
 class RegisterView(CreateView):
-    form_class = UserCreationForm
+    form_class = RegistrationForm
     template_name = "accounts/register.html"
     success_url = reverse_lazy("feed")
 

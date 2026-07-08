@@ -21,16 +21,27 @@ class RegistrationTests(TestCase):
     def test_valid_signup_creates_user_and_profile(self):
         response = self.client.post(
             reverse("register"),
-            {"username": "bob", "password1": "correct-horse-battery-staple", "password2": "correct-horse-battery-staple"},
+            {
+                "username": "bob",
+                "email": "bob@example.com",
+                "password1": "correct-horse-battery-staple",
+                "password2": "correct-horse-battery-staple",
+            },
         )
         self.assertRedirects(response, reverse("feed"))
         user = User.objects.get(username="bob")
+        self.assertEqual(user.email, "bob@example.com")
         self.assertTrue(Profile.objects.filter(user=user).exists())
 
     def test_signup_logs_the_user_in(self):
         self.client.post(
             reverse("register"),
-            {"username": "bob", "password1": "correct-horse-battery-staple", "password2": "correct-horse-battery-staple"},
+            {
+                "username": "bob",
+                "email": "bob@example.com",
+                "password1": "correct-horse-battery-staple",
+                "password2": "correct-horse-battery-staple",
+            },
         )
         response = self.client.get(reverse("feed"))
         self.assertTrue(response.wsgi_request.user.is_authenticated)
@@ -39,11 +50,29 @@ class RegistrationTests(TestCase):
         User.objects.create_user(username="bob", password="correct-horse-battery-staple")
         response = self.client.post(
             reverse("register"),
-            {"username": "bob", "password1": "correct-horse-battery-staple", "password2": "correct-horse-battery-staple"},
+            {
+                "username": "bob",
+                "email": "bob@example.com",
+                "password1": "correct-horse-battery-staple",
+                "password2": "correct-horse-battery-staple",
+            },
         )
         self.assertEqual(response.status_code, 200)
         self.assertEqual(User.objects.filter(username="bob").count(), 1)
         self.assertFormError(response.context["form"], "username", "A user with that username already exists.")
+
+    def test_email_is_required(self):
+        response = self.client.post(
+            reverse("register"),
+            {
+                "username": "bob",
+                "password1": "correct-horse-battery-staple",
+                "password2": "correct-horse-battery-staple",
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(User.objects.filter(username="bob").exists())
+        self.assertFormError(response.context["form"], "email", "This field is required.")
 
 
 class ProfileViewTests(TestCase):
