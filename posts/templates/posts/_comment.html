@@ -1,0 +1,18 @@
+{% load post_extras %}
+<div class="comment" id="comment-{{ comment.pk }}">
+    <div class="comment-meta">
+        <a href="{% url 'profile' comment.author.username %}">{{ comment.author.username }}</a>
+        &middot; {{ comment.created_at }}
+        {% if user.is_authenticated %}
+            &middot; <a href="{% url 'post-detail' comment.post_id %}?parent={{ comment.pk }}#comment-form">Reply</a>
+        {% endif %}
+    </div>
+    <div class="comment-body">{{ comment.body|markdown }}</div>
+    {% if comment.children %}
+        <div class="comment-replies">
+            {% for child in comment.children %}
+                {% include "posts/_comment.html" with comment=child %}
+            {% endfor %}
+        </div>
+    {% endif %}
+</div>

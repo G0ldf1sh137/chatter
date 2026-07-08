@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% load post_extras %}
+
+{% block title %}Post — Chatter{% endblock %}
+
+{% block content %}
+    <article class="post">
+        <div class="post-meta">
+            <a href="{% url 'profile' post.author.username %}">{{ post.author.username }}</a>
+            &middot; {{ post.created_at }}
+        </div>
+        <div class="post-body">{{ post.body|markdown }}</div>
+    </article>
+
+    <h2>Comments</h2>
+    <div class="comments">
+        {% for comment in comment_tree %}
+            {% include "posts/_comment.html" %}
+        {% empty %}
+            <p>No comments yet.</p>
+        {% endfor %}
+    </div>
+
+    {% if user.is_authenticated %}
+        <form method="post" action="{% url 'comment-create' post.pk %}" id="comment-form">
+            {% csrf_token %}
+            {{ comment_form.as_p }}
+            <button type="submit">Comment</button>
+        </form>
+    {% else %}
+        <p><a href="{% url 'login' %}">Log in</a> to comment.</p>
+    {% endif %}
+{% endblock %}

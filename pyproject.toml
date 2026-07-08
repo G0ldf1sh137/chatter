@@ -1,0 +1,19 @@
+[project]
+name = "chatter"
+version = "0.1.0"
+description = "A simple social media web app"
+requires-python = ">=3.12"
+dependencies = [
+    "django>=5.0,<5.1",
+    "psycopg[binary]>=3.1",
+    "gunicorn>=22.0",
+    "markdown-it-py>=3.0",
+    "linkify-it-py>=2.0",
+    "nh3>=0.2",
+    "python-dotenv>=1.0",
+]
+
+[dependency-groups]
+dev = [
+    "ruff>=0.6",
+]

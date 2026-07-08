@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% load post_extras %}
+
+{% block title %}{{ profile_user.username }} — Chatter{% endblock %}
+
+{% block content %}
+    <h1>{{ profile_user.username }}</h1>
+    {% if profile.bio %}
+        <p class="bio">{{ profile.bio }}</p>
+    {% endif %}
+
+    <h2>Posts</h2>
+    {% for post in posts %}
+        <article class="post">
+            <div class="post-meta">
+                <a href="{% url 'post-detail' post.pk %}">{{ post.created_at }}</a>
+            </div>
+            <div class="post-body">{{ post.body|markdown }}</div>
+        </article>
+    {% empty %}
+        <p>No posts yet.</p>
+    {% endfor %}
+{% endblock %}
