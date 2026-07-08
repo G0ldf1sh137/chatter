@@ -2,7 +2,7 @@ from django.contrib.auth.models import User
 from django.test import TestCase
 from django.urls import reverse
 
-from .models import Profile
+from .models import Follow, Profile
 
 
 class RegistrationTests(TestCase):
@@ -41,3 +41,37 @@ class ProfileViewTests(TestCase):
         response = self.client.get(reverse("profile", args=["carol"]))
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Hello, I&#x27;m Carol.")
+
+
+class FollowTests(TestCase):
+    def setUp(self):
+        self.alice = User.objects.create_user(username="alice", password="correct-horse-battery-staple")
+        self.bob = User.objects.create_user(username="bob", password="correct-horse-battery-staple")
+
+    def test_anonymous_cannot_follow(self):
+        response = self.client.post(reverse("follow", args=["bob"]))
+        self.assertEqual(response.status_code, 302)
+        self.assertFalse(Follow.objects.filter(follower=self.alice, followed=self.bob).exists())
+
+    def test_follow_and_unfollow(self):
+        self.client.force_login(self.alice)
+
+        self.client.post(reverse("follow", args=["bob"]))
+        self.assertTrue(Follow.objects.filter(follower=self.alice, followed=self.bob).exists())
+
+        response = self.client.get(reverse("profile", args=["bob"]))
+        self.assertContains(response, "1 follower")
+
+        self.client.post(reverse("unfollow", args=["bob"]))
+        self.assertFalse(Follow.objects.filter(follower=self.alice, followed=self.bob).exists())
+
+    def test_follow_is_idempotent(self):
+        self.client.force_login(self.alice)
+        self.client.post(reverse("follow", args=["bob"]))
+        self.client.post(reverse("follow", args=["bob"]))
+        self.assertEqual(Follow.objects.filter(follower=self.alice, followed=self.bob).count(), 1)
+
+    def test_cannot_follow_self(self):
+        self.client.force_login(self.alice)
+        self.client.post(reverse("follow", args=["alice"]))
+        self.assertFalse(Follow.objects.filter(follower=self.alice, followed=self.alice).exists())

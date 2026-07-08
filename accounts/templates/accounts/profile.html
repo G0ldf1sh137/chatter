@@ -9,6 +9,25 @@
         <p class="bio">{{ profile.bio }}</p>
     {% endif %}
 
+    <p class="follow-counts">
+        {{ followers_count }} follower{{ followers_count|pluralize }}
+        &middot; {{ following_count }} following
+    </p>
+
+    {% if user.is_authenticated and user != profile_user %}
+        {% if is_following %}
+            <form method="post" action="{% url 'unfollow' profile_user.username %}" class="inline-form">
+                {% csrf_token %}
+                <button type="submit">Unfollow</button>
+            </form>
+        {% else %}
+            <form method="post" action="{% url 'follow' profile_user.username %}" class="inline-form">
+                {% csrf_token %}
+                <button type="submit">Follow</button>
+            </form>
+        {% endif %}
+    {% endif %}
+
     <h2>Posts</h2>
     {% for post in posts %}
         <article class="post">
