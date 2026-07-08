@@ -1,0 +1,19 @@
+<div class="vote-widget vote-vertical">
+    {% if user.is_authenticated %}
+        <form method="post" action="{% url 'post-upvote' post.pk %}" class="inline-form">
+            {% csrf_token %}
+            <button type="submit" class="vote-button {% if post.user_vote == 1 %}vote-active-up{% endif %}" aria-label="Upvote">&#9650;</button>
+        </form>
+    {% else %}
+        <span class="vote-button vote-disabled">&#9650;</span>
+    {% endif %}
+    <span class="vote-score">{{ post.score }}</span>
+    {% if user.is_authenticated %}
+        <form method="post" action="{% url 'post-downvote' post.pk %}" class="inline-form">
+            {% csrf_token %}
+            <button type="submit" class="vote-button {% if post.user_vote == -1 %}vote-active-down{% endif %}" aria-label="Downvote">&#9660;</button>
+        </form>
+    {% else %}
+        <span class="vote-button vote-disabled">&#9660;</span>
+    {% endif %}
+</div>

@@ -4,6 +4,7 @@
         {% include "_avatar.html" with avatar_user=comment.author %}
         <a href="{% url 'profile' comment.author.username %}">{{ comment.author.username }}</a>
         &middot; {{ comment.created_at }}
+        {% include "_comment_vote.html" %}
     </div>
     <div class="comment-body">{{ comment.body|markdown }}</div>
     {% if user.is_authenticated %}

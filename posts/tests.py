@@ -3,7 +3,7 @@ from django.test import TestCase
 from django.urls import reverse
 
 from .markdown import render_markdown
-from .models import Comment, Post
+from .models import Comment, CommentVote, Post, PostVote
 from .views import build_comment_tree
 
 
@@ -107,6 +107,60 @@ class CommentTests(TestCase):
         self.assertEqual(tree[1].children, [])
         self.assertEqual(other_root.parent, None)
         self.assertEqual(grandchild.parent, child)
+
+
+class VoteTests(TestCase):
+    def setUp(self):
+        self.author = make_user("alice")
+        self.voter = make_user("bob")
+        self.post = Post.objects.create(author=self.author, body="hello")
+        self.comment = Comment.objects.create(author=self.author, post=self.post, body="a comment")
+
+    def test_anonymous_cannot_vote_on_post(self):
+        response = self.client.post(reverse("post-upvote", args=[self.post.pk]))
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(PostVote.objects.count(), 0)
+
+    def test_upvote_creates_vote(self):
+        self.client.force_login(self.voter)
+        self.client.post(reverse("post-upvote", args=[self.post.pk]))
+        vote = PostVote.objects.get(user=self.voter, post=self.post)
+        self.assertEqual(vote.value, PostVote.UP)
+
+    def test_clicking_same_direction_again_removes_vote(self):
+        self.client.force_login(self.voter)
+        self.client.post(reverse("post-upvote", args=[self.post.pk]))
+        self.client.post(reverse("post-upvote", args=[self.post.pk]))
+        self.assertFalse(PostVote.objects.filter(user=self.voter, post=self.post).exists())
+
+    def test_switching_direction_updates_vote(self):
+        self.client.force_login(self.voter)
+        self.client.post(reverse("post-upvote", args=[self.post.pk]))
+        self.client.post(reverse("post-downvote", args=[self.post.pk]))
+        vote = PostVote.objects.get(user=self.voter, post=self.post)
+        self.assertEqual(vote.value, PostVote.DOWN)
+        self.assertEqual(PostVote.objects.filter(user=self.voter, post=self.post).count(), 1)
+
+    def test_post_score_reflects_votes(self):
+        third = make_user("carol")
+        PostVote.objects.create(user=self.voter, post=self.post, value=PostVote.UP)
+        PostVote.objects.create(user=third, post=self.post, value=PostVote.DOWN)
+        response = self.client.get(reverse("post-detail", args=[self.post.pk]))
+        self.assertEqual(response.context["post"].score, 0)
+
+    def test_comment_vote_toggle(self):
+        self.client.force_login(self.voter)
+        self.client.post(reverse("comment-upvote", args=[self.comment.pk]))
+        self.assertEqual(
+            CommentVote.objects.get(user=self.voter, comment=self.comment).value, CommentVote.UP
+        )
+        self.client.post(reverse("comment-upvote", args=[self.comment.pk]))
+        self.assertFalse(CommentVote.objects.filter(user=self.voter, comment=self.comment).exists())
+
+    def test_anonymous_cannot_vote_on_comment(self):
+        response = self.client.post(reverse("comment-upvote", args=[self.comment.pk]))
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(CommentVote.objects.count(), 0)
 
 
 class MarkdownRenderingTests(TestCase):

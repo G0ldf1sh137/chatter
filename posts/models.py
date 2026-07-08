@@ -36,3 +36,36 @@ class Comment(models.Model):
 
     def __str__(self):
         return f"Comment({self.pk}) by {self.author} on Post({self.post_id})"
+
+
+class Vote(models.Model):
+    UP = 1
+    DOWN = -1
+    VALUE_CHOICES = [(UP, "Upvote"), (DOWN, "Downvote")]
+
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    value = models.SmallIntegerField(choices=VALUE_CHOICES)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        abstract = True
+
+
+class PostVote(Vote):
+    post = models.ForeignKey(Post, on_delete=models.CASCADE, related_name="votes")
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=["user", "post"], name="unique_post_vote")]
+
+    def __str__(self):
+        return f"{self.user} {self.get_value_display()}d Post({self.post_id})"
+
+
+class CommentVote(Vote):
+    comment = models.ForeignKey(Comment, on_delete=models.CASCADE, related_name="votes")
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=["user", "comment"], name="unique_comment_vote")]
+
+    def __str__(self):
+        return f"{self.user} {self.get_value_display()}d Comment({self.comment_id})"

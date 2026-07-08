@@ -1,10 +1,14 @@
 from django.contrib.auth import login
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.auth.models import User
+from django.db.models import Sum
 from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse, reverse_lazy
 from django.views import View
 from django.views.generic import CreateView, DetailView, UpdateView
+
+from posts.models import CommentVote, PostVote
+from posts.views import annotate_votes
 
 from .forms import ProfileForm, RegistrationForm
 from .models import Follow, Profile
@@ -37,14 +41,20 @@ class ProfileView(DetailView):
         context = super().get_context_data(**kwargs)
         profile_user = context["profile_user"]
         context["profile"], _ = Profile.objects.get_or_create(user=profile_user)
-        context["posts"] = profile_user.posts.all()[:PROFILE_ITEM_LIMIT]
+        posts = annotate_votes(profile_user.posts.all(), PostVote, "post", self.request.user)
+        context["posts"] = posts[:PROFILE_ITEM_LIMIT]
         context["post_count"] = profile_user.posts.count()
-        context["comments"] = profile_user.comments.select_related("post").order_by("-created_at")[
-            :PROFILE_ITEM_LIMIT
-        ]
+        comments = profile_user.comments.select_related("post").order_by("-created_at")
+        comments = annotate_votes(comments, CommentVote, "comment", self.request.user)
+        context["comments"] = comments[:PROFILE_ITEM_LIMIT]
         context["comment_count"] = profile_user.comments.count()
         context["followers_count"] = profile_user.followers.count()
         context["following_count"] = profile_user.following.count()
+        post_karma = PostVote.objects.filter(post__author=profile_user).aggregate(total=Sum("value"))["total"] or 0
+        comment_karma = (
+            CommentVote.objects.filter(comment__author=profile_user).aggregate(total=Sum("value"))["total"] or 0
+        )
+        context["karma"] = post_karma + comment_karma
         if self.request.user.is_authenticated:
             context["is_following"] = Follow.objects.filter(
                 follower=self.request.user, followed=profile_user

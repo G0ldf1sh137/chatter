@@ -5,12 +5,17 @@
 
 {% block content %}
     <article class="post">
-        <div class="post-meta">
-            {% include "_avatar.html" with avatar_user=post.author %}
-            <a href="{% url 'profile' post.author.username %}">{{ post.author.username }}</a>
-            &middot; {{ post.created_at }}
+        <div class="post-layout">
+            {% include "_post_vote.html" %}
+            <div class="post-content">
+                <div class="post-meta">
+                    {% include "_avatar.html" with avatar_user=post.author %}
+                    <a href="{% url 'profile' post.author.username %}">{{ post.author.username }}</a>
+                    &middot; {{ post.created_at }}
+                </div>
+                <div class="post-body">{{ post.body|markdown }}</div>
+            </div>
         </div>
-        <div class="post-body">{{ post.body|markdown }}</div>
     </article>
 
     <h2>Comments</h2>

@@ -7,13 +7,18 @@
     <h1>Feed</h1>
     {% for post in posts %}
         <article class="post">
-            <div class="post-meta">
-                {% include "_avatar.html" with avatar_user=post.author %}
-                <a href="{% url 'profile' post.author.username %}">{{ post.author.username }}</a>
-                &middot;
-                <a href="{% url 'post-detail' post.pk %}">{{ post.created_at }}</a>
+            <div class="post-layout">
+                {% include "_post_vote.html" %}
+                <div class="post-content">
+                    <div class="post-meta">
+                        {% include "_avatar.html" with avatar_user=post.author %}
+                        <a href="{% url 'profile' post.author.username %}">{{ post.author.username }}</a>
+                        &middot;
+                        <a href="{% url 'post-detail' post.pk %}">{{ post.created_at }}</a>
+                    </div>
+                    <div class="post-body">{{ post.body|markdown }}</div>
+                </div>
             </div>
-            <div class="post-body">{{ post.body|markdown }}</div>
         </article>
     {% empty %}
         <p>No posts yet. <a href="{% url 'post-create' %}">Be the first to post.</a></p>

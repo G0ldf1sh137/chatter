@@ -6,7 +6,7 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase, override_settings
 from django.urls import reverse
 
-from posts.models import Comment, Post
+from posts.models import Comment, CommentVote, Post, PostVote
 
 from .models import Follow, Profile
 
@@ -93,6 +93,22 @@ class ProfileViewTests(TestCase):
         self.assertContains(response, "A comment by carol")
         self.assertContains(response, "1 post")
         self.assertContains(response, "1 comment")
+
+    def test_profile_shows_karma_from_posts_and_comments(self):
+        carol = User.objects.create_user(username="carol", password="correct-horse-battery-staple")
+        voter1 = User.objects.create_user(username="voter1", password="correct-horse-battery-staple")
+        voter2 = User.objects.create_user(username="voter2", password="correct-horse-battery-staple")
+        post = Post.objects.create(author=carol, body="A post")
+        comment = Comment.objects.create(author=carol, post=post, body="A comment")
+
+        PostVote.objects.create(user=voter1, post=post, value=PostVote.UP)
+        PostVote.objects.create(user=voter2, post=post, value=PostVote.UP)
+        CommentVote.objects.create(user=voter1, comment=comment, value=CommentVote.DOWN)
+
+        response = self.client.get(reverse("profile", args=["carol"]))
+
+        self.assertContains(response, "1 karma")
+        self.assertEqual(response.context["karma"], 1)
 
 
 class ProfileEditTests(TestCase):
