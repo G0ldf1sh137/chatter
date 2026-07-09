@@ -43,8 +43,17 @@
     }
 
     function tileClass(value) {
-        if (value >= 512) return "bg-accent text-accent-fg";
-        if (value >= 64) return "bg-upvote text-white";
+        // Each power-of-two tier gets its own shade, cycling through the
+        // theme's four accent colors (blue, amber, rose, green) rather than
+        // inventing new hardcoded colors - solid tones at each family's
+        // final tier, lighter opacity variants leading into it.
+        if (value >= 4096) return "bg-accent text-accent-fg font-black";
+        if (value >= 2048) return "bg-karma text-white font-black";
+        if (value >= 1024) return "bg-karma/80 text-white font-black";
+        if (value >= 512) return "bg-downvote text-white font-black";
+        if (value >= 256) return "bg-downvote/70 text-white font-black";
+        if (value >= 128) return "bg-upvote text-white font-black";
+        if (value >= 64) return "bg-upvote/60 text-fg font-black";
         if (value >= 32) return "bg-accent/70 text-white font-black";
         if (value >= 16) return "bg-accent/45 text-fg font-black";
         if (value >= 8) return "bg-accent/25 text-fg font-black";
