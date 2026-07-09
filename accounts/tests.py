@@ -354,7 +354,9 @@ class ProfileEditTests(TestCase):
         self.client.force_login(self.user)
         avatar = SimpleUploadedFile("avatar.gif", TINY_GIF, content_type="image/gif")
 
-        response = self.client.post(reverse("profile-edit"), {"bio": "Hello!", "avatar": avatar})
+        response = self.client.post(
+            reverse("profile-edit"), {"username": "dave", "bio": "Hello!", "avatar": avatar}
+        )
 
         self.assertRedirects(response, reverse("profile", args=["dave"]))
         profile = Profile.objects.get(user=self.user)
@@ -366,11 +368,54 @@ class ProfileEditTests(TestCase):
         self.client.force_login(self.user)
         avatar = SimpleUploadedFile("avatar.gif", TINY_GIF, content_type="image/gif")
 
-        response = self.client.post(reverse("profile-edit"), {"bio": "", "avatar": avatar})
+        response = self.client.post(reverse("profile-edit"), {"username": "dave", "bio": "", "avatar": avatar})
 
         self.assertEqual(response.status_code, 200)
         self.assertFalse(Profile.objects.get(user=self.user).avatar)
         self.assertFormError(response.context["form"], "avatar", "Image must be smaller than 0MB.")
+
+    def test_user_can_update_username_and_names(self):
+        self.client.force_login(self.user)
+
+        response = self.client.post(
+            reverse("profile-edit"),
+            {"username": "davethegreat", "first_name": "Dave", "last_name": "Grohl", "bio": ""},
+        )
+
+        self.assertRedirects(response, reverse("profile", args=["davethegreat"]))
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.username, "davethegreat")
+        self.assertEqual(self.user.first_name, "Dave")
+        self.assertEqual(self.user.last_name, "Grohl")
+
+    def test_duplicate_username_rejected(self):
+        User.objects.create_user(username="erin", password="correct-horse-battery-staple")
+        self.client.force_login(self.user)
+
+        response = self.client.post(reverse("profile-edit"), {"username": "erin", "bio": ""})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFormError(
+            response.context["user_form"], "username", "A user with that username already exists."
+        )
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.username, "dave")
+        # The rejected, unsaved "erin" shouldn't leak onto request.user - the
+        # header's nav link reads from it and would otherwise point at erin's
+        # profile instead of dave's for this response.
+        self.assertEqual(response.context["user"].username, "dave")
+        self.assertContains(response, reverse("profile", args=["dave"]))
+        self.assertNotContains(response, reverse("profile", args=["erin"]))
+
+    def test_blank_username_rejected(self):
+        self.client.force_login(self.user)
+
+        response = self.client.post(reverse("profile-edit"), {"username": "", "bio": ""})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFormError(response.context["user_form"], "username", "This field is required.")
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.username, "dave")
 
 
 class PasswordChangeTests(TestCase):

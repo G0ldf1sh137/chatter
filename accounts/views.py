@@ -16,7 +16,7 @@ from posts.models import CommentVote, PostVote
 from posts.views import annotate_votes
 
 from .emails import send_verification_email
-from .forms import ProfileForm, RegistrationForm, ResendVerificationForm
+from .forms import ProfileForm, RegistrationForm, ResendVerificationForm, UserProfileForm
 from .models import Follow, Profile
 from .tokens import TokenExpired, TokenInvalid, verify_token
 
@@ -135,8 +135,30 @@ class ProfileEditView(LoginRequiredMixin, UpdateView):
         profile, _ = Profile.objects.get_or_create(user=self.request.user)
         return profile
 
-    def get_success_url(self):
-        return reverse("profile", kwargs={"username": self.request.user.username})
+    def get_user_form(self, data=None):
+        # A separate copy, not self.request.user itself - ModelForm validation
+        # writes submitted values onto the bound instance before uniqueness
+        # checks run, even when they ultimately fail. Binding request.user
+        # directly would leak a rejected, unsaved username onto the same
+        # object base.html's header reads for the nav link, pointing it at
+        # someone else's profile for the rest of this response.
+        user_copy = User.objects.get(pk=self.request.user.pk)
+        return UserProfileForm(data=data, instance=user_copy)
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context.setdefault("user_form", self.get_user_form())
+        return context
+
+    def post(self, request, *args, **kwargs):
+        self.object = self.get_object()
+        form = self.get_form()
+        user_form = self.get_user_form(data=request.POST)
+        if form.is_valid() and user_form.is_valid():
+            saved_user = user_form.save()
+            form.save()
+            return redirect(reverse("profile", kwargs={"username": saved_user.username}))
+        return self.render_to_response(self.get_context_data(form=form, user_form=user_form))
 
 
 class PasswordChangeView(LoginRequiredMixin, FormView):

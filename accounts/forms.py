@@ -30,6 +30,12 @@ class EmailVerifiedAuthenticationForm(AuthenticationForm):
             )
 
 
+class UserProfileForm(forms.ModelForm):
+    class Meta:
+        model = User
+        fields = ["username", "first_name", "last_name"]
+
+
 class ProfileForm(forms.ModelForm):
     class Meta:
         model = Profile
