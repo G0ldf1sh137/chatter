@@ -641,6 +641,36 @@ class MessageSendViewTests(TestCase):
         self.assertEqual(Message.objects.count(), 0)
 
 
+class MessageMarkdownRenderingTests(TestCase):
+    def setUp(self):
+        self.alice = make_user("alice")
+        self.bob = make_user("bob")
+        self.conversation = get_or_create_conversation(self.alice, self.bob)
+
+    def test_message_body_renders_markdown(self):
+        Message.objects.create(conversation=self.conversation, sender=self.alice, body="**bold** and *italic*")
+        self.client.force_login(self.bob)
+
+        response = self.client.get(reverse("conversation-detail", args=[self.conversation.pk]))
+
+        self.assertContains(response, "<strong>bold</strong>")
+        self.assertContains(response, "<em>italic</em>")
+
+    def test_message_body_strips_script_tags(self):
+        Message.objects.create(
+            conversation=self.conversation, sender=self.alice, body="<script>alert('xss')</script>"
+        )
+        self.client.force_login(self.bob)
+
+        response = self.client.get(reverse("conversation-detail", args=[self.conversation.pk]))
+
+        # The page legitimately has other <script src="..."> tags (badge
+        # polling JS), so check the malicious payload specifically rather
+        # than asserting no "<script>" substring appears anywhere at all.
+        self.assertNotContains(response, "<script>alert")
+        self.assertContains(response, "&lt;script&gt;")
+
+
 class UnreadMessageCountTests(TestCase):
     def setUp(self):
         self.alice = make_user("alice")

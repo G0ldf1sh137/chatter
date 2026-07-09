@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load post_extras %}
 
 {% block title %}{{ other.username }} — Messages — Chatter{% endblock %}
 
@@ -14,7 +15,7 @@
         {% for message in message_list %}
             <div class="flex {% if message.sender_id == user.id %}justify-end{% else %}justify-start{% endif %}">
                 <div class="max-w-[80%] rounded-2xl px-4 py-2 {% if message.sender_id == user.id %}bg-accent text-accent-fg{% else %}bg-surface-hover text-fg{% endif %}">
-                    <p class="text-sm">{{ message.body }}</p>
+                    <div class="prose prose-sm max-w-none text-sm [&_a]:text-inherit [&_a]:underline [&_*]:text-inherit">{{ message.body|markdown }}</div>
                     <p class="mt-1 text-xs opacity-70">{{ message.created_at }}</p>
                 </div>
             </div>

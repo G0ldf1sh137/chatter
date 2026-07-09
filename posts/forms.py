@@ -39,5 +39,5 @@ class MessageForm(forms.ModelForm):
         model = Message
         fields = ["body"]
         widgets = {
-            "body": forms.Textarea(attrs={"rows": 2, "placeholder": "Write a message..."}),
+            "body": forms.Textarea(attrs={"rows": 2, "placeholder": "Write a message... Markdown supported"}),
         }
