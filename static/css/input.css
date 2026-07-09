@@ -2,10 +2,11 @@
 @plugin "@tailwindcss/typography";
 
 /*
- * Chatter palette — violet/indigo brand with warm-orange upvotes and cool-sky
- * downvotes for a clear at-a-glance signal. Raw values live on :root/.dark
- * and @theme below maps them to Tailwind utilities (bg-surface, text-fg,
- * ...) so templates never need dark: prefixes for color.
+ * Chatter palette — "Cobalt Current": deep cobalt-blue brand with warm-amber
+ * upvotes and rose downvotes for a clear at-a-glance signal against the blue
+ * accent. Raw values live on :root/.dark and @theme below maps them to
+ * Tailwind utilities (bg-surface, text-fg, ...) so templates never need
+ * dark: prefixes for color.
  *
  * Dark mode is class-based (a .dark class on <html>, toggled by the header
  * button — see the inline script in base.html) rather than Tailwind's media
@@ -19,32 +20,32 @@
 :root {
     color-scheme: light;
 
-    --bg: #f6f5fb;
+    --bg: #f4f7fc;
     --surface: #ffffff;
-    --surface-hover: #faf9fe;
-    --fg: #17151f;
-    --muted: #6b6878;
-    --border: #e6e3ef;
-    --accent: #7c3aed;
+    --surface-hover: #eaf1fb;
+    --fg: #0b1220;
+    --muted: #5b6b85;
+    --border: #dbe4f3;
+    --accent: #1d4ed8;
     --accent-fg: #ffffff;
-    --upvote: #ea580c;
-    --downvote: #0284c7;
+    --upvote: #f59e0b;
+    --downvote: #db2777;
     --karma: #059669;
 }
 
 .dark {
     color-scheme: dark;
 
-    --bg: #100e1a;
-    --surface: #1b1829;
-    --surface-hover: #221f33;
-    --fg: #f3f1fa;
-    --muted: #a09cb3;
-    --border: #2f2b42;
-    --accent: #a78bfa;
-    --accent-fg: #1b1130;
-    --upvote: #fb923c;
-    --downvote: #38bdf8;
+    --bg: #060a14;
+    --surface: #0f1830;
+    --surface-hover: #16213f;
+    --fg: #eaf1fb;
+    --muted: #8ea0c2;
+    --border: #1f2c4d;
+    --accent: #4d7fff;
+    --accent-fg: #04102a;
+    --upvote: #fbbf24;
+    --downvote: #f472b6;
     --karma: #34d399;
 }
 
