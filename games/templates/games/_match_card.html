@@ -1,0 +1,12 @@
+{% if match.game == "ttt" %}
+    {% url 'ttt-match' match.pk as match_url %}
+{% else %}
+    {% url 'rps-match' match.pk as match_url %}
+{% endif %}
+<a href="{{ match_url }}" class="flex items-center gap-3 rounded-2xl border border-border bg-surface p-4 shadow-sm no-underline transition-shadow hover:shadow-md">
+    {% include "_avatar.html" with avatar_user=match.opponent %}
+    <div class="min-w-0 flex-1">
+        <p class="font-medium text-fg">{{ match.get_game_display }} vs {{ match.opponent.username }}</p>
+        <p class="text-sm text-muted">{{ match.updated_at }}</p>
+    </div>
+</a>

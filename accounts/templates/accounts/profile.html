@@ -16,17 +16,23 @@
             {% if user.is_authenticated and user == profile_user %}
                 <a href="{% url 'profile-edit' %}" class="rounded-full border border-border px-4 py-1.5 text-sm font-medium text-fg no-underline transition-colors hover:bg-surface-hover">Edit profile</a>
             {% elif user.is_authenticated %}
-                {% if is_following %}
-                    <form method="post" action="{% url 'unfollow' profile_user.username %}" class="inline">
+                <div class="flex flex-wrap items-center gap-2">
+                    {% if is_following %}
+                        <form method="post" action="{% url 'unfollow' profile_user.username %}" class="inline">
+                            {% csrf_token %}
+                            <button type="submit" class="mt-0 rounded-full border border-border bg-transparent px-4 py-1.5 text-sm text-fg transition-colors hover:bg-surface-hover">Unfollow</button>
+                        </form>
+                    {% else %}
+                        <form method="post" action="{% url 'follow' profile_user.username %}" class="inline">
+                            {% csrf_token %}
+                            <button type="submit" class="mt-0 rounded-full px-4 py-1.5 text-sm">Follow</button>
+                        </form>
+                    {% endif %}
+                    <form method="post" action="{% url 'ttt-challenge' profile_user.username %}" class="inline">
                         {% csrf_token %}
-                        <button type="submit" class="mt-0 rounded-full border border-border bg-transparent px-4 py-1.5 text-sm text-fg transition-colors hover:bg-surface-hover">Unfollow</button>
+                        <button type="submit" class="mt-0 rounded-full border border-border bg-transparent px-4 py-1.5 text-sm text-fg transition-colors hover:bg-surface-hover">Challenge to Tic-Tac-Toe</button>
                     </form>
-                {% else %}
-                    <form method="post" action="{% url 'follow' profile_user.username %}" class="inline">
-                        {% csrf_token %}
-                        <button type="submit" class="mt-0 rounded-full px-4 py-1.5 text-sm">Follow</button>
-                    </form>
-                {% endif %}
+                </div>
             {% endif %}
         </div>
 

@@ -4,5 +4,28 @@
 
 {% block content %}
     <h1 class="mb-4 text-2xl font-extrabold tracking-tight">Games</h1>
-    <p class="text-muted">Games are coming soon.</p>
+
+    {% if your_turn_matches %}
+        <h2 class="mb-3 mt-6 text-lg font-bold">Your turn</h2>
+        <div class="space-y-3">
+            {% for match in your_turn_matches %}
+                {% include "games/_match_card.html" %}
+            {% endfor %}
+        </div>
+    {% endif %}
+
+    {% if waiting_matches %}
+        <h2 class="mb-3 mt-6 text-lg font-bold">Waiting on opponent</h2>
+        <div class="space-y-3">
+            {% for match in waiting_matches %}
+                {% include "games/_match_card.html" %}
+            {% endfor %}
+        </div>
+    {% endif %}
+
+    <h2 class="mb-3 mt-6 text-lg font-bold">Multiplayer</h2>
+    <p class="text-sm text-muted">Challenge someone to Tic-Tac-Toe or Rock-Paper-Scissors from their profile page.</p>
+
+    <h2 class="mb-3 mt-6 text-lg font-bold">Single-player</h2>
+    <p class="text-muted">More games are coming soon.</p>
 {% endblock %}

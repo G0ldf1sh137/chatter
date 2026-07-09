@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+
+{% block title %}Tic-Tac-Toe — Chatter{% endblock %}
+
+{% block content %}
+    <div class="mx-auto max-w-sm rounded-2xl border border-border bg-surface p-6 shadow-sm">
+        <div class="mb-4 flex items-center justify-between">
+            <div class="flex items-center gap-2">
+                {% include "_avatar.html" with avatar_user=match.player1 %}
+                <span class="text-sm font-medium">{{ match.player1.username }} (X)</span>
+            </div>
+            <span class="text-sm text-muted">vs</span>
+            <div class="flex items-center gap-2">
+                <span class="text-sm font-medium">{{ match.player2.username }} (O)</span>
+                {% include "_avatar.html" with avatar_user=match.player2 %}
+            </div>
+        </div>
+
+        {% if match.status == "finished" %}
+            {% if match.winner %}
+                <p class="mb-4 text-center font-semibold text-accent">{{ match.winner.username }} won!</p>
+            {% else %}
+                <p class="mb-4 text-center font-semibold text-muted">It's a draw.</p>
+            {% endif %}
+        {% elif is_your_turn %}
+            <p class="mb-4 text-center font-semibold text-accent">Your turn</p>
+        {% else %}
+            <p class="mb-4 text-center text-muted">Waiting on {{ opponent.username }}</p>
+        {% endif %}
+
+        <div class="mx-auto grid w-full max-w-[240px] grid-cols-3 gap-2">
+            {% for cell in board %}
+                {% if cell %}
+                    <div class="flex aspect-square items-center justify-center rounded-lg bg-surface-hover text-3xl font-bold {% if cell == 'X' %}text-accent{% else %}text-downvote{% endif %}">{{ cell }}</div>
+                {% elif is_your_turn %}
+                    <form method="post" action="{% url 'ttt-move' match.pk %}">
+                        {% csrf_token %}
+                        <input type="hidden" name="cell" value="{{ forloop.counter0 }}">
+                        <button type="submit" aria-label="Play cell {{ forloop.counter }}" class="mt-0 flex aspect-square w-full items-center justify-center rounded-lg border border-border bg-transparent text-3xl font-bold text-muted transition-colors hover:bg-surface-hover"></button>
+                    </form>
+                {% else %}
+                    <div class="aspect-square rounded-lg bg-surface-hover"></div>
+                {% endif %}
+            {% endfor %}
+        </div>
+    </div>
+{% endblock %}
