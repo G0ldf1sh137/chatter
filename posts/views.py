@@ -10,6 +10,7 @@ from django.views.generic import CreateView, DetailView, ListView, UpdateView
 
 from .forms import CommentForm, PostForm
 from .models import Comment, CommentVote, Post, PostVote
+from .ranking import rank_posts
 
 
 def build_comment_tree(comments):
@@ -65,10 +66,12 @@ class FeedView(ListView):
     paginate_by = 20
     active_feed = "all"
 
-    def get_queryset(self):
+    def get_base_queryset(self):
         queryset = Post.objects.select_related("author", "author__profile")
-        queryset = annotate_votes(queryset, PostVote, "post", self.request.user)
-        return queryset.order_by("-score", "-created_at")
+        return annotate_votes(queryset, PostVote, "post", self.request.user)
+
+    def get_queryset(self):
+        return rank_posts(self.get_base_queryset())
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -79,8 +82,8 @@ class FeedView(ListView):
 class FollowingFeedView(LoginRequiredMixin, FeedView):
     active_feed = "following"
 
-    def get_queryset(self):
-        return super().get_queryset().filter(author__followers__follower=self.request.user)
+    def get_base_queryset(self):
+        return super().get_base_queryset().filter(author__followers__follower=self.request.user)
 
 
 class PostCreateView(LoginRequiredMixin, CreateView):

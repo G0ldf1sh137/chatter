@@ -1,6 +1,9 @@
+from datetime import timedelta
+
 from django.contrib.auth.models import User
 from django.test import TestCase
 from django.urls import reverse
+from django.utils import timezone
 
 from accounts.models import Follow
 
@@ -79,6 +82,68 @@ class PostTests(TestCase):
 
         # high_score created after low_score but outranks it: 3 upvotes vs 1.
         self.assertEqual(list(response.context["posts"]), [high_score, low_score])
+
+    def test_feed_ranks_more_comment_karma_higher(self):
+        author = make_user("dave")
+        commenter = make_user("eve")
+        voter1 = make_user("bob")
+        voter2 = make_user("carol")
+
+        with_comments = Post.objects.create(author=author, body="lively discussion")
+        no_comments = Post.objects.create(author=author, body="quiet post")
+        now = timezone.now()
+        Post.objects.filter(pk__in=[with_comments.pk, no_comments.pk]).update(created_at=now)
+
+        comment = Comment.objects.create(author=commenter, post=with_comments, body="great point")
+        CommentVote.objects.create(user=voter1, comment=comment, value=CommentVote.UP)
+        CommentVote.objects.create(user=voter2, comment=comment, value=CommentVote.UP)
+
+        response = self.client.get(reverse("feed"))
+
+        # Same author, same score, same age - only the comment thread's karma differs.
+        self.assertEqual(list(response.context["posts"]), [with_comments, no_comments])
+
+    def test_feed_ranks_higher_poster_karma_above_lower(self):
+        popular_author = make_user("dave")
+        new_author = make_user("erin")
+        voter1 = make_user("bob")
+        voter2 = make_user("carol")
+        voter3 = make_user("frank")
+
+        older_popular_post = Post.objects.create(author=popular_author, body="past hit")
+        for voter in (voter1, voter2, voter3):
+            PostVote.objects.create(user=voter, post=older_popular_post, value=PostVote.UP)
+
+        from_popular_author = Post.objects.create(author=popular_author, body="new from a popular author")
+        from_new_author = Post.objects.create(author=new_author, body="new from a fresh author")
+        now = timezone.now()
+        Post.objects.filter(pk__in=[from_popular_author.pk, from_new_author.pk]).update(created_at=now)
+
+        response = self.client.get(reverse("feed"))
+        posts = list(response.context["posts"])
+
+        # Same score, same age - only the authors' overall karma differs.
+        self.assertLess(posts.index(from_popular_author), posts.index(from_new_author))
+
+    def test_feed_decay_favors_recent_post_over_old_high_karma_post(self):
+        author = make_user("dave")
+        voter1 = make_user("bob")
+        voter2 = make_user("carol")
+        voter3 = make_user("frank")
+
+        old_high_karma = Post.objects.create(author=author, body="old but popular")
+        for voter in (voter1, voter2, voter3):
+            PostVote.objects.create(user=voter, post=old_high_karma, value=PostVote.UP)
+        Post.objects.filter(pk=old_high_karma.pk).update(created_at=timezone.now() - timedelta(days=30))
+        old_high_karma.refresh_from_db()
+
+        new_modest = Post.objects.create(author=make_user("erin"), body="brand new")
+
+        response = self.client.get(reverse("feed"))
+
+        # A month-old post with 4 upvotes has decayed enough that a brand-new post
+        # with just its author's self-upvote now outranks it.
+        self.assertEqual(list(response.context["posts"]), [new_modest, old_high_karma])
 
     def test_following_feed_requires_login(self):
         response = self.client.get(reverse("following-feed"))
