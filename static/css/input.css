@@ -17,6 +17,24 @@
  */
 @custom-variant dark (&:where(.dark, .dark *));
 
+/*
+ * Cross-document view transitions: opt every full-page navigation into the
+ * browser's built-in transition (Chrome/Edge 126+; a no-op elsewhere, so
+ * this is pure progressive enhancement). Voting redirects back to the same
+ * page with posts re-sorted by score - feed.html gives each post card a
+ * stable view-transition-name (post-<id>), so the browser animates that
+ * specific card sliding from its old rank to its new one instead of the
+ * whole page just jumping. No JS needed: this is what the API is for.
+ */
+@view-transition {
+    navigation: auto;
+}
+
+::view-transition-group(*) {
+    animation-duration: 0.35s;
+    animation-timing-function: cubic-bezier(0.2, 0, 0.2, 1);
+}
+
 :root {
     color-scheme: light;
 

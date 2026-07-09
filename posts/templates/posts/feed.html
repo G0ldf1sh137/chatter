@@ -15,7 +15,7 @@
 
     <div class="space-y-4">
         {% for post in posts %}
-            <article class="rounded-2xl border border-border bg-surface p-4 shadow-sm transition-shadow hover:shadow-md sm:p-5">
+            <article class="rounded-2xl border border-border bg-surface p-4 shadow-sm transition-shadow hover:shadow-md sm:p-5" style="view-transition-name: post-{{ post.pk }}">
                 <div class="flex gap-3">
                     {% include "_post_vote.html" %}
                     <div class="min-w-0 flex-1">
