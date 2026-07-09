@@ -40,6 +40,7 @@ INSTALLED_APPS = [
     "allauth.socialaccount.providers.google",
     "accounts",
     "posts",
+    "games",
 ]
 
 MIDDLEWARE = [
