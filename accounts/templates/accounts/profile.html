@@ -32,6 +32,10 @@
                         {% csrf_token %}
                         <button type="submit" class="mt-0 rounded-full border border-border bg-transparent px-4 py-1.5 text-sm text-fg transition-colors hover:bg-surface-hover">Challenge to Tic-Tac-Toe</button>
                     </form>
+                    <form method="post" action="{% url 'rps-challenge' profile_user.username %}" class="inline">
+                        {% csrf_token %}
+                        <button type="submit" class="mt-0 rounded-full border border-border bg-transparent px-4 py-1.5 text-sm text-fg transition-colors hover:bg-surface-hover">Challenge to Rock-Paper-Scissors</button>
+                    </form>
                 </div>
             {% endif %}
         </div>

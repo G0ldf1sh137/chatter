@@ -2,7 +2,7 @@ from django.contrib.auth.models import User
 from django.test import TestCase
 from django.urls import reverse
 
-from .logic import tic_tac_toe
+from .logic import rock_paper_scissors, tic_tac_toe
 from .logic.exceptions import InvalidMove
 from .models import Match
 
@@ -161,3 +161,104 @@ class TicTacToeMatchTests(TestCase):
         match.refresh_from_db()
         self.assertEqual(match.status, Match.Status.FINISHED)
         self.assertIsNone(match.winner)
+
+
+class RockPaperScissorsLogicTests(TestCase):
+    def test_same_choice_is_draw(self):
+        self.assertEqual(rock_paper_scissors.determine_winner("rock", "rock"), "draw")
+
+    def test_rock_beats_scissors(self):
+        self.assertEqual(rock_paper_scissors.determine_winner("rock", "scissors"), "a")
+        self.assertEqual(rock_paper_scissors.determine_winner("scissors", "rock"), "b")
+
+    def test_paper_beats_rock(self):
+        self.assertEqual(rock_paper_scissors.determine_winner("paper", "rock"), "a")
+        self.assertEqual(rock_paper_scissors.determine_winner("rock", "paper"), "b")
+
+    def test_scissors_beats_paper(self):
+        self.assertEqual(rock_paper_scissors.determine_winner("scissors", "paper"), "a")
+        self.assertEqual(rock_paper_scissors.determine_winner("paper", "scissors"), "b")
+
+
+class RockPaperScissorsMatchTests(TestCase):
+    def setUp(self):
+        self.alice = make_user("alice")
+        self.bob = make_user("bob")
+
+    def test_challenge_creates_active_match_with_no_turn(self):
+        self.client.force_login(self.alice)
+        response = self.client.post(reverse("rps-challenge", args=["bob"]))
+        match = Match.objects.get()
+        self.assertRedirects(response, reverse("rps-match", args=[match.pk]))
+        self.assertEqual(match.game, Match.Game.ROCK_PAPER_SCISSORS)
+        self.assertIsNone(match.turn)
+        self.assertEqual(match.state, {"choices": {}})
+
+    def test_cannot_challenge_self(self):
+        self.client.force_login(self.alice)
+        self.client.post(reverse("rps-challenge", args=["alice"]))
+        self.assertEqual(Match.objects.count(), 0)
+
+    def test_first_choice_does_not_finish_match(self):
+        match = Match.objects.create(
+            game=Match.Game.ROCK_PAPER_SCISSORS, player1=self.alice, player2=self.bob, state={"choices": {}}
+        )
+        self.client.force_login(self.alice)
+        self.client.post(reverse("rps-move", args=[match.pk]), {"choice": "rock"})
+        match.refresh_from_db()
+        self.assertEqual(match.status, Match.Status.ACTIVE)
+        self.assertEqual(match.state["choices"], {str(self.alice.id): "rock"})
+
+    def test_cannot_choose_twice(self):
+        match = Match.objects.create(
+            game=Match.Game.ROCK_PAPER_SCISSORS, player1=self.alice, player2=self.bob, state={"choices": {}}
+        )
+        self.client.force_login(self.alice)
+        self.client.post(reverse("rps-move", args=[match.pk]), {"choice": "rock"})
+        self.client.post(reverse("rps-move", args=[match.pk]), {"choice": "paper"})
+        match.refresh_from_db()
+        self.assertEqual(match.state["choices"], {str(self.alice.id): "rock"})
+
+    def test_second_choice_resolves_match(self):
+        match = Match.objects.create(
+            game=Match.Game.ROCK_PAPER_SCISSORS,
+            player1=self.alice,
+            player2=self.bob,
+            state={"choices": {str(self.alice.id): "rock"}},
+        )
+        self.client.force_login(self.bob)
+        self.client.post(reverse("rps-move", args=[match.pk]), {"choice": "scissors"})
+        match.refresh_from_db()
+        self.assertEqual(match.status, Match.Status.FINISHED)
+        self.assertEqual(match.winner, self.alice)
+
+    def test_draw_resolves_with_no_winner(self):
+        match = Match.objects.create(
+            game=Match.Game.ROCK_PAPER_SCISSORS,
+            player1=self.alice,
+            player2=self.bob,
+            state={"choices": {str(self.alice.id): "rock"}},
+        )
+        self.client.force_login(self.bob)
+        self.client.post(reverse("rps-move", args=[match.pk]), {"choice": "rock"})
+        match.refresh_from_db()
+        self.assertEqual(match.status, Match.Status.FINISHED)
+        self.assertIsNone(match.winner)
+
+    def test_non_participant_cannot_view_match(self):
+        match = Match.objects.create(
+            game=Match.Game.ROCK_PAPER_SCISSORS, player1=self.alice, player2=self.bob, state={"choices": {}}
+        )
+        carol = make_user("carol")
+        self.client.force_login(carol)
+        response = self.client.get(reverse("rps-match", args=[match.pk]))
+        self.assertEqual(response.status_code, 403)
+
+    def test_invalid_choice_is_ignored(self):
+        match = Match.objects.create(
+            game=Match.Game.ROCK_PAPER_SCISSORS, player1=self.alice, player2=self.bob, state={"choices": {}}
+        )
+        self.client.force_login(self.alice)
+        self.client.post(reverse("rps-move", args=[match.pk]), {"choice": "lizard"})
+        match.refresh_from_db()
+        self.assertEqual(match.state["choices"], {})

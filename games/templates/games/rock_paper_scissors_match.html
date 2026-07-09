@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+
+{% block title %}Rock-Paper-Scissors — Chatter{% endblock %}
+
+{% block content %}
+    <div class="mx-auto max-w-sm rounded-2xl border border-border bg-surface p-6 shadow-sm">
+        <div class="mb-4 flex items-center justify-between">
+            <div class="flex items-center gap-2">
+                {% include "_avatar.html" with avatar_user=match.player1 %}
+                <span class="text-sm font-medium">{{ match.player1.username }}</span>
+            </div>
+            <span class="text-sm text-muted">vs</span>
+            <div class="flex items-center gap-2">
+                <span class="text-sm font-medium">{{ match.player2.username }}</span>
+                {% include "_avatar.html" with avatar_user=match.player2 %}
+            </div>
+        </div>
+
+        {% if match.status == "finished" %}
+            <div class="mb-4 flex items-center justify-center gap-4 text-center">
+                <span class="rounded-lg bg-surface-hover px-4 py-2 text-sm font-semibold capitalize">{{ player1_choice|default:"—" }}</span>
+                <span class="text-sm text-muted">vs</span>
+                <span class="rounded-lg bg-surface-hover px-4 py-2 text-sm font-semibold capitalize">{{ player2_choice|default:"—" }}</span>
+            </div>
+            {% if match.winner %}
+                <p class="text-center font-semibold text-accent">{{ match.winner.username }} won!</p>
+            {% else %}
+                <p class="text-center font-semibold text-muted">It's a draw.</p>
+            {% endif %}
+        {% elif your_choice %}
+            <p class="text-center text-muted">You picked <span class="font-semibold capitalize text-fg">{{ your_choice }}</span>. Waiting on {{ opponent.username }}...</p>
+        {% else %}
+            <p class="mb-4 text-center font-semibold text-accent">Make your choice</p>
+            <form method="post" action="{% url 'rps-move' match.pk %}" class="flex justify-center gap-3">
+                {% csrf_token %}
+                <button type="submit" name="choice" value="rock" class="mt-0 rounded-xl border border-border bg-transparent px-4 py-3 text-sm font-medium text-fg transition-colors hover:bg-surface-hover">Rock</button>
+                <button type="submit" name="choice" value="paper" class="mt-0 rounded-xl border border-border bg-transparent px-4 py-3 text-sm font-medium text-fg transition-colors hover:bg-surface-hover">Paper</button>
+                <button type="submit" name="choice" value="scissors" class="mt-0 rounded-xl border border-border bg-transparent px-4 py-3 text-sm font-medium text-fg transition-colors hover:bg-surface-hover">Scissors</button>
+            </form>
+        {% endif %}
+    </div>
+{% endblock %}

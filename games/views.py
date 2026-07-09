@@ -8,7 +8,7 @@ from django.shortcuts import get_object_or_404, redirect
 from django.views import View
 from django.views.generic import DetailView, TemplateView
 
-from .logic import tic_tac_toe
+from .logic import rock_paper_scissors, tic_tac_toe
 from .logic.exceptions import InvalidMove
 from .models import Match
 
@@ -101,3 +101,78 @@ class TicTacToeMoveView(LoginRequiredMixin, View):
                 match.winner = request.user if result != "draw" else None
             match.save()
         return redirect("ttt-match", pk=pk)
+
+
+class RockPaperScissorsChallengeView(LoginRequiredMixin, View):
+    def post(self, request, username):
+        opponent = get_object_or_404(User, username=username)
+        if opponent == request.user:
+            messages.error(request, "You can't challenge yourself.")
+            return redirect("profile", username=username)
+        match = Match.objects.create(
+            game=Match.Game.ROCK_PAPER_SCISSORS,
+            player1=request.user,
+            player2=opponent,
+            state={"choices": {}},
+        )
+        return redirect("rps-match", pk=match.pk)
+
+
+class RockPaperScissorsMatchView(LoginRequiredMixin, UserPassesTestMixin, DetailView):
+    template_name = "games/rock_paper_scissors_match.html"
+    context_object_name = "match"
+
+    def test_func(self):
+        match = self.get_object()
+        return self.request.user.id in (match.player1_id, match.player2_id)
+
+    def get_queryset(self):
+        return Match.objects.filter(game=Match.Game.ROCK_PAPER_SCISSORS).select_related(
+            "player1", "player2", "winner"
+        )
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        match = context["match"]
+        choices = match.state.get("choices", {})
+        context["opponent"] = match.opponent_of(self.request.user)
+        context["your_choice"] = choices.get(str(self.request.user.id))
+        if match.status == Match.Status.FINISHED:
+            context["player1_choice"] = choices.get(str(match.player1_id))
+            context["player2_choice"] = choices.get(str(match.player2_id))
+        return context
+
+
+class RockPaperScissorsMoveView(LoginRequiredMixin, View):
+    def post(self, request, pk):
+        choice = request.POST.get("choice")
+        if choice not in rock_paper_scissors.CHOICES:
+            return redirect("rps-match", pk=pk)
+
+        with transaction.atomic():
+            match = get_object_or_404(
+                Match.objects.select_for_update(), pk=pk, game=Match.Game.ROCK_PAPER_SCISSORS
+            )
+            if request.user.id not in (match.player1_id, match.player2_id):
+                raise Http404
+            if match.status != Match.Status.ACTIVE:
+                return redirect("rps-match", pk=pk)
+
+            choices = dict(match.state.get("choices", {}))
+            if str(request.user.id) in choices:
+                # Already chosen - no changing your mind mid-match.
+                return redirect("rps-match", pk=pk)
+            choices[str(request.user.id)] = choice
+            match.state = {"choices": choices}
+
+            if len(choices) == 2:
+                result = rock_paper_scissors.determine_winner(
+                    choices[str(match.player1_id)], choices[str(match.player2_id)]
+                )
+                match.status = Match.Status.FINISHED
+                if result == "draw":
+                    match.winner = None
+                else:
+                    match.winner = match.player1 if result == "a" else match.player2
+            match.save()
+        return redirect("rps-match", pk=pk)
