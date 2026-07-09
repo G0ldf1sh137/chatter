@@ -26,10 +26,10 @@
     {% if comment_tree %}
         <div class="divide-y divide-border rounded-2xl border border-border bg-surface" id="comment-list">
             {% include "posts/_comment_list.html" %}
+            {% if comments_has_next %}
+                <div data-infinite-scroll-sentinel data-next-url="{% url 'post-detail' post.pk %}?page=2" class="h-8 text-center text-sm text-muted"></div>
+            {% endif %}
         </div>
-        {% if comments_has_next %}
-            <div data-infinite-scroll-sentinel data-next-url="{% url 'post-detail' post.pk %}?page=2" class="h-8 text-center text-sm text-muted"></div>
-        {% endif %}
     {% else %}
         <p class="text-muted">No comments yet.</p>
     {% endif %}

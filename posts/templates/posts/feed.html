@@ -32,11 +32,10 @@
                 {% endif %}
             </div>
         {% endfor %}
+        {% if page_obj.has_next %}
+            <div data-infinite-scroll-sentinel data-next-url="?page={{ page_obj.next_page_number }}&sort={{ active_sort }}" class="h-8 text-center text-sm text-muted"></div>
+        {% endif %}
     </div>
-
-    {% if page_obj.has_next %}
-        <div data-infinite-scroll-sentinel data-next-url="?page={{ page_obj.next_page_number }}&sort={{ active_sort }}" class="h-8 text-center text-sm text-muted"></div>
-    {% endif %}
 
     <script src="{% static 'posts/js/infinite_scroll.js' %}"></script>
 {% endblock %}
