@@ -116,6 +116,20 @@ class RegistrationTests(TestCase):
         self.assertEqual(User.objects.filter(username="bob").count(), 1)
         self.assertFormError(response.context["form"], "username", "A user with that username already exists.")
 
+    def test_username_with_at_sign_rejected(self):
+        response = self.client.post(
+            reverse("register"),
+            {
+                "username": "bob@example",
+                "email": "bob@example.com",
+                "password1": "correct-horse-battery-staple",
+                "password2": "correct-horse-battery-staple",
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(User.objects.filter(username="bob@example").exists())
+        self.assertFormError(response.context["form"], "username", "Usernames can't contain the '@' symbol.")
+
     def test_email_is_required(self):
         response = self.client.post(
             reverse("register"),
@@ -414,6 +428,18 @@ class ProfileEditTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertFormError(response.context["user_form"], "username", "This field is required.")
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.username, "dave")
+
+    def test_username_with_at_sign_rejected(self):
+        self.client.force_login(self.user)
+
+        response = self.client.post(reverse("profile-edit"), {"username": "dave@example", "bio": ""})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFormError(
+            response.context["user_form"], "username", "Usernames can't contain the '@' symbol."
+        )
         self.user.refresh_from_db()
         self.assertEqual(self.user.username, "dave")
 

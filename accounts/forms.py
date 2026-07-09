@@ -6,7 +6,18 @@ from django.contrib.auth.models import User
 from .models import Profile
 
 
-class RegistrationForm(UserCreationForm):
+class NoAtSignInUsernameMixin:
+    # '@' is reserved for referencing a username elsewhere (e.g. @mentions),
+    # so it can't be part of the username itself - Django's own username
+    # validator otherwise allows it alongside letters/digits/./+/-/_.
+    def clean_username(self):
+        username = self.cleaned_data.get("username", "")
+        if "@" in username:
+            raise forms.ValidationError("Usernames can't contain the '@' symbol.")
+        return username
+
+
+class RegistrationForm(NoAtSignInUsernameMixin, UserCreationForm):
     email = forms.EmailField(required=True)
 
     class Meta(UserCreationForm.Meta):
@@ -30,7 +41,7 @@ class EmailVerifiedAuthenticationForm(AuthenticationForm):
             )
 
 
-class UserProfileForm(forms.ModelForm):
+class UserProfileForm(NoAtSignInUsernameMixin, forms.ModelForm):
     class Meta:
         model = User
         fields = ["username", "first_name", "last_name"]
