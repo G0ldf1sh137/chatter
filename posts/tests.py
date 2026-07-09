@@ -145,6 +145,51 @@ class PostTests(TestCase):
         # with just its author's self-upvote now outranks it.
         self.assertEqual(list(response.context["posts"]), [new_modest, old_high_karma])
 
+    def test_feed_sort_top_ignores_decay_and_orders_by_score(self):
+        author = make_user("dave")
+        voter1 = make_user("bob")
+        voter2 = make_user("carol")
+        voter3 = make_user("frank")
+
+        old_high_karma = Post.objects.create(author=author, body="old but popular")
+        for voter in (voter1, voter2, voter3):
+            PostVote.objects.create(user=voter, post=old_high_karma, value=PostVote.UP)
+        Post.objects.filter(pk=old_high_karma.pk).update(created_at=timezone.now() - timedelta(days=30))
+        old_high_karma.refresh_from_db()
+
+        new_modest = Post.objects.create(author=make_user("erin"), body="brand new")
+
+        response = self.client.get(reverse("feed"), {"sort": "top"})
+
+        # Unlike the default ranking, "top" ignores age entirely - raw score wins.
+        self.assertEqual(list(response.context["posts"]), [old_high_karma, new_modest])
+
+    def test_feed_sort_new_orders_by_recency_regardless_of_score(self):
+        author = make_user("dave")
+        voter1 = make_user("bob")
+        voter2 = make_user("carol")
+        voter3 = make_user("frank")
+
+        old_high_karma = Post.objects.create(author=author, body="old but popular")
+        for voter in (voter1, voter2, voter3):
+            PostVote.objects.create(user=voter, post=old_high_karma, value=PostVote.UP)
+        Post.objects.filter(pk=old_high_karma.pk).update(created_at=timezone.now() - timedelta(days=30))
+        old_high_karma.refresh_from_db()
+
+        new_modest = Post.objects.create(author=make_user("erin"), body="brand new")
+
+        response = self.client.get(reverse("feed"), {"sort": "new"})
+
+        self.assertEqual(list(response.context["posts"]), [new_modest, old_high_karma])
+
+    def test_feed_sort_defaults_to_ranked_algorithm(self):
+        response = self.client.get(reverse("feed"))
+        self.assertEqual(response.context["active_sort"], "default")
+
+    def test_feed_sort_rejects_invalid_value(self):
+        response = self.client.get(reverse("feed"), {"sort": "not-a-real-option"})
+        self.assertEqual(response.context["active_sort"], "default")
+
     def test_following_feed_requires_login(self):
         response = self.client.get(reverse("following-feed"))
         self.assertRedirects(response, f"{reverse('login')}?next={reverse('following-feed')}")

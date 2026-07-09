@@ -59,6 +59,12 @@ def redirect_back(request, fallback):
     return redirect(fallback)
 
 
+SORT_DEFAULT = "default"
+SORT_TOP = "top"
+SORT_NEW = "new"
+SORT_CHOICES = {SORT_DEFAULT, SORT_TOP, SORT_NEW}
+
+
 class FeedView(ListView):
     model = Post
     template_name = "posts/feed.html"
@@ -66,16 +72,27 @@ class FeedView(ListView):
     paginate_by = 20
     active_feed = "all"
 
+    def get_sort(self):
+        sort = self.request.GET.get("sort", SORT_DEFAULT)
+        return sort if sort in SORT_CHOICES else SORT_DEFAULT
+
     def get_base_queryset(self):
         queryset = Post.objects.select_related("author", "author__profile")
         return annotate_votes(queryset, PostVote, "post", self.request.user)
 
     def get_queryset(self):
-        return rank_posts(self.get_base_queryset())
+        queryset = self.get_base_queryset()
+        sort = self.get_sort()
+        if sort == SORT_TOP:
+            return queryset.order_by("-score", "-created_at")
+        if sort == SORT_NEW:
+            return queryset.order_by("-created_at")
+        return rank_posts(queryset)
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context["active_feed"] = self.active_feed
+        context["active_sort"] = self.get_sort()
         return context
 
 

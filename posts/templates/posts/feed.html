@@ -6,12 +6,19 @@
 {% block content %}
     <h1 class="mb-4 text-2xl font-extrabold tracking-tight">Feed</h1>
 
-    {% if user.is_authenticated %}
-        <div class="mb-5 inline-flex rounded-full bg-surface-hover p-1">
-            <a href="{% url 'feed' %}" class="rounded-full px-4 py-1.5 text-sm font-medium no-underline transition-colors {% if active_feed == 'all' %}bg-surface text-fg shadow-sm{% else %}text-muted hover:text-fg{% endif %}">All</a>
-            <a href="{% url 'following-feed' %}" class="rounded-full px-4 py-1.5 text-sm font-medium no-underline transition-colors {% if active_feed == 'following' %}bg-surface text-fg shadow-sm{% else %}text-muted hover:text-fg{% endif %}">Following</a>
+    <div class="mb-5 flex flex-wrap items-center gap-3">
+        {% if user.is_authenticated %}
+            <div class="inline-flex rounded-full bg-surface-hover p-1">
+                <a href="{% url 'feed' %}?sort={{ active_sort }}" class="rounded-full px-4 py-1.5 text-sm font-medium no-underline transition-colors {% if active_feed == 'all' %}bg-surface text-fg shadow-sm{% else %}text-muted hover:text-fg{% endif %}">All</a>
+                <a href="{% url 'following-feed' %}?sort={{ active_sort }}" class="rounded-full px-4 py-1.5 text-sm font-medium no-underline transition-colors {% if active_feed == 'following' %}bg-surface text-fg shadow-sm{% else %}text-muted hover:text-fg{% endif %}">Following</a>
+            </div>
+        {% endif %}
+        <div class="inline-flex rounded-full bg-surface-hover p-1">
+            <a href="{{ request.path }}?sort=default" class="rounded-full px-4 py-1.5 text-sm font-medium no-underline transition-colors {% if active_sort == 'default' %}bg-surface text-fg shadow-sm{% else %}text-muted hover:text-fg{% endif %}">Default</a>
+            <a href="{{ request.path }}?sort=top" class="rounded-full px-4 py-1.5 text-sm font-medium no-underline transition-colors {% if active_sort == 'top' %}bg-surface text-fg shadow-sm{% else %}text-muted hover:text-fg{% endif %}">Most popular</a>
+            <a href="{{ request.path }}?sort=new" class="rounded-full px-4 py-1.5 text-sm font-medium no-underline transition-colors {% if active_sort == 'new' %}bg-surface text-fg shadow-sm{% else %}text-muted hover:text-fg{% endif %}">Most recent</a>
         </div>
-    {% endif %}
+    </div>
 
     <div class="space-y-4">
         {% for post in posts %}
@@ -33,7 +40,7 @@
         {% empty %}
             <div class="rounded-2xl border border-dashed border-border p-8 text-center text-muted">
                 {% if active_feed == 'following' %}
-                    <p>No posts from people you follow yet. <a href="{% url 'feed' %}">Browse all posts</a> to find people to follow.</p>
+                    <p>No posts from people you follow yet. <a href="{% url 'feed' %}?sort={{ active_sort }}">Browse all posts</a> to find people to follow.</p>
                 {% else %}
                     <p>No posts yet. <a href="{% url 'post-create' %}">Be the first to post.</a></p>
                 {% endif %}
@@ -44,11 +51,11 @@
     {% if is_paginated %}
         <nav class="mt-6 flex items-center justify-center gap-4 text-sm">
             {% if page_obj.has_previous %}
-                <a href="?page={{ page_obj.previous_page_number }}" class="rounded-full border border-border px-3 py-1.5 no-underline hover:bg-surface-hover">Previous</a>
+                <a href="?page={{ page_obj.previous_page_number }}&sort={{ active_sort }}" class="rounded-full border border-border px-3 py-1.5 no-underline hover:bg-surface-hover">Previous</a>
             {% endif %}
             <span class="text-muted">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
             {% if page_obj.has_next %}
-                <a href="?page={{ page_obj.next_page_number }}" class="rounded-full border border-border px-3 py-1.5 no-underline hover:bg-surface-hover">Next</a>
+                <a href="?page={{ page_obj.next_page_number }}&sort={{ active_sort }}" class="rounded-full border border-border px-3 py-1.5 no-underline hover:bg-surface-hover">Next</a>
             {% endif %}
         </nav>
     {% endif %}
