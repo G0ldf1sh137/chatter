@@ -14,7 +14,7 @@
     <div class="space-y-3 rounded-2xl border border-border bg-surface p-4 sm:p-5">
         {% for message in message_list %}
             <div class="flex {% if message.sender_id == user.id %}justify-end{% else %}justify-start{% endif %}">
-                <div class="max-w-[80%] rounded-2xl px-4 py-2 {% if message.sender_id == user.id %}bg-accent text-accent-fg{% else %}bg-surface-hover text-fg{% endif %}">
+                <div class="max-w-[80%] rounded-2xl px-4 py-2 {% if message.sender_id == user.id %}bg-accent text-accent-fg{% else %}bg-accent/25 text-fg{% endif %}">
                     <div class="message-body prose prose-sm max-w-none text-sm">{{ message.body|markdown }}</div>
                     <p class="mt-1 text-xs opacity-70">{{ message.created_at }}</p>
                 </div>
