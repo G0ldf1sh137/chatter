@@ -1,6 +1,10 @@
 #!/bin/sh
 set -e
 
+if [ "$#" -gt 0 ]; then
+    exec "$@"
+fi
+
 python manage.py migrate --noinput
 
 if [ "$DEBUG" = "1" ]; then
