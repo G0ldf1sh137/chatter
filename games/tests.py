@@ -2,7 +2,7 @@ from django.contrib.auth.models import User
 from django.test import TestCase
 from django.urls import reverse
 
-from .logic import hangman, rock_paper_scissors, tic_tac_toe
+from .logic import checkers, connect_four, hangman, rock_paper_scissors, tic_tac_toe
 from .logic.exceptions import InvalidMove
 from .models import Match, SinglePlayerResult
 
@@ -449,3 +449,477 @@ class LeaderboardTests(TestCase):
     def test_leaderboard_is_publicly_accessible(self):
         response = self.client.get(reverse("games-leaderboard"))
         self.assertEqual(response.status_code, 200)
+
+
+class ConnectFourLogicTests(TestCase):
+    def test_initial_state_is_empty_board(self):
+        state = connect_four.initial_state()
+        self.assertEqual(len(state["board"]), 6)
+        self.assertTrue(all(len(row) == 7 for row in state["board"]))
+        self.assertTrue(all(cell is None for row in state["board"] for cell in row))
+
+    def test_apply_move_lands_in_bottom_row(self):
+        state = connect_four.apply_move(connect_four.initial_state(), 3, "X")
+        self.assertEqual(state["board"][5][3], "X")
+
+    def test_apply_move_stacks_on_top(self):
+        state = connect_four.apply_move(connect_four.initial_state(), 3, "X")
+        state = connect_four.apply_move(state, 3, "O")
+        self.assertEqual(state["board"][5][3], "X")
+        self.assertEqual(state["board"][4][3], "O")
+
+    def test_apply_move_rejects_out_of_range_column(self):
+        with self.assertRaises(InvalidMove):
+            connect_four.apply_move(connect_four.initial_state(), 7, "X")
+
+    def test_apply_move_rejects_full_column(self):
+        state = connect_four.initial_state()
+        for i in range(6):
+            state = connect_four.apply_move(state, 0, "X" if i % 2 == 0 else "O")
+        with self.assertRaises(InvalidMove):
+            connect_four.apply_move(state, 0, "X")
+
+    def test_check_winner_detects_horizontal(self):
+        board = [[None] * 7 for _ in range(6)]
+        for c in range(4):
+            board[5][c] = "X"
+        self.assertEqual(connect_four.check_winner({"board": board}), "X")
+
+    def test_check_winner_detects_vertical(self):
+        board = [[None] * 7 for _ in range(6)]
+        for r in range(2, 6):
+            board[r][0] = "O"
+        self.assertEqual(connect_four.check_winner({"board": board}), "O")
+
+    def test_check_winner_detects_diagonal_down_right(self):
+        board = [[None] * 7 for _ in range(6)]
+        for i in range(4):
+            board[i][i] = "X"
+        self.assertEqual(connect_four.check_winner({"board": board}), "X")
+
+    def test_check_winner_detects_diagonal_down_left(self):
+        board = [[None] * 7 for _ in range(6)]
+        for i in range(4):
+            board[i][3 - i] = "O"
+        self.assertEqual(connect_four.check_winner({"board": board}), "O")
+
+    def test_check_winner_detects_full_board_draw(self):
+        # No four-in-a-row anywhere: alternate columns in a striped pattern
+        # that never lines up 4 in any of the 4 scanned directions.
+        pattern = ["X", "X", "O", "O", "X", "X", "O"]
+        board = [list(pattern) for _ in range(6)]
+        for r in range(1, 6, 2):
+            board[r] = [("O" if v == "X" else "X") for v in board[r]]
+        self.assertIn(connect_four.check_winner({"board": board}), ("draw", None))
+
+    def test_check_winner_returns_none_mid_game(self):
+        state = connect_four.apply_move(connect_four.initial_state(), 0, "X")
+        self.assertIsNone(connect_four.check_winner(state))
+
+
+class ConnectFourMatchTests(TestCase):
+    def setUp(self):
+        self.alice = make_user("alice")
+        self.bob = make_user("bob")
+
+    def test_challenge_creates_active_match(self):
+        self.client.force_login(self.alice)
+        response = self.client.post(reverse("connect4-challenge", args=["bob"]))
+        match = Match.objects.get()
+        self.assertRedirects(response, reverse("connect4-match", args=[match.pk]))
+        self.assertEqual(match.game, Match.Game.CONNECT_FOUR)
+        self.assertEqual(match.turn, self.alice)
+        self.assertEqual(match.status, Match.Status.ACTIVE)
+
+    def test_cannot_challenge_self(self):
+        self.client.force_login(self.alice)
+        self.client.post(reverse("connect4-challenge", args=["alice"]))
+        self.assertEqual(Match.objects.count(), 0)
+
+    def test_non_participant_cannot_view_match(self):
+        match = Match.objects.create(
+            game=Match.Game.CONNECT_FOUR, player1=self.alice, player2=self.bob,
+            state=connect_four.initial_state(), turn=self.alice,
+        )
+        carol = make_user("carol")
+        self.client.force_login(carol)
+        response = self.client.get(reverse("connect4-match", args=[match.pk]))
+        self.assertEqual(response.status_code, 403)
+
+    def test_move_by_wrong_player_is_ignored(self):
+        match = Match.objects.create(
+            game=Match.Game.CONNECT_FOUR, player1=self.alice, player2=self.bob,
+            state=connect_four.initial_state(), turn=self.alice,
+        )
+        self.client.force_login(self.bob)
+        self.client.post(reverse("connect4-move", args=[match.pk]), {"column": 0})
+        match.refresh_from_db()
+        self.assertEqual(match.turn, self.alice)
+        self.assertTrue(all(cell is None for row in match.state["board"] for cell in row))
+
+    def test_move_on_full_column_is_ignored(self):
+        state = connect_four.initial_state()
+        for i in range(6):
+            state = connect_four.apply_move(state, 0, "X" if i % 2 == 0 else "O")
+        match = Match.objects.create(
+            game=Match.Game.CONNECT_FOUR, player1=self.alice, player2=self.bob,
+            state=state, turn=self.alice,
+        )
+        self.client.force_login(self.alice)
+        self.client.post(reverse("connect4-move", args=[match.pk]), {"column": 0})
+        match.refresh_from_db()
+        self.assertEqual(match.turn, self.alice)
+
+    def test_valid_move_switches_turn(self):
+        match = Match.objects.create(
+            game=Match.Game.CONNECT_FOUR, player1=self.alice, player2=self.bob,
+            state=connect_four.initial_state(), turn=self.alice,
+        )
+        self.client.force_login(self.alice)
+        self.client.post(reverse("connect4-move", args=[match.pk]), {"column": 3})
+        match.refresh_from_db()
+        self.assertEqual(match.state["board"][5][3], "X")
+        self.assertEqual(match.turn, self.bob)
+
+    def test_winning_move_finishes_match(self):
+        board = [[None] * 7 for _ in range(6)]
+        board[5][0] = board[5][1] = board[5][2] = "X"
+        match = Match.objects.create(
+            game=Match.Game.CONNECT_FOUR, player1=self.alice, player2=self.bob,
+            state={"board": board}, turn=self.alice,
+        )
+        self.client.force_login(self.alice)
+        self.client.post(reverse("connect4-move", args=[match.pk]), {"column": 3})
+        match.refresh_from_db()
+        self.assertEqual(match.status, Match.Status.FINISHED)
+        self.assertEqual(match.winner, self.alice)
+        self.assertIsNone(match.turn)
+
+    def test_draw_finishes_match_with_no_winner(self):
+        pattern = ["X", "X", "O", "O", "X", "X", "O"]
+        board = [list(pattern) for _ in range(6)]
+        for r in range(1, 6, 2):
+            board[r] = [("O" if v == "X" else "X") for v in board[r]]
+        # Leave the last cell open for the final move.
+        board[5][6] = None
+        match = Match.objects.create(
+            game=Match.Game.CONNECT_FOUR, player1=self.alice, player2=self.bob,
+            state={"board": board}, turn=self.alice,
+        )
+        self.client.force_login(self.alice)
+        self.client.post(reverse("connect4-move", args=[match.pk]), {"column": 6})
+        match.refresh_from_db()
+        self.assertEqual(match.status, Match.Status.FINISHED)
+
+
+def empty_checkers_board():
+    return {"board": [[None] * 8 for _ in range(8)]}
+
+
+class CheckersLogicTests(TestCase):
+    def test_initial_state_places_pieces_correctly(self):
+        state = checkers.initial_state()
+        board = state["board"]
+        black_count = sum(1 for row in board for cell in row if cell == "b")
+        red_count = sum(1 for row in board for cell in row if cell == "r")
+        self.assertEqual(black_count, 12)
+        self.assertEqual(red_count, 12)
+        for r in range(3):
+            for c in range(8):
+                if (r + c) % 2 == 1:
+                    self.assertEqual(board[r][c], "b")
+        for r in range(5, 8):
+            for c in range(8):
+                if (r + c) % 2 == 1:
+                    self.assertEqual(board[r][c], "r")
+        for r in range(3, 5):
+            self.assertTrue(all(cell is None for cell in board[r]))
+
+    def test_valid_simple_move(self):
+        state = empty_checkers_board()
+        state["board"][2][3] = "b"
+        new_state = checkers.apply_move(state, (2, 3), (3, 4), "b")
+        self.assertEqual(new_state["board"][3][4], "b")
+        self.assertIsNone(new_state["board"][2][3])
+
+    def test_rejects_non_diagonal_move(self):
+        state = empty_checkers_board()
+        state["board"][2][3] = "b"
+        with self.assertRaises(InvalidMove):
+            checkers.apply_move(state, (2, 3), (3, 3), "b")
+
+    def test_rejects_move_too_far(self):
+        state = empty_checkers_board()
+        state["board"][2][2] = "b"
+        with self.assertRaises(InvalidMove):
+            checkers.apply_move(state, (2, 2), (5, 5), "b")
+
+    def test_rejects_occupied_destination(self):
+        state = empty_checkers_board()
+        state["board"][2][3] = "b"
+        state["board"][3][4] = "r"
+        with self.assertRaises(InvalidMove):
+            checkers.apply_move(state, (2, 3), (3, 4), "b")
+
+    def test_rejects_moving_another_players_piece(self):
+        state = empty_checkers_board()
+        state["board"][2][3] = "b"
+        with self.assertRaises(InvalidMove):
+            checkers.apply_move(state, (2, 3), (3, 4), "r")
+
+    def test_rejects_backward_simple_move_for_non_king(self):
+        state = empty_checkers_board()
+        state["board"][3][3] = "b"
+        with self.assertRaises(InvalidMove):
+            checkers.apply_move(state, (3, 3), (2, 2), "b")
+
+    def test_valid_capture_removes_piece(self):
+        state = empty_checkers_board()
+        state["board"][2][3] = "b"
+        state["board"][3][4] = "r"
+        new_state = checkers.apply_move(state, (2, 3), (4, 5), "b")
+        self.assertEqual(new_state["board"][4][5], "b")
+        self.assertIsNone(new_state["board"][3][4])
+        self.assertIsNone(new_state["board"][2][3])
+
+    def test_rejects_capture_over_own_piece(self):
+        state = empty_checkers_board()
+        state["board"][2][3] = "b"
+        state["board"][3][4] = "b"
+        with self.assertRaises(InvalidMove):
+            checkers.apply_move(state, (2, 3), (4, 5), "b")
+
+    def test_backward_capture_succeeds_for_non_king(self):
+        state = empty_checkers_board()
+        state["board"][5][3] = "b"
+        state["board"][4][2] = "r"
+        new_state = checkers.apply_move(state, (5, 3), (3, 1), "b")
+        self.assertEqual(new_state["board"][3][1], "b")
+        self.assertIsNone(new_state["board"][4][2])
+
+    def test_king_promotion_on_reaching_far_row(self):
+        state = empty_checkers_board()
+        state["board"][6][3] = "b"
+        new_state = checkers.apply_move(state, (6, 3), (7, 4), "b")
+        self.assertEqual(new_state["board"][7][4], "B")
+
+    def test_promoted_king_can_move_backward(self):
+        state = empty_checkers_board()
+        state["board"][4][3] = "B"
+        new_state = checkers.apply_move(state, (4, 3), (3, 2), "b")
+        self.assertEqual(new_state["board"][3][2], "B")
+
+    def test_legal_moves_exist_is_false_when_boxed_in(self):
+        state = empty_checkers_board()
+        state["board"][7][7] = "b"
+        self.assertFalse(checkers.legal_moves_exist(state, "b"))
+
+    def test_legal_moves_exist_true_when_only_capture_available(self):
+        state = empty_checkers_board()
+        state["board"][3][3] = "b"
+        state["board"][4][2] = "b"
+        state["board"][4][4] = "b"
+        state["board"][2][2] = "r"
+        self.assertTrue(checkers.legal_moves_exist(state, "b"))
+
+    def test_check_winner_when_opponent_has_no_pieces(self):
+        state = empty_checkers_board()
+        state["board"][2][3] = "b"
+        self.assertEqual(checkers.check_winner(state, "r"), "b")
+
+    def test_check_winner_when_opponent_has_no_legal_moves(self):
+        state = empty_checkers_board()
+        state["board"][7][7] = "b"
+        state["board"][0][0] = "r"
+        self.assertEqual(checkers.check_winner(state, "b"), "r")
+
+    def test_check_winner_returns_none_mid_game(self):
+        state = checkers.initial_state()
+        self.assertIsNone(checkers.check_winner(state, "r"))
+
+
+class CheckersMatchTests(TestCase):
+    def setUp(self):
+        self.alice = make_user("alice")
+        self.bob = make_user("bob")
+
+    def test_challenge_creates_active_match(self):
+        self.client.force_login(self.alice)
+        response = self.client.post(reverse("checkers-challenge", args=["bob"]))
+        match = Match.objects.get()
+        self.assertRedirects(response, reverse("checkers-match", args=[match.pk]))
+        self.assertEqual(match.game, Match.Game.CHECKERS)
+        self.assertEqual(match.turn, self.alice)
+        self.assertEqual(match.status, Match.Status.ACTIVE)
+        black_count = sum(1 for row in match.state["board"] for cell in row if cell == "b")
+        red_count = sum(1 for row in match.state["board"] for cell in row if cell == "r")
+        self.assertEqual((black_count, red_count), (12, 12))
+
+    def test_non_participant_cannot_view_match(self):
+        match = Match.objects.create(
+            game=Match.Game.CHECKERS, player1=self.alice, player2=self.bob,
+            state=checkers.initial_state(), turn=self.alice,
+        )
+        carol = make_user("carol")
+        self.client.force_login(carol)
+        response = self.client.get(reverse("checkers-match", args=[match.pk]))
+        self.assertEqual(response.status_code, 403)
+
+    def test_move_by_wrong_player_is_ignored(self):
+        match = Match.objects.create(
+            game=Match.Game.CHECKERS, player1=self.alice, player2=self.bob,
+            state=checkers.initial_state(), turn=self.alice,
+        )
+        self.client.force_login(self.bob)
+        self.client.post(
+            reverse("checkers-move", args=[match.pk]),
+            {"from_row": 2, "from_col": 1, "to_row": 3, "to_col": 0},
+        )
+        match.refresh_from_db()
+        self.assertEqual(match.turn, self.alice)
+        self.assertEqual(match.state["board"], checkers.initial_state()["board"])
+
+    def test_invalid_move_leaves_state_unchanged(self):
+        match = Match.objects.create(
+            game=Match.Game.CHECKERS, player1=self.alice, player2=self.bob,
+            state=checkers.initial_state(), turn=self.alice,
+        )
+        self.client.force_login(self.alice)
+        self.client.post(
+            reverse("checkers-move", args=[match.pk]),
+            {"from_row": 3, "from_col": 3, "to_row": 4, "to_col": 4},
+        )
+        match.refresh_from_db()
+        self.assertEqual(match.turn, self.alice)
+        self.assertEqual(match.state["board"], checkers.initial_state()["board"])
+
+    def test_valid_simple_move_switches_turn(self):
+        match = Match.objects.create(
+            game=Match.Game.CHECKERS, player1=self.alice, player2=self.bob,
+            state=checkers.initial_state(), turn=self.alice,
+        )
+        self.client.force_login(self.alice)
+        # player1 is always "r" (red), starting at the bottom, moving up.
+        self.client.post(
+            reverse("checkers-move", args=[match.pk]),
+            {"from_row": 5, "from_col": 0, "to_row": 4, "to_col": 1},
+        )
+        match.refresh_from_db()
+        self.assertEqual(match.state["board"][4][1], "r")
+        self.assertIsNone(match.state["board"][5][0])
+        self.assertEqual(match.turn, self.bob)
+
+    def test_valid_capture_removes_piece_and_switches_turn(self):
+        # player1 (bob) is always "r"; player2 (alice) is "b". A second
+        # black piece survives the capture so the match isn't finished.
+        state = empty_checkers_board()
+        state["board"][3][3] = "r"
+        state["board"][4][4] = "b"
+        state["board"][0][0] = "b"
+        match = Match.objects.create(
+            game=Match.Game.CHECKERS, player1=self.bob, player2=self.alice,
+            state=state, turn=self.bob,
+        )
+        self.client.force_login(self.bob)
+        self.client.post(
+            reverse("checkers-move", args=[match.pk]),
+            {"from_row": 3, "from_col": 3, "to_row": 5, "to_col": 5},
+        )
+        match.refresh_from_db()
+        self.assertEqual(match.state["board"][5][5], "r")
+        self.assertIsNone(match.state["board"][4][4])
+        self.assertEqual(match.turn, self.alice)
+
+    def test_capturing_last_piece_finishes_match(self):
+        state = empty_checkers_board()
+        state["board"][3][3] = "r"
+        state["board"][4][4] = "b"
+        match = Match.objects.create(
+            game=Match.Game.CHECKERS, player1=self.bob, player2=self.alice,
+            state=state, turn=self.bob,
+        )
+        self.client.force_login(self.bob)
+        self.client.post(
+            reverse("checkers-move", args=[match.pk]),
+            {"from_row": 3, "from_col": 3, "to_row": 5, "to_col": 5},
+        )
+        match.refresh_from_db()
+        self.assertEqual(match.status, Match.Status.FINISHED)
+        self.assertEqual(match.winner, self.bob)
+        self.assertIsNone(match.turn)
+
+
+class SnakeResultTests(TestCase):
+    def setUp(self):
+        self.alice = make_user("alice")
+        self.client.force_login(self.alice)
+
+    def post_json(self, payload):
+        return self.client.post(reverse("snake-finish"), data=payload, content_type="application/json")
+
+    def test_valid_score_is_recorded(self):
+        response = self.post_json({"score": 12})
+        self.assertEqual(response.status_code, 200)
+        result = SinglePlayerResult.objects.get()
+        self.assertEqual(result.player, self.alice)
+        self.assertEqual(result.game, SinglePlayerResult.Game.SNAKE)
+        self.assertEqual(result.score, 12)
+        self.assertFalse(result.won)
+
+    def test_negative_score_is_rejected(self):
+        response = self.post_json({"score": -1})
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(SinglePlayerResult.objects.count(), 0)
+
+    def test_out_of_range_score_is_rejected(self):
+        response = self.post_json({"score": 401})
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(SinglePlayerResult.objects.count(), 0)
+
+    def test_malformed_payload_is_rejected(self):
+        response = self.client.post(reverse("snake-finish"), data="not json", content_type="application/json")
+        self.assertEqual(response.status_code, 400)
+
+    def test_anonymous_cannot_submit_score(self):
+        self.client.logout()
+        response = self.post_json({"score": 10})
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(SinglePlayerResult.objects.count(), 0)
+
+
+class DoodleJumpResultTests(TestCase):
+    def setUp(self):
+        self.alice = make_user("alice")
+        self.client.force_login(self.alice)
+
+    def post_json(self, payload):
+        return self.client.post(reverse("doodle-finish"), data=payload, content_type="application/json")
+
+    def test_valid_score_is_recorded(self):
+        response = self.post_json({"score": 340})
+        self.assertEqual(response.status_code, 200)
+        result = SinglePlayerResult.objects.get()
+        self.assertEqual(result.player, self.alice)
+        self.assertEqual(result.game, SinglePlayerResult.Game.DOODLE_JUMP)
+        self.assertEqual(result.score, 340)
+        self.assertFalse(result.won)
+
+    def test_negative_score_is_rejected(self):
+        response = self.post_json({"score": -1})
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(SinglePlayerResult.objects.count(), 0)
+
+    def test_out_of_range_score_is_rejected(self):
+        response = self.post_json({"score": 2_000_000})
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(SinglePlayerResult.objects.count(), 0)
+
+    def test_malformed_payload_is_rejected(self):
+        response = self.client.post(reverse("doodle-finish"), data="not json", content_type="application/json")
+        self.assertEqual(response.status_code, 400)
+
+    def test_anonymous_cannot_submit_score(self):
+        self.client.logout()
+        response = self.post_json({"score": 100})
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(SinglePlayerResult.objects.count(), 0)

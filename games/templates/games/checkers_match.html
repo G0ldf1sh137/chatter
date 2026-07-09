@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Checkers — Chatter{% endblock %}
+
+{% block content %}
+    <div class="mx-auto max-w-sm rounded-2xl border border-border bg-surface p-6 shadow-sm">
+        <div class="mb-4 flex items-center justify-between">
+            <div class="flex items-center gap-2">
+                {% include "_avatar.html" with avatar_user=match.player1 %}
+                <span class="text-sm font-medium">{{ match.player1.username }} (Red)</span>
+            </div>
+            <span class="text-sm text-muted">vs</span>
+            <div class="flex items-center gap-2">
+                <span class="text-sm font-medium">{{ match.player2.username }} (Black)</span>
+                {% include "_avatar.html" with avatar_user=match.player2 %}
+            </div>
+        </div>
+
+        {% if match.status == "finished" %}
+            {% if match.winner %}
+                <p class="mb-4 text-center font-semibold text-accent">{{ match.winner.username }} won!</p>
+            {% else %}
+                <p class="mb-4 text-center font-semibold text-muted">Game over.</p>
+            {% endif %}
+        {% elif is_your_turn %}
+            <p class="mb-4 text-center font-semibold text-accent">Your turn — click a piece, then click where to move it</p>
+        {% else %}
+            <p class="mb-4 text-center text-muted">Waiting on {{ opponent.username }}</p>
+        {% endif %}
+
+        <div id="board" class="mx-auto grid w-full max-w-[320px] grid-cols-8 gap-0 overflow-hidden rounded-lg border border-border">
+            {% for row in board %}
+                {% for cell in row %}
+                    {% if forloop.parentloop.counter0|add:forloop.counter0|divisibleby:2 %}
+                        <div class="aspect-square bg-surface"></div>
+                    {% else %}
+                        <button type="button" data-row="{{ forloop.parentloop.counter0 }}" data-col="{{ forloop.counter0 }}" {% if not is_your_turn %}disabled{% endif %} class="flex aspect-square items-center justify-center bg-surface-hover p-0.5 transition-colors {% if is_your_turn %}hover:brightness-110{% endif %}">
+                            {% if cell %}
+                                <span class="flex h-4/5 w-4/5 items-center justify-center rounded-full {% if cell|lower == 'r' %}bg-downvote{% else %}bg-fg{% endif %} text-xs font-bold {% if cell|lower == 'b' %}text-surface{% else %}text-white{% endif %}">
+                                    {% if cell == cell|upper %}&#9819;{% endif %}
+                                </span>
+                            {% endif %}
+                        </button>
+                    {% endif %}
+                {% endfor %}
+            {% endfor %}
+        </div>
+
+        <form id="move-form" method="post" action="{% url 'checkers-move' match.pk %}">
+            {% csrf_token %}
+            <input type="hidden" id="from_row" name="from_row">
+            <input type="hidden" id="from_col" name="from_col">
+            <input type="hidden" id="to_row" name="to_row">
+            <input type="hidden" id="to_col" name="to_col">
+        </form>
+    </div>
+    {% if is_your_turn %}
+        <script src="{% static 'games/js/checkers.js' %}"></script>
+    {% endif %}
+{% endblock %}

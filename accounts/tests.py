@@ -299,18 +299,33 @@ class ProfileGamesIntegrationTests(TestCase):
             game=Match.Game.ROCK_PAPER_SCISSORS, player1=carol, player2=dave,
             status=Match.Status.FINISHED, winner=None,
         )
+        Match.objects.create(
+            game=Match.Game.CONNECT_FOUR, player1=carol, player2=dave,
+            status=Match.Status.FINISHED, winner=carol,
+        )
+        Match.objects.create(
+            game=Match.Game.CHECKERS, player1=dave, player2=carol,
+            status=Match.Status.FINISHED, winner=dave,
+        )
         SinglePlayerResult.objects.create(player=carol, game=SinglePlayerResult.Game.HANGMAN, won=True)
         SinglePlayerResult.objects.create(player=carol, game=SinglePlayerResult.Game.HANGMAN, won=False)
         SinglePlayerResult.objects.create(player=carol, game=SinglePlayerResult.Game.GAME_2048, score=750)
         SinglePlayerResult.objects.create(player=carol, game=SinglePlayerResult.Game.GAME_2048, score=300)
+        SinglePlayerResult.objects.create(player=carol, game=SinglePlayerResult.Game.SNAKE, score=12)
+        SinglePlayerResult.objects.create(player=carol, game=SinglePlayerResult.Game.DOODLE_JUMP, score=560)
 
         response = self.client.get(reverse("profile", args=["carol"]))
 
         self.assertEqual(response.context["ttt_record"], {"wins": 1, "losses": 1, "draws": 0})
         self.assertEqual(response.context["rps_record"], {"wins": 0, "losses": 0, "draws": 1})
+        self.assertEqual(response.context["connect4_record"], {"wins": 1, "losses": 0, "draws": 0})
+        self.assertEqual(response.context["checkers_record"], {"wins": 0, "losses": 1, "draws": 0})
         self.assertEqual(response.context["hangman_wins"], 1)
         self.assertEqual(response.context["high_score_2048"], 750)
+        self.assertEqual(response.context["snake_high_score"], 12)
+        self.assertEqual(response.context["doodle_high_score"], 560)
         self.assertContains(response, "750")
+        self.assertContains(response, "560")
 
 
 class ProfileEditTests(TestCase):

@@ -112,8 +112,14 @@ class ProfileView(DetailView):
         context["ttt_record"] = {"wins": ttt_wins, "losses": ttt_losses, "draws": ttt_draws}
         rps_wins, rps_losses, rps_draws = game_stats.match_record(profile_user, Match.Game.ROCK_PAPER_SCISSORS)
         context["rps_record"] = {"wins": rps_wins, "losses": rps_losses, "draws": rps_draws}
+        c4_wins, c4_losses, c4_draws = game_stats.match_record(profile_user, Match.Game.CONNECT_FOUR)
+        context["connect4_record"] = {"wins": c4_wins, "losses": c4_losses, "draws": c4_draws}
+        chk_wins, chk_losses, chk_draws = game_stats.match_record(profile_user, Match.Game.CHECKERS)
+        context["checkers_record"] = {"wins": chk_wins, "losses": chk_losses, "draws": chk_draws}
         context["hangman_wins"] = game_stats.hangman_wins(profile_user)
         context["high_score_2048"] = game_stats.high_score_2048(profile_user)
+        context["snake_high_score"] = game_stats.snake_high_score(profile_user)
+        context["doodle_high_score"] = game_stats.doodle_high_score(profile_user)
         return context
 
 

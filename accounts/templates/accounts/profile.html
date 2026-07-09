@@ -36,6 +36,14 @@
                         {% csrf_token %}
                         <button type="submit" class="mt-0 rounded-full border border-border bg-transparent px-4 py-1.5 text-sm text-fg transition-colors hover:bg-surface-hover">Challenge to Rock-Paper-Scissors</button>
                     </form>
+                    <form method="post" action="{% url 'connect4-challenge' profile_user.username %}" class="inline">
+                        {% csrf_token %}
+                        <button type="submit" class="mt-0 rounded-full border border-border bg-transparent px-4 py-1.5 text-sm text-fg transition-colors hover:bg-surface-hover">Challenge to Connect Four</button>
+                    </form>
+                    <form method="post" action="{% url 'checkers-challenge' profile_user.username %}" class="inline">
+                        {% csrf_token %}
+                        <button type="submit" class="mt-0 rounded-full border border-border bg-transparent px-4 py-1.5 text-sm text-fg transition-colors hover:bg-surface-hover">Challenge to Checkers</button>
+                    </form>
                 </div>
             {% endif %}
         </div>
@@ -110,6 +118,26 @@
         <div class="rounded-2xl border border-border bg-surface p-4 text-center shadow-sm">
             <p class="text-xs text-muted">2048</p>
             <p class="text-lg font-bold text-fg">{{ high_score_2048 }}</p>
+            <p class="text-xs text-muted">high score</p>
+        </div>
+        <div class="rounded-2xl border border-border bg-surface p-4 text-center shadow-sm">
+            <p class="text-xs text-muted">Connect Four</p>
+            <p class="text-lg font-bold text-fg">{{ connect4_record.wins }}-{{ connect4_record.losses }}-{{ connect4_record.draws }}</p>
+            <p class="text-xs text-muted">W-L-D</p>
+        </div>
+        <div class="rounded-2xl border border-border bg-surface p-4 text-center shadow-sm">
+            <p class="text-xs text-muted">Checkers</p>
+            <p class="text-lg font-bold text-fg">{{ checkers_record.wins }}-{{ checkers_record.losses }}-{{ checkers_record.draws }}</p>
+            <p class="text-xs text-muted">W-L-D</p>
+        </div>
+        <div class="rounded-2xl border border-border bg-surface p-4 text-center shadow-sm">
+            <p class="text-xs text-muted">Snake</p>
+            <p class="text-lg font-bold text-fg">{{ snake_high_score }}</p>
+            <p class="text-xs text-muted">high score</p>
+        </div>
+        <div class="rounded-2xl border border-border bg-surface p-4 text-center shadow-sm">
+            <p class="text-xs text-muted">Doodle Jump</p>
+            <p class="text-lg font-bold text-fg">{{ doodle_high_score }}</p>
             <p class="text-xs text-muted">high score</p>
         </div>
     </div>
