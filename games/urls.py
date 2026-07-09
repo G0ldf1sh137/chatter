@@ -13,4 +13,6 @@ urlpatterns = [
     path("hangman/new/", views.HangmanNewView.as_view(), name="hangman-new"),
     path("hangman/", views.HangmanPlayView.as_view(), name="hangman-play"),
     path("hangman/guess/", views.HangmanGuessView.as_view(), name="hangman-guess"),
+    path("2048/", views.Game2048View.as_view(), name="2048-play"),
+    path("2048/finish/", views.Game2048FinishView.as_view(), name="2048-finish"),
 ]

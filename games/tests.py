@@ -347,3 +347,57 @@ class HangmanSessionTests(TestCase):
         self.client.logout()
         response = self.client.post(reverse("hangman-new"))
         self.assertEqual(response.status_code, 302)
+
+
+class Game2048ResultTests(TestCase):
+    def setUp(self):
+        self.alice = make_user("alice")
+        self.client.force_login(self.alice)
+
+    def post_json(self, payload):
+        return self.client.post(reverse("2048-finish"), data=payload, content_type="application/json")
+
+    def test_valid_score_is_recorded(self):
+        response = self.post_json({"score": 1020, "highest_tile": 128})
+        self.assertEqual(response.status_code, 200)
+        result = SinglePlayerResult.objects.get()
+        self.assertEqual(result.player, self.alice)
+        self.assertEqual(result.game, SinglePlayerResult.Game.GAME_2048)
+        self.assertEqual(result.score, 1020)
+        self.assertFalse(result.won)
+
+    def test_reaching_2048_tile_marks_won(self):
+        self.post_json({"score": 20000, "highest_tile": 2048})
+        result = SinglePlayerResult.objects.get()
+        self.assertTrue(result.won)
+
+    def test_negative_score_is_rejected(self):
+        response = self.post_json({"score": -5, "highest_tile": 128})
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(SinglePlayerResult.objects.count(), 0)
+
+    def test_absurdly_high_score_is_rejected(self):
+        response = self.post_json({"score": 99_999_999, "highest_tile": 128})
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(SinglePlayerResult.objects.count(), 0)
+
+    def test_non_power_of_two_tile_is_rejected(self):
+        response = self.post_json({"score": 100, "highest_tile": 100})
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(SinglePlayerResult.objects.count(), 0)
+
+    def test_score_inconsistent_with_tile_is_rejected(self):
+        # A highest tile of 512 requires a score of at least 510.
+        response = self.post_json({"score": 10, "highest_tile": 512})
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(SinglePlayerResult.objects.count(), 0)
+
+    def test_malformed_payload_is_rejected(self):
+        response = self.client.post(reverse("2048-finish"), data="not json", content_type="application/json")
+        self.assertEqual(response.status_code, 400)
+
+    def test_anonymous_cannot_submit_score(self):
+        self.client.logout()
+        response = self.post_json({"score": 100, "highest_tile": 128})
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(SinglePlayerResult.objects.count(), 0)

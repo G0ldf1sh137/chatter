@@ -1,9 +1,11 @@
+import json
+
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 from django.contrib.auth.models import User
 from django.db import transaction
 from django.db.models import Q
-from django.http import Http404
+from django.http import Http404, JsonResponse
 from django.shortcuts import get_object_or_404, redirect
 from django.views import View
 from django.views.generic import DetailView, TemplateView
@@ -13,6 +15,12 @@ from .logic.exceptions import InvalidMove
 from .models import Match, SinglePlayerResult
 
 SESSION_KEY_HANGMAN = "hangman_game"
+
+# Generous ceiling well above any realistic 2048 game - just a sanity bound,
+# not an attempt at full move-replay anti-cheat (proportionate to a casual
+# game's stakes: leaderboard vanity, not real value).
+MAX_2048_SCORE = 10_000_000
+MAX_2048_TILE = 131072
 
 
 class GamesHubView(LoginRequiredMixin, TemplateView):
@@ -217,3 +225,35 @@ class HangmanGuessView(LoginRequiredMixin, View):
                     score=1 if status == "won" else 0,
                 )
         return redirect("hangman-play")
+
+
+class Game2048View(LoginRequiredMixin, TemplateView):
+    template_name = "games/game_2048.html"
+
+
+class Game2048FinishView(LoginRequiredMixin, View):
+    def post(self, request):
+        try:
+            data = json.loads(request.body)
+            score = int(data["score"])
+            highest_tile = int(data["highest_tile"])
+        except (ValueError, KeyError, TypeError, json.JSONDecodeError):
+            return JsonResponse({"error": "invalid payload"}, status=400)
+
+        if not (0 <= score <= MAX_2048_SCORE):
+            return JsonResponse({"error": "invalid score"}, status=400)
+        if not (2 <= highest_tile <= MAX_2048_TILE) or (highest_tile & (highest_tile - 1)) != 0:
+            return JsonResponse({"error": "invalid highest tile"}, status=400)
+        # The minimum possible score to have legitimately produced a tile of
+        # value N through repeated merges is N - 2 (every other merge in the
+        # game only adds to the score, never subtracts).
+        if score < highest_tile - 2:
+            return JsonResponse({"error": "score inconsistent with highest tile"}, status=400)
+
+        SinglePlayerResult.objects.create(
+            player=request.user,
+            game=SinglePlayerResult.Game.GAME_2048,
+            won=highest_tile >= 2048,
+            score=score,
+        )
+        return JsonResponse({"ok": True})
