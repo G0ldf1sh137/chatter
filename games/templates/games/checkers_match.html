@@ -58,4 +58,5 @@
     {% if is_your_turn %}
         <script src="{% static 'games/js/checkers.js' %}"></script>
     {% endif %}
+    {% include "games/_match_poll.html" %}
 {% endblock %}

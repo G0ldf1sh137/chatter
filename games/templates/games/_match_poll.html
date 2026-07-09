@@ -1,0 +1,5 @@
+{% load static %}
+{% if match.status == "active" %}
+    <div id="match-poll" data-status-url="{% url 'match-status' match.pk %}" data-updated-at="{{ match.updated_at|date:'c' }}" class="hidden"></div>
+    <script src="{% static 'games/js/match_poll.js' %}"></script>
+{% endif %}

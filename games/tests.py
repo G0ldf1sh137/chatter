@@ -163,6 +163,46 @@ class TicTacToeMatchTests(TestCase):
         self.assertIsNone(match.winner)
 
 
+class MatchStatusViewTests(TestCase):
+    def setUp(self):
+        self.alice = make_user("alice")
+        self.bob = make_user("bob")
+        self.match = Match.objects.create(
+            game=Match.Game.TIC_TAC_TOE,
+            player1=self.alice,
+            player2=self.bob,
+            state=tic_tac_toe.initial_state(),
+            turn=self.alice,
+        )
+
+    def test_anonymous_cannot_poll(self):
+        response = self.client.get(reverse("match-status", args=[self.match.pk]))
+        self.assertEqual(response.status_code, 302)
+
+    def test_non_participant_cannot_poll(self):
+        carol = make_user("carol")
+        self.client.force_login(carol)
+        response = self.client.get(reverse("match-status", args=[self.match.pk]))
+        self.assertEqual(response.status_code, 404)
+
+    def test_participant_gets_status_json(self):
+        self.client.force_login(self.bob)
+        response = self.client.get(reverse("match-status", args=[self.match.pk]))
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data["status"], "active")
+        self.assertEqual(data["updated_at"], self.match.updated_at.isoformat())
+
+    def test_updated_at_changes_after_a_move(self):
+        self.client.force_login(self.alice)
+        before = self.client.get(reverse("match-status", args=[self.match.pk])).json()
+
+        self.client.post(reverse("ttt-move", args=[self.match.pk]), {"cell": 0})
+
+        after = self.client.get(reverse("match-status", args=[self.match.pk])).json()
+        self.assertNotEqual(before["updated_at"], after["updated_at"])
+
+
 class RockPaperScissorsLogicTests(TestCase):
     def test_same_choice_is_draw(self):
         self.assertEqual(rock_paper_scissors.determine_winner("rock", "rock"), "draw")

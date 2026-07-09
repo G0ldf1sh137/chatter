@@ -68,6 +68,18 @@ class GamesHubView(LoginRequiredMixin, TemplateView):
         return context
 
 
+class MatchStatusView(LoginRequiredMixin, View):
+    # One endpoint for all 5 multiplayer games' poll-for-updates JS (see
+    # match_poll.js) - the client only needs to know "has anything changed
+    # since I loaded this page", which is game-agnostic, so this avoids a
+    # near-identical status view per game.
+    def get(self, request, pk):
+        match = get_object_or_404(Match, pk=pk)
+        if request.user.id not in (match.player1_id, match.player2_id):
+            raise Http404
+        return JsonResponse({"updated_at": match.updated_at.isoformat(), "status": match.status})
+
+
 class TicTacToeChallengeView(LoginRequiredMixin, View):
     def post(self, request, username):
         opponent = get_object_or_404(User, username=username)
