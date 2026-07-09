@@ -53,3 +53,37 @@ def game_2048_leaders(limit=10):
         .annotate(high_score=Max("score"))
         .order_by("-high_score")[:limit]
     )
+
+
+def snake_high_score(user):
+    return (
+        SinglePlayerResult.objects.filter(player=user, game=SinglePlayerResult.Game.SNAKE)
+        .aggregate(Max("score"))["score__max"]
+        or 0
+    )
+
+
+def doodle_high_score(user):
+    return (
+        SinglePlayerResult.objects.filter(player=user, game=SinglePlayerResult.Game.DOODLE_JUMP)
+        .aggregate(Max("score"))["score__max"]
+        or 0
+    )
+
+
+def snake_leaders(limit=10):
+    return (
+        SinglePlayerResult.objects.filter(game=SinglePlayerResult.Game.SNAKE)
+        .values("player__username")
+        .annotate(high_score=Max("score"))
+        .order_by("-high_score")[:limit]
+    )
+
+
+def doodle_leaders(limit=10):
+    return (
+        SinglePlayerResult.objects.filter(game=SinglePlayerResult.Game.DOODLE_JUMP)
+        .values("player__username")
+        .annotate(high_score=Max("score"))
+        .order_by("-high_score")[:limit]
+    )

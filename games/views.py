@@ -11,7 +11,7 @@ from django.views import View
 from django.views.generic import DetailView, TemplateView
 
 from . import stats
-from .logic import hangman, rock_paper_scissors, tic_tac_toe
+from .logic import checkers, connect_four, hangman, rock_paper_scissors, tic_tac_toe
 from .logic.exceptions import InvalidMove
 from .models import Match, SinglePlayerResult
 
@@ -23,6 +23,14 @@ SESSION_KEY_HANGMAN = "hangman_game"
 MAX_2048_SCORE = 10_000_000
 MAX_2048_TILE = 131072
 
+# A 20x20 grid has 400 cells; you can never eat more food than that.
+SNAKE_GRID_SIZE = 20
+MAX_SNAKE_SCORE = SNAKE_GRID_SIZE * SNAKE_GRID_SIZE
+
+# No principled ceiling like 2048's power-of-two check (height is unbounded
+# in principle) - just a generous sanity bound, same anti-cheat proportionality.
+MAX_DOODLE_SCORE = 1_000_000
+
 
 class LeaderboardView(TemplateView):
     template_name = "games/leaderboard.html"
@@ -31,8 +39,12 @@ class LeaderboardView(TemplateView):
         context = super().get_context_data(**kwargs)
         context["ttt_leaders"] = stats.match_win_leaders(Match.Game.TIC_TAC_TOE)
         context["rps_leaders"] = stats.match_win_leaders(Match.Game.ROCK_PAPER_SCISSORS)
+        context["connect4_leaders"] = stats.match_win_leaders(Match.Game.CONNECT_FOUR)
+        context["checkers_leaders"] = stats.match_win_leaders(Match.Game.CHECKERS)
         context["hangman_leaders"] = stats.hangman_leaders()
         context["game2048_leaders"] = stats.game_2048_leaders()
+        context["snake_leaders"] = stats.snake_leaders()
+        context["doodle_leaders"] = stats.doodle_leaders()
         return context
 
 
@@ -201,6 +213,152 @@ class RockPaperScissorsMoveView(LoginRequiredMixin, View):
         return redirect("rps-match", pk=pk)
 
 
+class ConnectFourChallengeView(LoginRequiredMixin, View):
+    def post(self, request, username):
+        opponent = get_object_or_404(User, username=username)
+        if opponent == request.user:
+            messages.error(request, "You can't challenge yourself.")
+            return redirect("profile", username=username)
+        match = Match.objects.create(
+            game=Match.Game.CONNECT_FOUR,
+            player1=request.user,
+            player2=opponent,
+            state=connect_four.initial_state(),
+            turn=request.user,
+        )
+        return redirect("connect4-match", pk=match.pk)
+
+
+class ConnectFourMatchView(LoginRequiredMixin, UserPassesTestMixin, DetailView):
+    template_name = "games/connect_four_match.html"
+    context_object_name = "match"
+
+    def test_func(self):
+        match = self.get_object()
+        return self.request.user.id in (match.player1_id, match.player2_id)
+
+    def get_queryset(self):
+        return Match.objects.filter(game=Match.Game.CONNECT_FOUR).select_related("player1", "player2", "winner")
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        match = context["match"]
+        context["board"] = match.state["board"]
+        context["your_symbol"] = "X" if self.request.user.id == match.player1_id else "O"
+        context["is_your_turn"] = match.status == Match.Status.ACTIVE and match.turn_id == self.request.user.id
+        context["opponent"] = match.opponent_of(self.request.user)
+        return context
+
+
+class ConnectFourMoveView(LoginRequiredMixin, View):
+    def post(self, request, pk):
+        try:
+            column = int(request.POST.get("column"))
+        except (TypeError, ValueError):
+            return redirect("connect4-match", pk=pk)
+
+        with transaction.atomic():
+            match = get_object_or_404(
+                Match.objects.select_for_update(), pk=pk, game=Match.Game.CONNECT_FOUR
+            )
+            if request.user.id not in (match.player1_id, match.player2_id):
+                raise Http404
+            if match.status != Match.Status.ACTIVE or match.turn_id != request.user.id:
+                return redirect("connect4-match", pk=pk)
+
+            symbol = "X" if request.user.id == match.player1_id else "O"
+            try:
+                match.state = connect_four.apply_move(match.state, column, symbol)
+            except InvalidMove:
+                return redirect("connect4-match", pk=pk)
+
+            result = connect_four.check_winner(match.state)
+            if result is None:
+                match.turn = match.opponent_of(request.user)
+            else:
+                match.status = Match.Status.FINISHED
+                match.turn = None
+                match.winner = request.user if result != "draw" else None
+            match.save()
+        return redirect("connect4-match", pk=pk)
+
+
+class CheckersChallengeView(LoginRequiredMixin, View):
+    def post(self, request, username):
+        opponent = get_object_or_404(User, username=username)
+        if opponent == request.user:
+            messages.error(request, "You can't challenge yourself.")
+            return redirect("profile", username=username)
+        match = Match.objects.create(
+            game=Match.Game.CHECKERS,
+            player1=request.user,
+            player2=opponent,
+            state=checkers.initial_state(),
+            turn=request.user,
+        )
+        return redirect("checkers-match", pk=match.pk)
+
+
+class CheckersMatchView(LoginRequiredMixin, UserPassesTestMixin, DetailView):
+    template_name = "games/checkers_match.html"
+    context_object_name = "match"
+
+    def test_func(self):
+        match = self.get_object()
+        return self.request.user.id in (match.player1_id, match.player2_id)
+
+    def get_queryset(self):
+        return Match.objects.filter(game=Match.Game.CHECKERS).select_related("player1", "player2", "winner")
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        match = context["match"]
+        context["board"] = match.state["board"]
+        # player1 is always "r" (red), starts at the bottom of the board.
+        context["your_color"] = "r" if self.request.user.id == match.player1_id else "b"
+        context["is_your_turn"] = match.status == Match.Status.ACTIVE and match.turn_id == self.request.user.id
+        context["opponent"] = match.opponent_of(self.request.user)
+        return context
+
+
+class CheckersMoveView(LoginRequiredMixin, View):
+    def post(self, request, pk):
+        try:
+            from_pos = (int(request.POST["from_row"]), int(request.POST["from_col"]))
+            to_pos = (int(request.POST["to_row"]), int(request.POST["to_col"]))
+        except (KeyError, TypeError, ValueError):
+            return redirect("checkers-match", pk=pk)
+
+        with transaction.atomic():
+            match = get_object_or_404(
+                Match.objects.select_for_update(), pk=pk, game=Match.Game.CHECKERS
+            )
+            if request.user.id not in (match.player1_id, match.player2_id):
+                raise Http404
+            if match.status != Match.Status.ACTIVE or match.turn_id != request.user.id:
+                return redirect("checkers-match", pk=pk)
+
+            player = "r" if request.user.id == match.player1_id else "b"
+            try:
+                match.state = checkers.apply_move(match.state, from_pos, to_pos, player)
+            except InvalidMove:
+                return redirect("checkers-match", pk=pk)
+
+            opponent_color = "b" if player == "r" else "r"
+            winner_color = checkers.check_winner(match.state, opponent_color)
+            if winner_color is None:
+                match.turn = match.opponent_of(request.user)
+            else:
+                match.status = Match.Status.FINISHED
+                match.turn = None
+                # winner_color always equals player here (the mover just
+                # captured the opponent's last piece or stalemated them),
+                # so no color -> user lookup is needed.
+                match.winner = request.user
+            match.save()
+        return redirect("checkers-match", pk=pk)
+
+
 class HangmanNewView(LoginRequiredMixin, View):
     def post(self, request):
         request.session[SESSION_KEY_HANGMAN] = hangman.initial_state()
@@ -268,5 +426,47 @@ class Game2048FinishView(LoginRequiredMixin, View):
             game=SinglePlayerResult.Game.GAME_2048,
             won=highest_tile >= 2048,
             score=score,
+        )
+        return JsonResponse({"ok": True})
+
+
+class SnakeView(LoginRequiredMixin, TemplateView):
+    template_name = "games/snake.html"
+
+
+class SnakeFinishView(LoginRequiredMixin, View):
+    def post(self, request):
+        try:
+            data = json.loads(request.body)
+            score = int(data["score"])
+        except (ValueError, KeyError, TypeError, json.JSONDecodeError):
+            return JsonResponse({"error": "invalid payload"}, status=400)
+
+        if not (0 <= score <= MAX_SNAKE_SCORE):
+            return JsonResponse({"error": "invalid score"}, status=400)
+
+        SinglePlayerResult.objects.create(
+            player=request.user, game=SinglePlayerResult.Game.SNAKE, won=False, score=score
+        )
+        return JsonResponse({"ok": True})
+
+
+class DoodleJumpView(LoginRequiredMixin, TemplateView):
+    template_name = "games/doodle_jump.html"
+
+
+class DoodleJumpFinishView(LoginRequiredMixin, View):
+    def post(self, request):
+        try:
+            data = json.loads(request.body)
+            score = int(data["score"])
+        except (ValueError, KeyError, TypeError, json.JSONDecodeError):
+            return JsonResponse({"error": "invalid payload"}, status=400)
+
+        if not (0 <= score <= MAX_DOODLE_SCORE):
+            return JsonResponse({"error": "invalid score"}, status=400)
+
+        SinglePlayerResult.objects.create(
+            player=request.user, game=SinglePlayerResult.Game.DOODLE_JUMP, won=False, score=score
         )
         return JsonResponse({"ok": True})

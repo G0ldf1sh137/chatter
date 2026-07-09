@@ -6,6 +6,8 @@ class Match(models.Model):
     class Game(models.TextChoices):
         TIC_TAC_TOE = "ttt", "Tic-Tac-Toe"
         ROCK_PAPER_SCISSORS = "rps", "Rock-Paper-Scissors"
+        CONNECT_FOUR = "connect4", "Connect Four"
+        CHECKERS = "checkers", "Checkers"
 
     class Status(models.TextChoices):
         ACTIVE = "active", "Active"
@@ -48,6 +50,8 @@ class SinglePlayerResult(models.Model):
     class Game(models.TextChoices):
         HANGMAN = "hangman", "Word Guess"
         GAME_2048 = "2048", "2048"
+        SNAKE = "snake", "Snake"
+        DOODLE_JUMP = "doodle", "Doodle Jump"
 
     player = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="game_results")
     game = models.CharField(max_length=8, choices=Game.choices)

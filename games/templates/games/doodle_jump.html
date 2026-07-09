@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Doodle Jump — Chatter{% endblock %}
+
+{% block content %}
+    <div class="mx-auto max-w-sm rounded-2xl border border-border bg-surface p-6 shadow-sm">
+        <div class="mb-4 flex items-center justify-between">
+            <div>
+                <p class="text-xs text-muted">Height</p>
+                <p id="score" class="text-2xl font-bold">0</p>
+            </div>
+            <button type="button" id="new-game" class="mt-0 rounded-full border border-border bg-transparent px-4 py-1.5 text-sm text-fg transition-colors hover:bg-surface-hover">New game</button>
+        </div>
+        <canvas
+            id="board"
+            width="320"
+            height="480"
+            class="w-full rounded-xl bg-surface-hover"
+            data-finish-url="{% url 'doodle-finish' %}"
+            data-csrf-token="{{ csrf_token }}"
+        ></canvas>
+        <p id="game-message" class="mt-4 text-center font-semibold text-accent hidden"></p>
+        <p class="mt-4 text-center text-xs text-muted">Use left/right arrow keys to move.</p>
+    </div>
+    <script src="{% static 'games/js/doodle_jump.js' %}"></script>
+{% endblock %}
