@@ -23,9 +23,6 @@ class Post(models.Model):
         lines = self.body.strip().splitlines()
         return lines[0] if lines else ""
 
-    def has_more_content(self):
-        return len(self.body.strip().splitlines()) > 1
-
 
 class Comment(models.Model):
     author = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="comments")
