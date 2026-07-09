@@ -6,6 +6,7 @@ urlpatterns = [
     path("", views.GamesHubView.as_view(), name="games-hub"),
     path("leaderboard/", views.LeaderboardView.as_view(), name="games-leaderboard"),
     path("match/<int:pk>/status/", views.MatchStatusView.as_view(), name="match-status"),
+    path("your-turn-count/", views.YourTurnCountView.as_view(), name="your-turn-count"),
     path("ttt/challenge/<str:username>/", views.TicTacToeChallengeView.as_view(), name="ttt-challenge"),
     path("ttt/<int:pk>/", views.TicTacToeMatchView.as_view(), name="ttt-match"),
     path("ttt/<int:pk>/move/", views.TicTacToeMoveView.as_view(), name="ttt-move"),

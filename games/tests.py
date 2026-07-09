@@ -2,6 +2,7 @@ from django.contrib.auth.models import User
 from django.test import TestCase
 from django.urls import reverse
 
+from . import stats
 from .logic import checkers, connect_four, hangman, othello, rock_paper_scissors, tic_tac_toe, wordle
 from .logic.exceptions import InvalidMove
 from .models import Match, SinglePlayerResult
@@ -201,6 +202,142 @@ class MatchStatusViewTests(TestCase):
 
         after = self.client.get(reverse("match-status", args=[self.match.pk])).json()
         self.assertNotEqual(before["updated_at"], after["updated_at"])
+
+
+class YourTurnStatsTests(TestCase):
+    def setUp(self):
+        self.alice = make_user("alice")
+        self.bob = make_user("bob")
+
+    def test_is_users_turn_for_turn_based_game(self):
+        match = Match.objects.create(
+            game=Match.Game.TIC_TAC_TOE,
+            player1=self.alice,
+            player2=self.bob,
+            state=tic_tac_toe.initial_state(),
+            turn=self.alice,
+        )
+        self.assertTrue(stats.is_users_turn(match, self.alice))
+        self.assertFalse(stats.is_users_turn(match, self.bob))
+
+    def test_is_users_turn_for_rps_before_either_picks(self):
+        # RPS has no match.turn (both choose simultaneously) - "your turn"
+        # means "you haven't locked in a choice yet".
+        match = Match.objects.create(
+            game=Match.Game.ROCK_PAPER_SCISSORS, player1=self.alice, player2=self.bob, state={"choices": {}}
+        )
+        self.assertTrue(stats.is_users_turn(match, self.alice))
+        self.assertTrue(stats.is_users_turn(match, self.bob))
+
+    def test_is_users_turn_for_rps_after_one_picks(self):
+        match = Match.objects.create(
+            game=Match.Game.ROCK_PAPER_SCISSORS,
+            player1=self.alice,
+            player2=self.bob,
+            state={"choices": {str(self.alice.id): "rock"}},
+        )
+        self.assertFalse(stats.is_users_turn(match, self.alice))
+        self.assertTrue(stats.is_users_turn(match, self.bob))
+
+    def test_finished_match_is_never_your_turn(self):
+        match = Match.objects.create(
+            game=Match.Game.TIC_TAC_TOE,
+            player1=self.alice,
+            player2=self.bob,
+            status=Match.Status.FINISHED,
+            winner=self.alice,
+        )
+        self.assertFalse(stats.is_users_turn(match, self.alice))
+
+    def test_your_turn_count_across_games(self):
+        Match.objects.create(
+            game=Match.Game.TIC_TAC_TOE,
+            player1=self.alice,
+            player2=self.bob,
+            state=tic_tac_toe.initial_state(),
+            turn=self.alice,
+        )
+        Match.objects.create(
+            game=Match.Game.ROCK_PAPER_SCISSORS, player1=self.alice, player2=self.bob, state={"choices": {}}
+        )
+        Match.objects.create(
+            game=Match.Game.CONNECT_FOUR,
+            player1=self.bob,
+            player2=self.alice,
+            state=connect_four.initial_state(),
+            turn=self.bob,
+        )
+        self.assertEqual(stats.your_turn_count(self.alice), 2)
+
+
+class YourTurnCountViewTests(TestCase):
+    def setUp(self):
+        self.alice = make_user("alice")
+        self.bob = make_user("bob")
+
+    def test_anonymous_redirected(self):
+        response = self.client.get(reverse("your-turn-count"))
+        self.assertEqual(response.status_code, 302)
+
+    def test_returns_correct_count(self):
+        Match.objects.create(
+            game=Match.Game.TIC_TAC_TOE,
+            player1=self.alice,
+            player2=self.bob,
+            state=tic_tac_toe.initial_state(),
+            turn=self.alice,
+        )
+        self.client.force_login(self.alice)
+        response = self.client.get(reverse("your-turn-count"))
+        self.assertEqual(response.json(), {"count": 1})
+
+
+class GamesHubViewTests(TestCase):
+    def setUp(self):
+        self.alice = make_user("alice")
+        self.bob = make_user("bob")
+
+    def test_rps_match_awaiting_your_choice_is_bucketed_as_your_turn(self):
+        # Regression test: turn_id is always None for RPS (see Match.turn's
+        # docstring), so bucketing on turn_id alone would wrongly dump every
+        # active RPS match into "waiting" even when it's actually your move.
+        match = Match.objects.create(
+            game=Match.Game.ROCK_PAPER_SCISSORS, player1=self.alice, player2=self.bob, state={"choices": {}}
+        )
+        self.client.force_login(self.alice)
+        response = self.client.get(reverse("games-hub"))
+        self.assertIn(match, response.context["your_turn_matches"])
+        self.assertNotIn(match, response.context["waiting_matches"])
+
+
+class YourTurnBadgeTests(TestCase):
+    def setUp(self):
+        self.alice = make_user("alice")
+        self.bob = make_user("bob")
+
+    def test_badge_hidden_with_no_active_matches(self):
+        self.client.force_login(self.alice)
+        response = self.client.get(reverse("games-hub"))
+        self.assertContains(response, 'id="your-turn-badge"')
+        self.assertEqual(response.context["your_turn_count"], 0)
+        self.assertContains(response, "hidden")
+
+    def test_badge_shows_count_when_its_your_turn(self):
+        Match.objects.create(
+            game=Match.Game.TIC_TAC_TOE,
+            player1=self.alice,
+            player2=self.bob,
+            state=tic_tac_toe.initial_state(),
+            turn=self.alice,
+        )
+        self.client.force_login(self.alice)
+        response = self.client.get(reverse("games-hub"))
+        self.assertEqual(response.context["your_turn_count"], 1)
+        self.assertContains(response, ">1</span>")
+
+    def test_anonymous_page_has_no_badge(self):
+        response = self.client.get(reverse("register"))
+        self.assertNotContains(response, "your-turn-badge")
 
 
 class RockPaperScissorsLogicTests(TestCase):

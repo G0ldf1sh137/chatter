@@ -63,8 +63,8 @@ class GamesHubView(LoginRequiredMixin, TemplateView):
         )
         for match in matches:
             match.opponent = match.opponent_of(user)
-        context["your_turn_matches"] = [m for m in matches if m.turn_id == user.id]
-        context["waiting_matches"] = [m for m in matches if m.turn_id != user.id]
+        context["your_turn_matches"] = [m for m in matches if stats.is_users_turn(m, user)]
+        context["waiting_matches"] = [m for m in matches if not stats.is_users_turn(m, user)]
         return context
 
 
@@ -78,6 +78,11 @@ class MatchStatusView(LoginRequiredMixin, View):
         if request.user.id not in (match.player1_id, match.player2_id):
             raise Http404
         return JsonResponse({"updated_at": match.updated_at.isoformat(), "status": match.status})
+
+
+class YourTurnCountView(LoginRequiredMixin, View):
+    def get(self, request):
+        return JsonResponse({"count": stats.your_turn_count(request.user)})
 
 
 class TicTacToeChallengeView(LoginRequiredMixin, View):

@@ -3,6 +3,25 @@ from django.db.models import Count, Max, Q
 from .models import Match, SinglePlayerResult
 
 
+def is_users_turn(match, user):
+    """Whether `user` currently has an action to take in an active match.
+
+    Rock-Paper-Scissors has no match.turn (both players choose
+    simultaneously - see the Match.turn field's docstring) - "your turn"
+    there means "you haven't locked in a choice yet" instead.
+    """
+    if match.status != Match.Status.ACTIVE:
+        return False
+    if match.game == Match.Game.ROCK_PAPER_SCISSORS:
+        return not match.state.get("choices", {}).get(str(user.id))
+    return match.turn_id == user.id
+
+
+def your_turn_count(user):
+    matches = Match.objects.filter(status=Match.Status.ACTIVE).filter(Q(player1=user) | Q(player2=user))
+    return sum(1 for m in matches if is_users_turn(m, user))
+
+
 def match_record(user, game):
     """Returns (wins, losses, draws) for a user in a given multiplayer game."""
     matches = Match.objects.filter(game=game, status=Match.Status.FINISHED).filter(
