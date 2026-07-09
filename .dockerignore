@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+.venv/
+db.sqlite3
+.env
+staticfiles/
+media/
+bin/
+static/css/tailwind.css
+.git/

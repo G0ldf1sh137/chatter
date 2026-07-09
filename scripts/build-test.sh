@@ -21,6 +21,11 @@ echo "==> Running tests"
 docker compose run --rm web python manage.py test
 
 echo "==> Running deploy checks"
-docker compose run --rm -e DEBUG=0 web python manage.py check --deploy
+# RENDER=true simulates actually being deployed on Render (not just DEBUG=0),
+# since SSL-redirect/HSTS settings are deliberately scoped to that signal -
+# see config/settings.py's IS_RENDER. The SECRET_KEY warning below is
+# expected locally (.env's placeholder isn't a real secret) - a real
+# deployment gets a proper one via render.yaml's generateValue.
+docker compose run --rm -e DEBUG=0 -e RENDER=true web python manage.py check --deploy
 
 echo "==> Build and test succeeded"

@@ -1,0 +1,37 @@
+services:
+  - type: web
+    name: chatter
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    plan: free
+    healthCheckPath: /
+    envVars:
+      - key: DEBUG
+        value: "0"
+      - key: SECRET_KEY
+        generateValue: true
+      # Set these in the Render dashboard after the first deploy - they hold
+      # real secrets/credentials, or values only known once the service
+      # exists, that this blueprint shouldn't manage automatically.
+      # ALLOWED_HOSTS: the hostname Render assigns on first deploy (shown in
+      # the dashboard, typically <service-name>.onrender.com), or your
+      # custom domain if you attach one.
+      - key: ALLOWED_HOSTS
+        sync: false
+      - key: DATABASE_URL
+        sync: false
+      - key: GOOGLE_OAUTH_CLIENT_ID
+        sync: false
+      - key: GOOGLE_OAUTH_CLIENT_SECRET
+        sync: false
+      - key: EMAIL_HOST
+        sync: false
+      - key: EMAIL_PORT
+        sync: false
+      - key: EMAIL_HOST_USER
+        sync: false
+      - key: EMAIL_HOST_PASSWORD
+        sync: false
+      - key: DEFAULT_FROM_EMAIL
+        sync: false

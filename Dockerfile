@@ -27,6 +27,16 @@ COPY . .
 
 RUN tailwindcss -i ./static/css/input.css -o ./static/css/tailwind.css --minify
 
+# Baked into the image at build time, not run on every container start -
+# deterministic given the code above it, so redoing it on every boot/restart
+# would just be repeated work sitting in front of gunicorn for no benefit.
+# .dockerignore excludes .env, so DEBUG naturally defaults to False here,
+# matching production and selecting WhiteNoise's manifest storage backend.
+# input.css (the Tailwind *source*, not the compiled output) is excluded -
+# its `@import "tailwindcss"` line isn't a real file reference, and
+# WhiteNoise's manifest post-processor errors trying to resolve it as one.
+RUN python manage.py collectstatic --noinput --ignore=input.css
+
 RUN chown -R app:app /app
 USER app
 
