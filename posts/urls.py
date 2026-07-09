@@ -10,6 +10,7 @@ urlpatterns = [
     path("posts/<uuid:pk>/", views.PostDetailView.as_view(), name="post-detail"),
     path("posts/<uuid:pk>/edit/", views.PostEditView.as_view(), name="post-edit"),
     path("posts/<uuid:pk>/comment/", views.CommentCreateView.as_view(), name="comment-create"),
+    path("comments/<uuid:pk>/edit/", views.CommentEditView.as_view(), name="comment-edit"),
     path(
         "posts/<uuid:pk>/upvote/",
         views.PostVoteView.as_view(value=PostVote.UP),

@@ -21,3 +21,14 @@ class CommentForm(forms.ModelForm):
         widgets = {
             "body": forms.Textarea(attrs={"rows": 3, "placeholder": "Markdown supported"}),
         }
+
+
+class CommentEditForm(forms.ModelForm):
+    # No parent field - unlike CommentForm, editing never changes which
+    # comment/post a reply is nested under, only its body.
+    class Meta:
+        model = Comment
+        fields = ["body"]
+        widgets = {
+            "body": forms.Textarea(attrs={"rows": 3, "placeholder": "Markdown supported"}),
+        }

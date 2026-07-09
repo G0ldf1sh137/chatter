@@ -236,6 +236,22 @@ class PostTests(TestCase):
         post.refresh_from_db()
         self.assertEqual(post.body, "original")
 
+    def test_editing_a_post_marks_it_edited(self):
+        user = make_user("alice")
+        post = Post.objects.create(author=user, body="original")
+        self.client.force_login(user)
+        self.client.post(reverse("post-edit", args=[post.pk]), {"body": "edited"})
+        post.refresh_from_db()
+        self.assertTrue(post.edited)
+
+    def test_resubmitting_unchanged_body_does_not_mark_edited(self):
+        user = make_user("alice")
+        post = Post.objects.create(author=user, body="original")
+        self.client.force_login(user)
+        self.client.post(reverse("post-edit", args=[post.pk]), {"body": "original"})
+        post.refresh_from_db()
+        self.assertFalse(post.edited)
+
 
 class CommentTests(TestCase):
     def test_authenticated_user_can_comment(self):
@@ -278,6 +294,55 @@ class CommentTests(TestCase):
         self.assertEqual(tree[1].children, [])
         self.assertEqual(other_root.parent, None)
         self.assertEqual(grandchild.parent, child)
+
+
+class CommentEditTests(TestCase):
+    def setUp(self):
+        self.author = make_user("alice")
+        self.post = Post.objects.create(author=self.author, body="hello")
+        self.comment = Comment.objects.create(author=self.author, post=self.post, body="original")
+
+    def test_author_can_edit_own_comment(self):
+        self.client.force_login(self.author)
+        response = self.client.post(reverse("comment-edit", args=[self.comment.pk]), {"body": "edited"})
+        self.comment.refresh_from_db()
+        self.assertRedirects(
+            response, f"{reverse('post-detail', args=[self.post.pk])}#comment-{self.comment.pk}"
+        )
+        self.assertEqual(self.comment.body, "edited")
+        self.assertTrue(self.comment.edited)
+
+    def test_resubmitting_unchanged_body_does_not_mark_edited(self):
+        self.client.force_login(self.author)
+        self.client.post(reverse("comment-edit", args=[self.comment.pk]), {"body": "original"})
+        self.comment.refresh_from_db()
+        self.assertFalse(self.comment.edited)
+
+    def test_non_author_cannot_edit_comment(self):
+        other = make_user("mallory")
+        self.client.force_login(other)
+        response = self.client.post(reverse("comment-edit", args=[self.comment.pk]), {"body": "hacked"})
+        self.assertEqual(response.status_code, 404)
+        self.comment.refresh_from_db()
+        self.assertEqual(self.comment.body, "original")
+        self.assertFalse(self.comment.edited)
+
+    def test_anonymous_cannot_edit_comment(self):
+        response = self.client.post(reverse("comment-edit", args=[self.comment.pk]), {"body": "hacked"})
+        self.assertEqual(response.status_code, 302)
+        self.assertIn(reverse("login"), response.url)
+        self.comment.refresh_from_db()
+        self.assertEqual(self.comment.body, "original")
+
+    def test_invalid_edit_is_ignored(self):
+        self.client.force_login(self.author)
+        response = self.client.post(reverse("comment-edit", args=[self.comment.pk]), {"body": ""})
+        self.comment.refresh_from_db()
+        self.assertRedirects(
+            response, f"{reverse('post-detail', args=[self.post.pk])}#comment-{self.comment.pk}"
+        )
+        self.assertEqual(self.comment.body, "original")
+        self.assertFalse(self.comment.edited)
 
 
 class VoteTests(TestCase):

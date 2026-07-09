@@ -12,6 +12,10 @@
                     {% include "_avatar.html" with avatar_user=post.author %}
                     <a href="{% url 'profile' post.author.username %}" class="font-medium text-fg no-underline hover:text-accent">{{ post.author.username }}</a>
                     <span>&middot; {{ post.created_at }}</span>
+                    {% if post.edited %}<span class="italic">&middot; edited</span>{% endif %}
+                    {% if user == post.author %}
+                        <a href="{% url 'post-edit' post.pk %}" class="ml-auto font-medium text-accent no-underline hover:underline">Edit</a>
+                    {% endif %}
                 </div>
                 <div class="prose prose-sm max-w-none dark:prose-invert">{{ post.body|markdown }}</div>
             </div>

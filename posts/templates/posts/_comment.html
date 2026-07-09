@@ -4,18 +4,30 @@
         {% include "_avatar.html" with avatar_user=comment.author %}
         <a href="{% url 'profile' comment.author.username %}" class="font-medium text-fg no-underline hover:text-accent">{{ comment.author.username }}</a>
         <span>&middot; {{ comment.created_at }}</span>
+        {% if comment.edited %}<span class="italic">&middot; edited</span>{% endif %}
         {% include "_comment_vote.html" %}
     </div>
     <div class="prose prose-sm max-w-none dark:prose-invert">{{ comment.body|markdown }}</div>
     {% if user.is_authenticated %}
-        <input type="checkbox" id="reply-toggle-{{ comment.pk }}" class="peer hidden">
+        <input type="checkbox" id="reply-toggle-{{ comment.pk }}" class="peer/reply hidden">
         <label for="reply-toggle-{{ comment.pk }}" class="mt-1.5 inline-block cursor-pointer text-sm font-medium text-accent hover:underline">Reply</label>
-        <form method="post" action="{% url 'comment-create' comment.post_id %}" class="mt-2 hidden peer-checked:block">
+        {% if user == comment.author %}
+            <input type="checkbox" id="edit-toggle-{{ comment.pk }}" class="peer/edit hidden">
+            <label for="edit-toggle-{{ comment.pk }}" class="mt-1.5 ml-2 inline-block cursor-pointer text-sm font-medium text-accent hover:underline">Edit</label>
+        {% endif %}
+        <form method="post" action="{% url 'comment-create' comment.post_id %}" class="mt-2 hidden peer-checked/reply:block">
             {% csrf_token %}
             <input type="hidden" name="parent" value="{{ comment.pk }}">
             <textarea name="body" rows="2" placeholder="Markdown supported" class="min-h-12"></textarea>
             <button type="submit">Reply</button>
         </form>
+        {% if user == comment.author %}
+            <form method="post" action="{% url 'comment-edit' comment.pk %}" class="mt-2 hidden peer-checked/edit:block">
+                {% csrf_token %}
+                <textarea name="body" rows="2" class="min-h-12">{{ comment.body }}</textarea>
+                <button type="submit">Save</button>
+            </form>
+        {% endif %}
     {% endif %}
     {% if comment.children %}
         <div class="mt-3 ml-3 space-y-3 border-l-2 border-border pl-4 sm:ml-4">

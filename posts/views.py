@@ -3,12 +3,13 @@ from collections import defaultdict
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 from django.db.models import OuterRef, Subquery, Sum
 from django.db.models.functions import Coalesce
+from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views import View
 from django.views.generic import CreateView, DetailView, ListView, UpdateView
 
-from .forms import CommentForm, PostForm
+from .forms import CommentEditForm, CommentForm, PostForm
 from .models import Comment, CommentVote, Post, PostVote
 from .ranking import rank_posts
 
@@ -139,6 +140,11 @@ class PostEditView(LoginRequiredMixin, UserPassesTestMixin, UpdateView):
     def test_func(self):
         return self.get_object().author_id == self.request.user.id
 
+    def form_valid(self, form):
+        if form.has_changed():
+            form.instance.edited = True
+        return super().form_valid(form)
+
 
 class CommentCreateView(LoginRequiredMixin, View):
     def post(self, request, pk):
@@ -156,6 +162,20 @@ class CommentCreateView(LoginRequiredMixin, View):
                 body=form.cleaned_data["body"],
             )
         return redirect("post-detail", pk=post.pk)
+
+
+class CommentEditView(LoginRequiredMixin, View):
+    def post(self, request, pk):
+        comment = get_object_or_404(Comment, pk=pk)
+        if comment.author_id != request.user.id:
+            raise Http404
+
+        form = CommentEditForm(request.POST, instance=comment)
+        if form.is_valid():
+            if form.has_changed():
+                form.instance.edited = True
+            form.save()
+        return redirect(f"{comment.post.get_absolute_url()}#comment-{comment.pk}")
 
 
 class PostVoteView(LoginRequiredMixin, View):
