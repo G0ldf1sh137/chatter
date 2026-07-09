@@ -373,6 +373,96 @@ class ProfileEditTests(TestCase):
         self.assertFormError(response.context["form"], "avatar", "Image must be smaller than 0MB.")
 
 
+class PasswordChangeTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(username="dave", password="correct-horse-battery-staple")
+
+    def test_anonymous_cannot_access(self):
+        response = self.client.post(
+            reverse("password-change"),
+            {"old_password": "x", "new_password1": "y", "new_password2": "y"},
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertIn(reverse("login"), response.url)
+
+    def test_user_can_change_password_with_correct_old_password(self):
+        self.client.force_login(self.user)
+
+        response = self.client.post(
+            reverse("password-change"),
+            {
+                "old_password": "correct-horse-battery-staple",
+                "new_password1": "new-correct-horse-staple",
+                "new_password2": "new-correct-horse-staple",
+            },
+        )
+
+        self.assertRedirects(response, reverse("profile-edit"))
+        self.user.refresh_from_db()
+        self.assertTrue(self.user.check_password("new-correct-horse-staple"))
+
+    def test_session_stays_authenticated_after_change(self):
+        self.client.force_login(self.user)
+
+        self.client.post(
+            reverse("password-change"),
+            {
+                "old_password": "correct-horse-battery-staple",
+                "new_password1": "new-correct-horse-staple",
+                "new_password2": "new-correct-horse-staple",
+            },
+        )
+
+        response = self.client.get(reverse("profile-edit"))
+        self.assertEqual(response.status_code, 200)
+
+    def test_wrong_old_password_rejected(self):
+        self.client.force_login(self.user)
+
+        response = self.client.post(
+            reverse("password-change"),
+            {
+                "old_password": "wrong-password",
+                "new_password1": "new-correct-horse-staple",
+                "new_password2": "new-correct-horse-staple",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.user.refresh_from_db()
+        self.assertTrue(self.user.check_password("correct-horse-battery-staple"))
+
+    def test_mismatched_new_passwords_rejected(self):
+        self.client.force_login(self.user)
+
+        response = self.client.post(
+            reverse("password-change"),
+            {
+                "old_password": "correct-horse-battery-staple",
+                "new_password1": "new-correct-horse-staple",
+                "new_password2": "something-else-entirely",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.user.refresh_from_db()
+        self.assertTrue(self.user.check_password("correct-horse-battery-staple"))
+
+    def test_social_only_user_can_set_password_without_old_password(self):
+        social_user = User.objects.create_user(username="erin", password=None)
+        self.assertFalse(social_user.has_usable_password())
+        self.client.force_login(social_user)
+
+        response = self.client.post(
+            reverse("password-change"),
+            {"new_password1": "brand-new-password-123", "new_password2": "brand-new-password-123"},
+        )
+
+        self.assertRedirects(response, reverse("profile-edit"))
+        social_user.refresh_from_db()
+        self.assertTrue(social_user.check_password("brand-new-password-123"))
+
+
 class FollowTests(TestCase):
     def setUp(self):
         self.alice = User.objects.create_user(username="alice", password="correct-horse-battery-staple")

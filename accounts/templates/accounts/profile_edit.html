@@ -13,5 +13,8 @@
             {{ form.as_p }}
             <button type="submit">Save</button>
         </form>
+        <a href="{% url 'password-change' %}" class="mt-4 inline-block text-sm font-medium text-accent no-underline hover:underline">
+            {% if request.user.has_usable_password %}Change password{% else %}Set a password{% endif %}
+        </a>
     </div>
 {% endblock %}

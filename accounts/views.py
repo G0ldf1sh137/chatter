@@ -1,6 +1,7 @@
 from django.conf import settings
 from django.contrib import messages
-from django.contrib.auth import login
+from django.contrib.auth import login, update_session_auth_hash
+from django.contrib.auth.forms import PasswordChangeForm, SetPasswordForm
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.auth.models import User
 from django.db.models import Sum
@@ -136,6 +137,33 @@ class ProfileEditView(LoginRequiredMixin, UpdateView):
 
     def get_success_url(self):
         return reverse("profile", kwargs={"username": self.request.user.username})
+
+
+class PasswordChangeView(LoginRequiredMixin, FormView):
+    template_name = "accounts/password_change.html"
+    success_url = reverse_lazy("profile-edit")
+
+    def get_form_class(self):
+        # Google-only signups have no usable password (allauth sets one
+        # unusable at signup) - SetPasswordForm skips the old-password check
+        # that PasswordChangeForm would otherwise always fail for them.
+        return PasswordChangeForm if self.request.user.has_usable_password() else SetPasswordForm
+
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        kwargs["user"] = self.request.user
+        return kwargs
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["has_password"] = self.request.user.has_usable_password()
+        return context
+
+    def form_valid(self, form):
+        form.save()
+        update_session_auth_hash(self.request, form.user)
+        messages.success(self.request, "Your password has been updated.")
+        return super().form_valid(form)
 
 
 class FollowView(LoginRequiredMixin, View):
