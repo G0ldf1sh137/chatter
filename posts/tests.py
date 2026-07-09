@@ -41,6 +41,31 @@ class PostTests(TestCase):
         self.assertEqual(post.author, user)
         self.assertEqual(post.body, "hello world")
 
+    def test_first_line_returns_only_first_line(self):
+        post = Post.objects.create(author=make_user("alice"), body="line one\nline two\nline three")
+        self.assertEqual(post.first_line(), "line one")
+        self.assertTrue(post.has_more_content())
+
+    def test_first_line_of_single_line_post_has_no_more_content(self):
+        post = Post.objects.create(author=make_user("alice"), body="just one line")
+        self.assertEqual(post.first_line(), "just one line")
+        self.assertFalse(post.has_more_content())
+
+    def test_feed_shows_only_first_line_with_read_more_link(self):
+        user = make_user("alice")
+        post = Post.objects.create(author=user, body="first line\nsecond line")
+        response = self.client.get(reverse("feed"))
+        self.assertContains(response, "first line")
+        self.assertNotContains(response, "second line")
+        self.assertContains(response, reverse("post-detail", args=[post.pk]))
+        self.assertContains(response, "Read more")
+
+    def test_feed_hides_read_more_link_for_single_line_post(self):
+        user = make_user("alice")
+        Post.objects.create(author=user, body="just one line")
+        response = self.client.get(reverse("feed"))
+        self.assertNotContains(response, "Read more")
+
     def test_feed_orders_tied_posts_newest_first(self):
         user = make_user("alice")
         first = Post.objects.create(author=user, body="first")

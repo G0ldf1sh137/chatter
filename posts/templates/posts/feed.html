@@ -22,10 +22,12 @@
                         <div class="mb-1.5 flex items-center gap-1.5 text-sm text-muted">
                             {% include "_avatar.html" with avatar_user=post.author %}
                             <a href="{% url 'profile' post.author.username %}" class="font-medium text-fg no-underline hover:text-accent">{{ post.author.username }}</a>
-                            <span>&middot;</span>
-                            <a href="{% url 'post-detail' post.pk %}" class="text-muted no-underline hover:text-fg">{{ post.created_at }}</a>
+                            <span>&middot; {{ post.created_at }}</span>
                         </div>
-                        <div class="prose prose-sm max-w-none dark:prose-invert">{{ post.body|markdown }}</div>
+                        <div class="prose prose-sm max-w-none dark:prose-invert">{{ post.first_line|markdown }}</div>
+                        {% if post.has_more_content %}
+                            <a href="{% url 'post-detail' post.pk %}" class="mt-1 inline-block text-sm font-medium text-accent no-underline hover:underline">Read more</a>
+                        {% endif %}
                     </div>
                 </div>
             </article>
