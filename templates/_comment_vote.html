@@ -2,7 +2,7 @@
     {% if user.is_authenticated %}
         <form method="post" action="{% url 'comment-upvote' comment.pk %}" class="inline">
             {% csrf_token %}
-            <button type="submit" class="mt-0 flex items-center justify-center rounded-full border-none bg-transparent p-1 text-muted transition-colors hover:bg-border/60 hover:text-fg {% if comment.user_vote == 1 %}text-upvote hover:text-upvote{% endif %}" aria-label="Upvote">
+            <button type="submit" class="mt-0 flex items-center justify-center rounded-full border-none bg-transparent p-1 transition-colors hover:bg-border/60 {% if comment.user_vote == 1 %}text-upvote hover:text-upvote{% else %}text-muted hover:text-fg{% endif %}" aria-label="Upvote">
                 <svg viewBox="0 0 20 20" fill="currentColor" class="h-3 w-3"><path d="M10 6l6 7H4l6-7z"/></svg>
             </button>
         </form>
@@ -15,7 +15,7 @@
     {% if user.is_authenticated %}
         <form method="post" action="{% url 'comment-downvote' comment.pk %}" class="inline">
             {% csrf_token %}
-            <button type="submit" class="mt-0 flex items-center justify-center rounded-full border-none bg-transparent p-1 text-muted transition-colors hover:bg-border/60 hover:text-fg {% if comment.user_vote == -1 %}text-downvote hover:text-downvote{% endif %}" aria-label="Downvote">
+            <button type="submit" class="mt-0 flex items-center justify-center rounded-full border-none bg-transparent p-1 transition-colors hover:bg-border/60 {% if comment.user_vote == -1 %}text-downvote hover:text-downvote{% else %}text-muted hover:text-fg{% endif %}" aria-label="Downvote">
                 <svg viewBox="0 0 20 20" fill="currentColor" class="h-3 w-3"><path d="M10 14l-6-7h12l-6 7z"/></svg>
             </button>
         </form>
