@@ -45,8 +45,11 @@
     function tileClass(value) {
         if (value >= 512) return "bg-accent text-accent-fg";
         if (value >= 64) return "bg-upvote text-white";
-        if (value >= 8) return "bg-surface-hover text-fg font-black";
-        return "bg-surface-hover text-fg";
+        if (value >= 32) return "bg-accent/70 text-white font-black";
+        if (value >= 16) return "bg-accent/45 text-fg font-black";
+        if (value >= 8) return "bg-accent/25 text-fg font-black";
+        if (value >= 4) return "bg-accent/10 text-fg";
+        return "bg-surface text-fg border border-border";
     }
 
     function render() {
