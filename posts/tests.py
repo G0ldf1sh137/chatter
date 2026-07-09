@@ -253,6 +253,35 @@ class PostTests(TestCase):
         self.assertFalse(post.edited)
 
 
+class FeedPaginationTests(TestCase):
+    def setUp(self):
+        self.author = make_user("alice")
+        for i in range(8):
+            Post.objects.create(author=self.author, body=f"post {i}")
+
+    def test_initial_load_shows_only_first_page(self):
+        response = self.client.get(reverse("feed"))
+        self.assertEqual(len(response.context["posts"]), 6)
+
+    def test_ajax_request_returns_json_with_remaining_posts_and_next_url(self):
+        response = self.client.get(
+            reverse("feed"), {"page": 2}, HTTP_X_REQUESTED_WITH="XMLHttpRequest"
+        )
+        data = response.json()
+        self.assertIn("post 0", data["html"])
+        self.assertIsNone(data["next_url"])
+
+    def test_ajax_first_page_has_a_next_url_when_more_remain(self):
+        response = self.client.get(reverse("feed"), HTTP_X_REQUESTED_WITH="XMLHttpRequest")
+        data = response.json()
+        self.assertIsNotNone(data["next_url"])
+        self.assertIn("page=2", data["next_url"])
+
+    def test_normal_request_is_not_json(self):
+        response = self.client.get(reverse("feed"))
+        self.assertEqual(response["Content-Type"].split(";")[0], "text/html")
+
+
 class CommentTests(TestCase):
     def test_authenticated_user_can_comment(self):
         author = make_user("alice")
@@ -343,6 +372,45 @@ class CommentEditTests(TestCase):
         )
         self.assertEqual(self.comment.body, "original")
         self.assertFalse(self.comment.edited)
+
+
+class CommentPaginationTests(TestCase):
+    def setUp(self):
+        self.author = make_user("alice")
+        self.post = Post.objects.create(author=self.author, body="hello")
+        self.top_level = [
+            Comment.objects.create(author=self.author, post=self.post, body=f"top {i}") for i in range(7)
+        ]
+        self.reply = Comment.objects.create(
+            author=self.author, post=self.post, body="a reply", parent=self.top_level[-1]
+        )
+
+    def test_initial_load_shows_only_first_six_top_level_threads(self):
+        response = self.client.get(reverse("post-detail", args=[self.post.pk]))
+        self.assertEqual(len(response.context["comment_tree"]), 6)
+        self.assertTrue(response.context["comments_has_next"])
+
+    def test_ajax_second_page_returns_remaining_thread_with_its_reply(self):
+        response = self.client.get(
+            reverse("post-detail", args=[self.post.pk]),
+            {"page": 2},
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        data = response.json()
+        self.assertIn("top 6", data["html"])
+        self.assertIn("a reply", data["html"])
+        self.assertIsNone(data["next_url"])
+
+    def test_reply_to_a_first_page_thread_is_not_paginated_separately(self):
+        # Replies live inside their parent's tree node - only top-level
+        # comments are paginated, so a reply on an already-shown thread must
+        # appear on page 1 alongside it, not wait for its own page.
+        reply_to_first = Comment.objects.create(
+            author=self.author, post=self.post, body="reply to first", parent=self.top_level[0]
+        )
+        response = self.client.get(reverse("post-detail", args=[self.post.pk]))
+        first_node = response.context["comment_tree"][0]
+        self.assertIn(reply_to_first, first_node.children)
 
 
 class VoteTests(TestCase):

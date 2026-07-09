@@ -3,8 +3,9 @@ from collections import defaultdict
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 from django.db.models import OuterRef, Subquery, Sum
 from django.db.models.functions import Coalesce
-from django.http import Http404
+from django.http import Http404, JsonResponse
 from django.shortcuts import get_object_or_404, redirect
+from django.template.loader import render_to_string
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views import View
 from django.views.generic import CreateView, DetailView, ListView, UpdateView
@@ -65,12 +66,22 @@ SORT_TOP = "top"
 SORT_NEW = "new"
 SORT_CHOICES = {SORT_DEFAULT, SORT_TOP, SORT_NEW}
 
+# Initial page size for both the feed and a post's top-level comments -
+# infinite_scroll.js requests further pages as the user scrolls near the
+# bottom, rather than loading everything (or a manual pager) upfront.
+POSTS_PAGE_SIZE = 6
+COMMENTS_PAGE_SIZE = 6
+
+
+def is_ajax(request):
+    return request.headers.get("X-Requested-With") == "XMLHttpRequest"
+
 
 class FeedView(ListView):
     model = Post
     template_name = "posts/feed.html"
     context_object_name = "posts"
-    paginate_by = 20
+    paginate_by = POSTS_PAGE_SIZE
     active_feed = "all"
 
     def get_sort(self):
@@ -95,6 +106,17 @@ class FeedView(ListView):
         context["active_feed"] = self.active_feed
         context["active_sort"] = self.get_sort()
         return context
+
+    def render_to_response(self, context, **response_kwargs):
+        if not is_ajax(self.request):
+            return super().render_to_response(context, **response_kwargs)
+
+        html = render_to_string("posts/_post_list.html", {"posts": context["posts"]}, request=self.request)
+        next_url = None
+        page_obj = context.get("page_obj")
+        if page_obj and page_obj.has_next():
+            next_url = f"{self.request.path}?page={page_obj.next_page_number()}&sort={self.get_sort()}"
+        return JsonResponse({"html": html, "next_url": next_url})
 
 
 class FollowingFeedView(LoginRequiredMixin, FeedView):
@@ -123,11 +145,43 @@ class PostDetailView(DetailView):
         queryset = Post.objects.select_related("author", "author__profile")
         return annotate_votes(queryset, PostVote, "post", self.request.user)
 
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
+    def get_comment_tree(self):
         comments = self.object.comments.select_related("author", "author__profile")
         comments = annotate_votes(comments, CommentVote, "comment", self.request.user)
-        context["comment_tree"] = build_comment_tree(list(comments))
+        return build_comment_tree(list(comments))
+
+    def get(self, request, *args, **kwargs):
+        self.object = self.get_object()
+        if is_ajax(request):
+            return self.render_comments_page()
+        return self.render_to_response(self.get_context_data(object=self.object))
+
+    def render_comments_page(self):
+        # Paginates over the already-built tree in Python rather than the
+        # underlying queryset: a top-level comment's replies must stay with
+        # it regardless of thread depth, and this app's comment trees are
+        # small enough that rebuilding the full tree per page is proportionate
+        # (annotate_votes already re-runs on every load for the same reason).
+        try:
+            page = int(self.request.GET.get("page", 1))
+        except ValueError:
+            page = 1
+        tree = self.get_comment_tree()
+        start = (page - 1) * COMMENTS_PAGE_SIZE
+        end = start + COMMENTS_PAGE_SIZE
+        html = render_to_string(
+            "posts/_comment_list.html", {"comment_tree": tree[start:end]}, request=self.request
+        )
+        next_url = None
+        if end < len(tree):
+            next_url = f"{self.object.get_absolute_url()}?page={page + 1}"
+        return JsonResponse({"html": html, "next_url": next_url})
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        tree = self.get_comment_tree()
+        context["comment_tree"] = tree[:COMMENTS_PAGE_SIZE]
+        context["comments_has_next"] = len(tree) > COMMENTS_PAGE_SIZE
         context["comment_form"] = CommentForm()
         return context
 

@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% load post_extras %}
+{% load post_extras static %}
 
 {% block title %}Post — Chatter{% endblock %}
 
@@ -24,11 +24,12 @@
 
     <h2 class="mb-3 mt-8 text-lg font-bold">Comments</h2>
     {% if comment_tree %}
-        <div class="divide-y divide-border rounded-2xl border border-border bg-surface">
-            {% for comment in comment_tree %}
-                {% include "posts/_comment.html" %}
-            {% endfor %}
+        <div class="divide-y divide-border rounded-2xl border border-border bg-surface" id="comment-list">
+            {% include "posts/_comment_list.html" %}
         </div>
+        {% if comments_has_next %}
+            <div data-infinite-scroll-sentinel data-next-url="{% url 'post-detail' post.pk %}?page=2" class="h-8 text-center text-sm text-muted"></div>
+        {% endif %}
     {% else %}
         <p class="text-muted">No comments yet.</p>
     {% endif %}
@@ -42,4 +43,6 @@
     {% else %}
         <p class="mt-4"><a href="{% url 'login' %}">Log in</a> to comment.</p>
     {% endif %}
+
+    <script src="{% static 'posts/js/infinite_scroll.js' %}"></script>
 {% endblock %}
