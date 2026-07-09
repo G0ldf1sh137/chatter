@@ -8,9 +8,11 @@ from django.shortcuts import get_object_or_404, redirect
 from django.views import View
 from django.views.generic import DetailView, TemplateView
 
-from .logic import rock_paper_scissors, tic_tac_toe
+from .logic import hangman, rock_paper_scissors, tic_tac_toe
 from .logic.exceptions import InvalidMove
-from .models import Match
+from .models import Match, SinglePlayerResult
+
+SESSION_KEY_HANGMAN = "hangman_game"
 
 
 class GamesHubView(LoginRequiredMixin, TemplateView):
@@ -176,3 +178,42 @@ class RockPaperScissorsMoveView(LoginRequiredMixin, View):
                     match.winner = match.player1 if result == "a" else match.player2
             match.save()
         return redirect("rps-match", pk=pk)
+
+
+class HangmanNewView(LoginRequiredMixin, View):
+    def post(self, request):
+        request.session[SESSION_KEY_HANGMAN] = hangman.initial_state()
+        return redirect("hangman-play")
+
+
+class HangmanPlayView(LoginRequiredMixin, TemplateView):
+    template_name = "games/hangman_play.html"
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        state = self.request.session.get(SESSION_KEY_HANGMAN)
+        context["state"] = state
+        if state:
+            context["display"] = hangman.display_word(state)
+            context["status"] = hangman.game_status(state)
+            context["remaining_guesses"] = hangman.MAX_WRONG_GUESSES - state["wrong"]
+            context["alphabet"] = "abcdefghijklmnopqrstuvwxyz"
+        return context
+
+
+class HangmanGuessView(LoginRequiredMixin, View):
+    def post(self, request):
+        state = request.session.get(SESSION_KEY_HANGMAN)
+        letter = request.POST.get("letter", "")
+        if state and len(letter) == 1 and letter.isalpha() and hangman.game_status(state) == "playing":
+            state = hangman.apply_guess(state, letter)
+            request.session[SESSION_KEY_HANGMAN] = state
+            status = hangman.game_status(state)
+            if status in ("won", "lost"):
+                SinglePlayerResult.objects.create(
+                    player=request.user,
+                    game=SinglePlayerResult.Game.HANGMAN,
+                    won=status == "won",
+                    score=1 if status == "won" else 0,
+                )
+        return redirect("hangman-play")

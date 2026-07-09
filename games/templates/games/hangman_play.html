@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+
+{% block title %}Word Guess — Chatter{% endblock %}
+
+{% block content %}
+    <div class="mx-auto max-w-sm rounded-2xl border border-border bg-surface p-6 text-center shadow-sm">
+        {% if not state %}
+            <p class="mb-4 text-muted">Guess the word one letter at a time. You get 6 wrong guesses.</p>
+            <form method="post" action="{% url 'hangman-new' %}">
+                {% csrf_token %}
+                <button type="submit">Start a game</button>
+            </form>
+        {% else %}
+            <p class="mb-2 text-2xl font-bold tracking-widest">
+                {% for letter in display %}{% if letter %}{{ letter|upper }}{% else %}_{% endif %} {% endfor %}
+            </p>
+
+            {% if status == "won" %}
+                <p class="mb-4 font-semibold text-accent">You won! The word was "{{ state.word }}".</p>
+                <form method="post" action="{% url 'hangman-new' %}">
+                    {% csrf_token %}
+                    <button type="submit">Play again</button>
+                </form>
+            {% elif status == "lost" %}
+                <p class="mb-4 font-semibold text-downvote">You lost. The word was "{{ state.word }}".</p>
+                <form method="post" action="{% url 'hangman-new' %}">
+                    {% csrf_token %}
+                    <button type="submit">Play again</button>
+                </form>
+            {% else %}
+                <p class="mb-4 text-sm text-muted">{{ remaining_guesses }} guess{{ remaining_guesses|pluralize:"es" }} left</p>
+                <div class="mx-auto grid max-w-xs grid-cols-7 gap-1.5">
+                    {% for letter in alphabet %}
+                        {% if letter in state.guessed %}
+                            <div class="flex aspect-square items-center justify-center rounded-lg bg-surface-hover text-xs font-semibold text-muted">{{ letter|upper }}</div>
+                        {% else %}
+                            <form method="post" action="{% url 'hangman-guess' %}">
+                                {% csrf_token %}
+                                <input type="hidden" name="letter" value="{{ letter }}">
+                                <button type="submit" class="mt-0 flex aspect-square w-full items-center justify-center rounded-lg border border-border bg-transparent text-xs font-semibold text-fg transition-colors hover:bg-surface-hover">{{ letter|upper }}</button>
+                            </form>
+                        {% endif %}
+                    {% endfor %}
+                </div>
+            {% endif %}
+        {% endif %}
+    </div>
+{% endblock %}

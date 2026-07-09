@@ -2,9 +2,9 @@ from django.contrib.auth.models import User
 from django.test import TestCase
 from django.urls import reverse
 
-from .logic import rock_paper_scissors, tic_tac_toe
+from .logic import hangman, rock_paper_scissors, tic_tac_toe
 from .logic.exceptions import InvalidMove
-from .models import Match
+from .models import Match, SinglePlayerResult
 
 
 def make_user(username):
@@ -262,3 +262,88 @@ class RockPaperScissorsMatchTests(TestCase):
         self.client.post(reverse("rps-move", args=[match.pk]), {"choice": "lizard"})
         match.refresh_from_db()
         self.assertEqual(match.state["choices"], {})
+
+
+class HangmanLogicTests(TestCase):
+    def test_initial_state_has_no_guesses(self):
+        state = hangman.initial_state()
+        self.assertIn(state["word"], hangman.WORD_LIST)
+        self.assertEqual(state["guessed"], [])
+        self.assertEqual(state["wrong"], 0)
+
+    def test_correct_guess_does_not_increment_wrong(self):
+        state = {"word": "python", "guessed": [], "wrong": 0}
+        state = hangman.apply_guess(state, "p")
+        self.assertEqual(state["wrong"], 0)
+        self.assertIn("p", state["guessed"])
+
+    def test_incorrect_guess_increments_wrong(self):
+        state = {"word": "python", "guessed": [], "wrong": 0}
+        state = hangman.apply_guess(state, "z")
+        self.assertEqual(state["wrong"], 1)
+
+    def test_repeated_guess_is_a_no_op(self):
+        state = {"word": "python", "guessed": ["z"], "wrong": 1}
+        state = hangman.apply_guess(state, "z")
+        self.assertEqual(state["wrong"], 1)
+        self.assertEqual(state["guessed"], ["z"])
+
+    def test_display_word_hides_unguessed_letters(self):
+        state = {"word": "cat", "guessed": ["c"], "wrong": 0}
+        self.assertEqual(hangman.display_word(state), ["c", None, None])
+
+    def test_status_won_when_all_letters_guessed(self):
+        state = {"word": "cat", "guessed": ["c", "a", "t"], "wrong": 0}
+        self.assertEqual(hangman.game_status(state), "won")
+
+    def test_status_lost_at_max_wrong_guesses(self):
+        state = {"word": "cat", "guessed": [], "wrong": hangman.MAX_WRONG_GUESSES}
+        self.assertEqual(hangman.game_status(state), "lost")
+
+    def test_status_playing_mid_game(self):
+        state = {"word": "cat", "guessed": ["c"], "wrong": 1}
+        self.assertEqual(hangman.game_status(state), "playing")
+
+
+class HangmanSessionTests(TestCase):
+    def setUp(self):
+        self.alice = make_user("alice")
+        self.client.force_login(self.alice)
+
+    def test_new_game_stores_state_in_session(self):
+        self.client.post(reverse("hangman-new"))
+        self.assertIn("hangman_game", self.client.session)
+
+    def test_correct_guesses_win_and_record_result(self):
+        self.client.post(reverse("hangman-new"))
+        word = self.client.session["hangman_game"]["word"]
+        for letter in set(word):
+            self.client.post(reverse("hangman-guess"), {"letter": letter})
+        result = SinglePlayerResult.objects.get()
+        self.assertTrue(result.won)
+        self.assertEqual(result.player, self.alice)
+        self.assertEqual(result.game, SinglePlayerResult.Game.HANGMAN)
+
+    def test_six_wrong_guesses_lose_and_record_result(self):
+        self.client.post(reverse("hangman-new"))
+        word = set(self.client.session["hangman_game"]["word"])
+        wrong_letters = [c for c in "abcdefghijklmnopqrstuvwxyz" if c not in word][:6]
+        for letter in wrong_letters:
+            self.client.post(reverse("hangman-guess"), {"letter": letter})
+        result = SinglePlayerResult.objects.get()
+        self.assertFalse(result.won)
+
+    def test_guessing_after_game_over_does_not_record_twice(self):
+        self.client.post(reverse("hangman-new"))
+        word = set(self.client.session["hangman_game"]["word"])
+        wrong_letters = [c for c in "abcdefghijklmnopqrstuvwxyz" if c not in word][:6]
+        for letter in wrong_letters:
+            self.client.post(reverse("hangman-guess"), {"letter": letter})
+        # One more guess after the game is already lost.
+        self.client.post(reverse("hangman-guess"), {"letter": "a"})
+        self.assertEqual(SinglePlayerResult.objects.count(), 1)
+
+    def test_anonymous_cannot_play(self):
+        self.client.logout()
+        response = self.client.post(reverse("hangman-new"))
+        self.assertEqual(response.status_code, 302)
