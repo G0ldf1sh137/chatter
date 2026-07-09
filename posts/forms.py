@@ -1,6 +1,6 @@
 from django import forms
 
-from .models import Comment, Post
+from .models import Comment, Message, Post
 
 
 class PostForm(forms.ModelForm):
@@ -31,4 +31,13 @@ class CommentEditForm(forms.ModelForm):
         fields = ["body"]
         widgets = {
             "body": forms.Textarea(attrs={"rows": 3, "placeholder": "Markdown supported"}),
+        }
+
+
+class MessageForm(forms.ModelForm):
+    class Meta:
+        model = Message
+        fields = ["body"]
+        widgets = {
+            "body": forms.Textarea(attrs={"rows": 2, "placeholder": "Write a message..."}),
         }

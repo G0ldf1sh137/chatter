@@ -1,6 +1,7 @@
 from datetime import timedelta
 
 from django.contrib.auth.models import User
+from django.db import IntegrityError
 from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
@@ -8,8 +9,8 @@ from django.utils import timezone
 from accounts.models import Follow
 
 from .markdown import render_markdown
-from .models import Comment, CommentVote, Post, PostVote
-from .views import build_comment_tree
+from .models import Comment, CommentVote, Conversation, Message, Post, PostVote
+from .views import build_comment_tree, get_or_create_conversation, unread_message_count
 
 
 def make_user(username):
@@ -524,3 +525,195 @@ class MarkdownRenderingTests(TestCase):
     def test_links_get_nofollow_noopener(self):
         html = render_markdown("[link](https://example.com)")
         self.assertIn('rel="nofollow noopener"', html)
+
+
+class ConversationModelTests(TestCase):
+    def setUp(self):
+        self.alice = make_user("alice")
+        self.bob = make_user("bob")
+
+    def test_get_or_create_returns_same_conversation_regardless_of_order(self):
+        first = get_or_create_conversation(self.alice, self.bob)
+        second = get_or_create_conversation(self.bob, self.alice)
+
+        self.assertEqual(first.pk, second.pk)
+        self.assertEqual(Conversation.objects.count(), 1)
+
+    def test_self_conversation_rejected_at_db_level(self):
+        lo, hi = sorted([self.alice, self.alice], key=lambda u: u.pk)
+        with self.assertRaises(IntegrityError):
+            Conversation.objects.create(user1=lo, user2=hi)
+
+
+class StartConversationViewTests(TestCase):
+    def setUp(self):
+        self.alice = make_user("alice")
+        self.bob = make_user("bob")
+
+    def test_creates_and_redirects_to_conversation(self):
+        self.client.force_login(self.alice)
+        response = self.client.post(reverse("conversation-start", args=["bob"]))
+        conversation = Conversation.objects.get()
+        self.assertRedirects(response, reverse("conversation-detail", args=[conversation.pk]))
+
+    def test_reuses_existing_conversation_started_from_either_side(self):
+        self.client.force_login(self.alice)
+        self.client.post(reverse("conversation-start", args=["bob"]))
+        self.client.force_login(self.bob)
+        self.client.post(reverse("conversation-start", args=["alice"]))
+
+        self.assertEqual(Conversation.objects.count(), 1)
+
+    def test_cannot_message_self(self):
+        self.client.force_login(self.alice)
+        response = self.client.post(reverse("conversation-start", args=["alice"]))
+        self.assertEqual(Conversation.objects.count(), 0)
+        self.assertRedirects(response, reverse("profile", args=["alice"]))
+
+    def test_anonymous_redirected_to_login(self):
+        response = self.client.post(reverse("conversation-start", args=["bob"]))
+        self.assertEqual(response.status_code, 302)
+        self.assertIn(reverse("login"), response.url)
+        self.assertEqual(Conversation.objects.count(), 0)
+
+
+class ConversationPrivacyTests(TestCase):
+    def setUp(self):
+        self.alice = make_user("alice")
+        self.bob = make_user("bob")
+        self.mallory = make_user("mallory")
+        self.conversation = get_or_create_conversation(self.alice, self.bob)
+        Message.objects.create(conversation=self.conversation, sender=self.alice, body="hi bob")
+
+    def test_participant_can_view(self):
+        self.client.force_login(self.bob)
+        response = self.client.get(reverse("conversation-detail", args=[self.conversation.pk]))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "hi bob")
+
+    def test_non_participant_cannot_view(self):
+        self.client.force_login(self.mallory)
+        response = self.client.get(reverse("conversation-detail", args=[self.conversation.pk]))
+        self.assertEqual(response.status_code, 403)
+
+    def test_anonymous_redirected_to_login(self):
+        response = self.client.get(reverse("conversation-detail", args=[self.conversation.pk]))
+        self.assertEqual(response.status_code, 302)
+        self.assertIn(reverse("login"), response.url)
+
+    def test_non_participant_cannot_send_message(self):
+        self.client.force_login(self.mallory)
+        response = self.client.post(
+            reverse("message-send", args=[self.conversation.pk]), {"body": "sneaky"}
+        )
+        self.assertEqual(response.status_code, 404)
+        self.assertFalse(Message.objects.filter(body="sneaky").exists())
+
+
+class MessageSendViewTests(TestCase):
+    def setUp(self):
+        self.alice = make_user("alice")
+        self.bob = make_user("bob")
+        self.conversation = get_or_create_conversation(self.alice, self.bob)
+
+    def test_participant_can_send_message(self):
+        self.client.force_login(self.alice)
+        response = self.client.post(
+            reverse("message-send", args=[self.conversation.pk]), {"body": "hello there"}
+        )
+        self.assertRedirects(response, reverse("conversation-detail", args=[self.conversation.pk]))
+        message = Message.objects.get()
+        self.assertEqual(message.sender, self.alice)
+        self.assertEqual(message.body, "hello there")
+        self.assertFalse(message.read)
+
+    def test_blank_message_is_not_created(self):
+        self.client.force_login(self.alice)
+        self.client.post(reverse("message-send", args=[self.conversation.pk]), {"body": ""})
+        self.assertEqual(Message.objects.count(), 0)
+
+    def test_anonymous_redirected_to_login(self):
+        response = self.client.post(
+            reverse("message-send", args=[self.conversation.pk]), {"body": "hello"}
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertIn(reverse("login"), response.url)
+        self.assertEqual(Message.objects.count(), 0)
+
+
+class UnreadMessageCountTests(TestCase):
+    def setUp(self):
+        self.alice = make_user("alice")
+        self.bob = make_user("bob")
+        self.carol = make_user("carol")
+
+    def test_counts_only_messages_from_others_not_yet_read(self):
+        convo_with_bob = get_or_create_conversation(self.alice, self.bob)
+        convo_with_carol = get_or_create_conversation(self.alice, self.carol)
+        Message.objects.create(conversation=convo_with_bob, sender=self.bob, body="from bob")
+        Message.objects.create(conversation=convo_with_carol, sender=self.carol, body="from carol")
+        Message.objects.create(conversation=convo_with_bob, sender=self.alice, body="from alice")
+
+        self.assertEqual(unread_message_count(self.alice), 2)
+        self.assertEqual(unread_message_count(self.bob), 1)
+
+    def test_viewing_conversation_marks_messages_read_and_updates_count(self):
+        conversation = get_or_create_conversation(self.alice, self.bob)
+        Message.objects.create(conversation=conversation, sender=self.bob, body="hi")
+        self.assertEqual(unread_message_count(self.alice), 1)
+
+        self.client.force_login(self.alice)
+        self.client.get(reverse("conversation-detail", args=[conversation.pk]))
+
+        self.assertEqual(unread_message_count(self.alice), 0)
+        self.assertTrue(Message.objects.get().read)
+
+    def test_viewing_own_conversation_does_not_mark_own_messages_read_differently(self):
+        conversation = get_or_create_conversation(self.alice, self.bob)
+        Message.objects.create(conversation=conversation, sender=self.alice, body="hi bob")
+
+        self.client.force_login(self.bob)
+        self.client.get(reverse("conversation-detail", args=[conversation.pk]))
+
+        # bob viewing marks alice's message (sent to him) as read...
+        self.assertTrue(Message.objects.get().read)
+        # ...and it was never counted as unread for alice (its own sender) anyway.
+        self.assertEqual(unread_message_count(self.alice), 0)
+
+    def test_endpoint_returns_json_count(self):
+        conversation = get_or_create_conversation(self.alice, self.bob)
+        Message.objects.create(conversation=conversation, sender=self.bob, body="hi")
+
+        self.client.force_login(self.alice)
+        response = self.client.get(reverse("unread-message-count"))
+
+        self.assertEqual(response.json(), {"count": 1})
+
+    def test_anonymous_cannot_access_unread_count_endpoint(self):
+        response = self.client.get(reverse("unread-message-count"))
+        self.assertEqual(response.status_code, 302)
+
+
+class ConversationListViewTests(TestCase):
+    def setUp(self):
+        self.alice = make_user("alice")
+        self.bob = make_user("bob")
+        self.carol = make_user("carol")
+
+    def test_lists_only_the_users_own_conversations_with_other_participant_and_unread_count(self):
+        mine = get_or_create_conversation(self.alice, self.bob)
+        get_or_create_conversation(self.bob, self.carol)
+        Message.objects.create(conversation=mine, sender=self.bob, body="hi")
+
+        self.client.force_login(self.alice)
+        response = self.client.get(reverse("conversation-list"))
+
+        conversations = list(response.context["conversations"])
+        self.assertEqual(len(conversations), 1)
+        self.assertEqual(conversations[0].other, self.bob)
+        self.assertEqual(conversations[0].unread_count, 1)
+
+    def test_anonymous_redirected_to_login(self):
+        response = self.client.get(reverse("conversation-list"))
+        self.assertEqual(response.status_code, 302)
+        self.assertIn(reverse("login"), response.url)

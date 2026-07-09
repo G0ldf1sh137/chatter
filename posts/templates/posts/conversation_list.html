@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+
+{% block title %}Messages — Chatter{% endblock %}
+
+{% block content %}
+    <h1 class="mb-4 text-2xl font-extrabold tracking-tight">Messages</h1>
+    <div class="space-y-2">
+        {% for conversation in conversations %}
+            <a href="{% url 'conversation-detail' conversation.pk %}" class="flex items-center justify-between gap-3 rounded-2xl border border-border bg-surface p-4 shadow-sm no-underline transition-shadow hover:shadow-md">
+                <div class="flex items-center gap-3">
+                    {% include "_avatar.html" with avatar_user=conversation.other %}
+                    <div>
+                        <p class="font-medium text-fg">{{ conversation.other.username }}</p>
+                        {% if conversation.last_message_at %}
+                            <p class="text-xs text-muted">{{ conversation.last_message_at }}</p>
+                        {% endif %}
+                    </div>
+                </div>
+                {% if conversation.unread_count %}
+                    <span class="flex h-5 min-w-5 items-center justify-center rounded-full bg-accent px-1.5 text-xs font-bold text-accent-fg">{{ conversation.unread_count }}</span>
+                {% endif %}
+            </a>
+        {% empty %}
+            <p class="text-muted">No conversations yet. Visit someone's profile to send them a message.</p>
+        {% endfor %}
+    </div>
+{% endblock %}

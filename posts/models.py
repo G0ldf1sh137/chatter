@@ -80,3 +80,45 @@ class CommentVote(Vote):
 
     def __str__(self):
         return f"{self.user} {self.get_value_display()}d Comment({self.comment_id})"
+
+
+class Conversation(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    # Always stored with user1_id < user2_id (see views.get_or_create_conversation)
+    # so a conversation between two users is a single row no matter who
+    # started it - a plain UniqueConstraint on an unordered pair can't
+    # enforce that on its own.
+    user1 = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="conversations_as_user1")
+    user2 = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="conversations_as_user2")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["user1", "user2"], name="unique_conversation"),
+            models.CheckConstraint(check=~models.Q(user1=models.F("user2")), name="no_self_conversation"),
+        ]
+
+    def __str__(self):
+        return f"Conversation({self.pk}): {self.user1} & {self.user2}"
+
+    def other_participant(self, user):
+        return self.user2 if user.id == self.user1_id else self.user1
+
+
+class Message(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    conversation = models.ForeignKey(Conversation, on_delete=models.CASCADE, related_name="messages")
+    sender = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="sent_messages")
+    body = models.TextField(max_length=5000)
+    # Whether the *other* participant has read it - a conversation only ever
+    # has two people, so there's no need for a per-recipient read-receipt
+    # table the way a group chat would need.
+    read = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["created_at"]
+        indexes = [models.Index(fields=["conversation", "created_at"])]
+
+    def __str__(self):
+        return f"Message({self.pk}) from {self.sender} in Conversation({self.conversation_id})"

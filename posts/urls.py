@@ -31,4 +31,9 @@ urlpatterns = [
         views.CommentVoteView.as_view(value=CommentVote.DOWN),
         name="comment-downvote",
     ),
+    path("messages/", views.ConversationListView.as_view(), name="conversation-list"),
+    path("messages/unread-count/", views.UnreadMessageCountView.as_view(), name="unread-message-count"),
+    path("messages/start/<str:username>/", views.StartConversationView.as_view(), name="conversation-start"),
+    path("messages/<uuid:pk>/", views.ConversationDetailView.as_view(), name="conversation-detail"),
+    path("messages/<uuid:pk>/send/", views.MessageSendView.as_view(), name="message-send"),
 ]

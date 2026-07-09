@@ -1,17 +1,19 @@
 from collections import defaultdict
 
+from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
-from django.db.models import OuterRef, Subquery, Sum
+from django.contrib.auth.models import User
+from django.db.models import Count, Max, OuterRef, Q, Subquery, Sum
 from django.db.models.functions import Coalesce
 from django.http import Http404, JsonResponse
 from django.shortcuts import get_object_or_404, redirect
 from django.template.loader import render_to_string
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views import View
-from django.views.generic import CreateView, DetailView, ListView, UpdateView
+from django.views.generic import CreateView, DetailView, ListView, TemplateView, UpdateView
 
-from .forms import CommentEditForm, CommentForm, PostForm
-from .models import Comment, CommentVote, Post, PostVote
+from .forms import CommentEditForm, CommentForm, MessageForm, PostForm
+from .models import Comment, CommentVote, Conversation, Message, Post, PostVote
 from .ranking import rank_posts
 
 
@@ -248,3 +250,97 @@ class CommentVoteView(LoginRequiredMixin, View):
         comment = get_object_or_404(Comment, pk=pk)
         toggle_vote(CommentVote, {"comment": comment}, request.user, self.value)
         return redirect_back(request, comment.post.get_absolute_url())
+
+
+def get_or_create_conversation(user_a, user_b):
+    # Always stored lo/hi by pk (see Conversation.Meta.constraints) so a
+    # conversation started from either side's profile page resolves to the
+    # same row instead of creating a mirrored duplicate.
+    lo, hi = sorted([user_a, user_b], key=lambda u: u.pk)
+    conversation, _ = Conversation.objects.get_or_create(user1=lo, user2=hi)
+    return conversation
+
+
+def unread_message_count(user):
+    return (
+        Message.objects.filter(Q(conversation__user1=user) | Q(conversation__user2=user))
+        .exclude(sender=user)
+        .filter(read=False)
+        .count()
+    )
+
+
+class StartConversationView(LoginRequiredMixin, View):
+    def post(self, request, username):
+        other = get_object_or_404(User, username=username)
+        if other == request.user:
+            messages.error(request, "You can't message yourself.")
+            return redirect("profile", username=username)
+        conversation = get_or_create_conversation(request.user, other)
+        return redirect("conversation-detail", pk=conversation.pk)
+
+
+class ConversationListView(LoginRequiredMixin, TemplateView):
+    template_name = "posts/conversation_list.html"
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        user = self.request.user
+        conversations = list(
+            Conversation.objects.filter(Q(user1=user) | Q(user2=user))
+            .select_related("user1", "user2")
+            .annotate(
+                last_message_at=Max("messages__created_at"),
+                unread_count=Count("messages", filter=Q(messages__read=False) & ~Q(messages__sender=user)),
+            )
+            .order_by("-last_message_at")
+        )
+        for conversation in conversations:
+            conversation.other = conversation.other_participant(user)
+        context["conversations"] = conversations
+        return context
+
+
+class ConversationDetailView(LoginRequiredMixin, UserPassesTestMixin, DetailView):
+    model = Conversation
+    template_name = "posts/conversation_detail.html"
+    context_object_name = "conversation"
+
+    def test_func(self):
+        conversation = self.get_object()
+        return self.request.user.id in (conversation.user1_id, conversation.user2_id)
+
+    def get_queryset(self):
+        return Conversation.objects.select_related("user1", "user2")
+
+    def get(self, request, *args, **kwargs):
+        self.object = self.get_object()
+        # Marked read before rendering, not after, so the header's unread
+        # badge (via the context processor) reflects this same response's
+        # updated count instead of the stale pre-read one.
+        self.object.messages.filter(read=False).exclude(sender=request.user).update(read=True)
+        return self.render_to_response(self.get_context_data(object=self.object))
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["other"] = self.object.other_participant(self.request.user)
+        context["message_list"] = self.object.messages.select_related("sender")
+        context["message_form"] = MessageForm()
+        return context
+
+
+class MessageSendView(LoginRequiredMixin, View):
+    def post(self, request, pk):
+        conversation = get_object_or_404(Conversation, pk=pk)
+        if request.user.id not in (conversation.user1_id, conversation.user2_id):
+            raise Http404
+
+        form = MessageForm(request.POST)
+        if form.is_valid():
+            Message.objects.create(conversation=conversation, sender=request.user, body=form.cleaned_data["body"])
+        return redirect("conversation-detail", pk=conversation.pk)
+
+
+class UnreadMessageCountView(LoginRequiredMixin, View):
+    def get(self, request):
+        return JsonResponse({"count": unread_message_count(request.user)})
