@@ -10,6 +10,7 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import RequestFactory, TestCase, override_settings
 from django.urls import reverse
 
+from games.models import Match, SinglePlayerResult
 from posts.models import Comment, CommentVote, Post, PostVote
 
 from .adapter import SocialAccountAdapter
@@ -279,6 +280,37 @@ class ProfileViewTests(TestCase):
         # post: +1 self-upvote, +1 voter1, +1 voter2 = 3. comment: +1 self-upvote, -1 voter1 = 0.
         self.assertContains(response, "3 karma")
         self.assertEqual(response.context["karma"], 3)
+
+
+class ProfileGamesIntegrationTests(TestCase):
+    def test_profile_shows_accurate_game_stats(self):
+        carol = User.objects.create_user(username="carol", password="correct-horse-battery-staple")
+        dave = User.objects.create_user(username="dave", password="correct-horse-battery-staple")
+
+        Match.objects.create(
+            game=Match.Game.TIC_TAC_TOE, player1=carol, player2=dave,
+            status=Match.Status.FINISHED, winner=carol,
+        )
+        Match.objects.create(
+            game=Match.Game.TIC_TAC_TOE, player1=dave, player2=carol,
+            status=Match.Status.FINISHED, winner=dave,
+        )
+        Match.objects.create(
+            game=Match.Game.ROCK_PAPER_SCISSORS, player1=carol, player2=dave,
+            status=Match.Status.FINISHED, winner=None,
+        )
+        SinglePlayerResult.objects.create(player=carol, game=SinglePlayerResult.Game.HANGMAN, won=True)
+        SinglePlayerResult.objects.create(player=carol, game=SinglePlayerResult.Game.HANGMAN, won=False)
+        SinglePlayerResult.objects.create(player=carol, game=SinglePlayerResult.Game.GAME_2048, score=750)
+        SinglePlayerResult.objects.create(player=carol, game=SinglePlayerResult.Game.GAME_2048, score=300)
+
+        response = self.client.get(reverse("profile", args=["carol"]))
+
+        self.assertEqual(response.context["ttt_record"], {"wins": 1, "losses": 1, "draws": 0})
+        self.assertEqual(response.context["rps_record"], {"wins": 0, "losses": 0, "draws": 1})
+        self.assertEqual(response.context["hangman_wins"], 1)
+        self.assertEqual(response.context["high_score_2048"], 750)
+        self.assertContains(response, "750")
 
 
 class ProfileEditTests(TestCase):

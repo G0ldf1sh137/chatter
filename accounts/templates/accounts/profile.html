@@ -89,4 +89,28 @@
             <p class="text-muted">No comments yet.</p>
         {% endfor %}
     </div>
+
+    <h2 class="mb-3 mt-8 text-lg font-bold">Games</h2>
+    <div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <div class="rounded-2xl border border-border bg-surface p-4 text-center shadow-sm">
+            <p class="text-xs text-muted">Tic-Tac-Toe</p>
+            <p class="text-lg font-bold text-fg">{{ ttt_record.wins }}-{{ ttt_record.losses }}-{{ ttt_record.draws }}</p>
+            <p class="text-xs text-muted">W-L-D</p>
+        </div>
+        <div class="rounded-2xl border border-border bg-surface p-4 text-center shadow-sm">
+            <p class="text-xs text-muted">Rock-Paper-Scissors</p>
+            <p class="text-lg font-bold text-fg">{{ rps_record.wins }}-{{ rps_record.losses }}-{{ rps_record.draws }}</p>
+            <p class="text-xs text-muted">W-L-D</p>
+        </div>
+        <div class="rounded-2xl border border-border bg-surface p-4 text-center shadow-sm">
+            <p class="text-xs text-muted">Word Guess</p>
+            <p class="text-lg font-bold text-fg">{{ hangman_wins }}</p>
+            <p class="text-xs text-muted">wins</p>
+        </div>
+        <div class="rounded-2xl border border-border bg-surface p-4 text-center shadow-sm">
+            <p class="text-xs text-muted">2048</p>
+            <p class="text-lg font-bold text-fg">{{ high_score_2048 }}</p>
+            <p class="text-xs text-muted">high score</p>
+        </div>
+    </div>
 {% endblock %}

@@ -9,6 +9,8 @@ from django.urls import reverse, reverse_lazy
 from django.views import View
 from django.views.generic import CreateView, DetailView, FormView, TemplateView, UpdateView
 
+from games import stats as game_stats
+from games.models import Match
 from posts.models import CommentVote, PostVote
 from posts.views import annotate_votes
 
@@ -105,6 +107,13 @@ class ProfileView(DetailView):
             context["is_following"] = Follow.objects.filter(
                 follower=self.request.user, followed=profile_user
             ).exists()
+
+        ttt_wins, ttt_losses, ttt_draws = game_stats.match_record(profile_user, Match.Game.TIC_TAC_TOE)
+        context["ttt_record"] = {"wins": ttt_wins, "losses": ttt_losses, "draws": ttt_draws}
+        rps_wins, rps_losses, rps_draws = game_stats.match_record(profile_user, Match.Game.ROCK_PAPER_SCISSORS)
+        context["rps_record"] = {"wins": rps_wins, "losses": rps_losses, "draws": rps_draws}
+        context["hangman_wins"] = game_stats.hangman_wins(profile_user)
+        context["high_score_2048"] = game_stats.high_score_2048(profile_user)
         return context
 
 

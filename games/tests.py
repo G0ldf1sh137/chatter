@@ -401,3 +401,51 @@ class Game2048ResultTests(TestCase):
         response = self.post_json({"score": 100, "highest_tile": 128})
         self.assertEqual(response.status_code, 302)
         self.assertEqual(SinglePlayerResult.objects.count(), 0)
+
+
+class LeaderboardTests(TestCase):
+    def setUp(self):
+        self.alice = make_user("alice")
+        self.bob = make_user("bob")
+        self.carol = make_user("carol")
+
+    def test_ttt_leaderboard_orders_by_wins(self):
+        Match.objects.create(
+            game=Match.Game.TIC_TAC_TOE, player1=self.alice, player2=self.bob,
+            status=Match.Status.FINISHED, winner=self.alice,
+        )
+        Match.objects.create(
+            game=Match.Game.TIC_TAC_TOE, player1=self.alice, player2=self.carol,
+            status=Match.Status.FINISHED, winner=self.alice,
+        )
+        Match.objects.create(
+            game=Match.Game.TIC_TAC_TOE, player1=self.bob, player2=self.carol,
+            status=Match.Status.FINISHED, winner=self.bob,
+        )
+        response = self.client.get(reverse("games-leaderboard"))
+        leaders = list(response.context["ttt_leaders"])
+        self.assertEqual(leaders[0]["winner__username"], "alice")
+        self.assertEqual(leaders[0]["wins"], 2)
+
+    def test_hangman_leaderboard_orders_by_win_count(self):
+        SinglePlayerResult.objects.create(player=self.alice, game=SinglePlayerResult.Game.HANGMAN, won=True)
+        SinglePlayerResult.objects.create(player=self.alice, game=SinglePlayerResult.Game.HANGMAN, won=True)
+        SinglePlayerResult.objects.create(player=self.bob, game=SinglePlayerResult.Game.HANGMAN, won=True)
+        SinglePlayerResult.objects.create(player=self.bob, game=SinglePlayerResult.Game.HANGMAN, won=False)
+        response = self.client.get(reverse("games-leaderboard"))
+        leaders = list(response.context["hangman_leaders"])
+        self.assertEqual(leaders[0]["player__username"], "alice")
+        self.assertEqual(leaders[0]["wins"], 2)
+
+    def test_2048_leaderboard_orders_by_high_score(self):
+        SinglePlayerResult.objects.create(player=self.alice, game=SinglePlayerResult.Game.GAME_2048, score=500)
+        SinglePlayerResult.objects.create(player=self.alice, game=SinglePlayerResult.Game.GAME_2048, score=2000)
+        SinglePlayerResult.objects.create(player=self.bob, game=SinglePlayerResult.Game.GAME_2048, score=1000)
+        response = self.client.get(reverse("games-leaderboard"))
+        leaders = list(response.context["game2048_leaders"])
+        self.assertEqual(leaders[0]["player__username"], "alice")
+        self.assertEqual(leaders[0]["high_score"], 2000)
+
+    def test_leaderboard_is_publicly_accessible(self):
+        response = self.client.get(reverse("games-leaderboard"))
+        self.assertEqual(response.status_code, 200)

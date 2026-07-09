@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+
+{% block title %}Leaderboard — Chatter{% endblock %}
+
+{% block content %}
+    <h1 class="mb-4 text-2xl font-extrabold tracking-tight">Leaderboard</h1>
+
+    <h2 class="mb-3 mt-6 text-lg font-bold">Tic-Tac-Toe (wins)</h2>
+    <ol class="divide-y divide-border rounded-2xl border border-border bg-surface">
+        {% for entry in ttt_leaders %}
+            <li class="flex items-center justify-between px-4 py-2 text-sm">
+                <span>{{ forloop.counter }}. {{ entry.winner__username }}</span>
+                <span class="font-semibold text-fg">{{ entry.wins }}</span>
+            </li>
+        {% empty %}
+            <li class="px-4 py-2 text-sm text-muted">No games finished yet.</li>
+        {% endfor %}
+    </ol>
+
+    <h2 class="mb-3 mt-6 text-lg font-bold">Rock-Paper-Scissors (wins)</h2>
+    <ol class="divide-y divide-border rounded-2xl border border-border bg-surface">
+        {% for entry in rps_leaders %}
+            <li class="flex items-center justify-between px-4 py-2 text-sm">
+                <span>{{ forloop.counter }}. {{ entry.winner__username }}</span>
+                <span class="font-semibold text-fg">{{ entry.wins }}</span>
+            </li>
+        {% empty %}
+            <li class="px-4 py-2 text-sm text-muted">No games finished yet.</li>
+        {% endfor %}
+    </ol>
+
+    <h2 class="mb-3 mt-6 text-lg font-bold">Word Guess (wins)</h2>
+    <ol class="divide-y divide-border rounded-2xl border border-border bg-surface">
+        {% for entry in hangman_leaders %}
+            <li class="flex items-center justify-between px-4 py-2 text-sm">
+                <span>{{ forloop.counter }}. {{ entry.player__username }}</span>
+                <span class="font-semibold text-fg">{{ entry.wins }}</span>
+            </li>
+        {% empty %}
+            <li class="px-4 py-2 text-sm text-muted">No wins yet.</li>
+        {% endfor %}
+    </ol>
+
+    <h2 class="mb-3 mt-6 text-lg font-bold">2048 (high score)</h2>
+    <ol class="divide-y divide-border rounded-2xl border border-border bg-surface">
+        {% for entry in game2048_leaders %}
+            <li class="flex items-center justify-between px-4 py-2 text-sm">
+                <span>{{ forloop.counter }}. {{ entry.player__username }}</span>
+                <span class="font-semibold text-fg">{{ entry.high_score }}</span>
+            </li>
+        {% empty %}
+            <li class="px-4 py-2 text-sm text-muted">No games played yet.</li>
+        {% endfor %}
+    </ol>
+{% endblock %}

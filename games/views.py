@@ -10,6 +10,7 @@ from django.shortcuts import get_object_or_404, redirect
 from django.views import View
 from django.views.generic import DetailView, TemplateView
 
+from . import stats
 from .logic import hangman, rock_paper_scissors, tic_tac_toe
 from .logic.exceptions import InvalidMove
 from .models import Match, SinglePlayerResult
@@ -21,6 +22,18 @@ SESSION_KEY_HANGMAN = "hangman_game"
 # game's stakes: leaderboard vanity, not real value).
 MAX_2048_SCORE = 10_000_000
 MAX_2048_TILE = 131072
+
+
+class LeaderboardView(TemplateView):
+    template_name = "games/leaderboard.html"
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["ttt_leaders"] = stats.match_win_leaders(Match.Game.TIC_TAC_TOE)
+        context["rps_leaders"] = stats.match_win_leaders(Match.Game.ROCK_PAPER_SCISSORS)
+        context["hangman_leaders"] = stats.hangman_leaders()
+        context["game2048_leaders"] = stats.game_2048_leaders()
+        return context
 
 
 class GamesHubView(LoginRequiredMixin, TemplateView):
