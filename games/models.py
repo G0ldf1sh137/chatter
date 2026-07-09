@@ -1,8 +1,12 @@
+import uuid
+
 from django.conf import settings
 from django.db import models
 
 
 class Match(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+
     class Game(models.TextChoices):
         TIC_TAC_TOE = "ttt", "Tic-Tac-Toe"
         ROCK_PAPER_SCISSORS = "rps", "Rock-Paper-Scissors"
@@ -48,6 +52,8 @@ class Match(models.Model):
 
 
 class SinglePlayerResult(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+
     class Game(models.TextChoices):
         HANGMAN = "hangman", "Word Guess"
         GAME_2048 = "2048", "2048"
