@@ -1,14 +1,18 @@
 import shutil
 import tempfile
 
+from allauth.socialaccount.models import SocialAccount, SocialLogin
 from django.contrib.auth.models import User
+from django.contrib.messages.middleware import MessageMiddleware
+from django.contrib.sessions.middleware import SessionMiddleware
 from django.core import mail
 from django.core.files.uploadedfile import SimpleUploadedFile
-from django.test import TestCase, override_settings
+from django.test import RequestFactory, TestCase, override_settings
 from django.urls import reverse
 
 from posts.models import Comment, CommentVote, Post, PostVote
 
+from .adapter import SocialAccountAdapter
 from .models import Follow, Profile
 from .signals import mark_social_signup_verified
 from .tokens import generate_verification_token
@@ -195,6 +199,49 @@ class EmailVerificationTests(TestCase):
         mark_social_signup_verified(request=None, user=self.user)
         self.user.profile.refresh_from_db()
         self.assertFalse(self.user.profile.email_verified)
+
+
+class SocialAccountLinkingTests(TestCase):
+    def make_request(self):
+        request = RequestFactory().get("/")
+        SessionMiddleware(lambda r: None).process_request(request)
+        request.session.save()
+        MessageMiddleware(lambda r: None).process_request(request)
+        return request
+
+    def test_matching_email_connects_to_existing_account(self):
+        existing = User.objects.create_user(username="matt", email="matt@example.com", password="x")
+        existing.profile.email_verified = False
+        existing.profile.save(update_fields=["email_verified"])
+
+        new_user = User(username="someoauthname", email="matt@example.com")
+        sociallogin = SocialLogin(user=new_user, account=SocialAccount(provider="google", uid="uid-123"))
+
+        SocialAccountAdapter().pre_social_login(self.make_request(), sociallogin)
+
+        self.assertEqual(sociallogin.user, existing)
+        self.assertTrue(sociallogin.is_existing)
+        existing.profile.refresh_from_db()
+        self.assertTrue(existing.profile.email_verified)
+
+    def test_no_matching_email_leaves_signup_as_new(self):
+        new_user = User(username="brandnew", email="brandnew@example.com")
+        sociallogin = SocialLogin(user=new_user, account=SocialAccount(provider="google", uid="uid-456"))
+
+        SocialAccountAdapter().pre_social_login(self.make_request(), sociallogin)
+
+        self.assertEqual(sociallogin.user, new_user)
+        self.assertFalse(sociallogin.is_existing)
+
+    def test_already_linked_login_is_left_alone(self):
+        existing = User.objects.create_user(username="matt", email="matt@example.com", password="x")
+        account = SocialAccount.objects.create(user=existing, provider="google", uid="uid-789")
+        sociallogin = SocialLogin(user=existing, account=account)
+
+        # Should not raise or try to reconnect an already-existing link.
+        SocialAccountAdapter().pre_social_login(self.make_request(), sociallogin)
+
+        self.assertEqual(sociallogin.user, existing)
 
 
 class ProfileViewTests(TestCase):
