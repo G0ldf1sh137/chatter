@@ -504,6 +504,23 @@ class MarkdownRenderingTests(TestCase):
         self.assertIn("<pre><code>", html)
         self.assertIn("code here", html)
 
+    def test_fenced_code_block_with_language_gets_syntax_highlighted(self):
+        html = render_markdown("```python\ndef greet():\n    return 'hi'\n```")
+        self.assertIn('<pre class="highlight">', html)
+        self.assertIn('<code class="language-python">', html)
+        # "def" is a Pygments Keyword ("k") for Python.
+        self.assertIn('<span class="k">def</span>', html)
+
+    def test_fenced_code_block_with_unknown_language_falls_back_to_plain(self):
+        html = render_markdown("```not-a-real-language\nsome text\n```")
+        self.assertNotIn('class="highlight"', html)
+        self.assertIn("some text", html)
+
+    def test_highlighted_code_cannot_break_out_of_the_block(self):
+        html = render_markdown("```python\n'</code></pre><script>alert(1)</script>'\n```")
+        self.assertNotIn("<script>alert(1)</script>", html)
+        self.assertIn("&lt;script&gt;", html)
+
     def test_script_tag_is_stripped(self):
         html = render_markdown("<script>alert('xss')</script>")
         self.assertNotIn("<script>", html)

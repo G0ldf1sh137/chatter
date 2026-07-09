@@ -16,6 +16,7 @@ dependencies = [
     "dj-database-url>=2.2",
     "whitenoise>=6.7",
     "django-storages[s3]>=1.14",
+    "pygments>=2.20.0",
 ]
 
 [dependency-groups]
