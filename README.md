@@ -52,7 +52,7 @@ Accounts that existed before this feature was added (created via `docker compose
 
 Users can set a bio and avatar image at `/settings/profile/`, and follow/unfollow other users from their profile page. Profiles show recent posts, recent comments, and post/comment/follower/following counts.
 
-Avatars are stored on local disk under `media/` (gitignored) and served directly by Django in dev. That's fine for a single-container demo but won't survive a redeploy or scale past one instance — swapping in S3-compatible storage (e.g. `django-storages`) is the drop-in fix if this goes further. Max upload size is capped at 2MB (`MAX_AVATAR_UPLOAD_SIZE` in settings).
+Avatars are stored on local disk under `media/` (gitignored) and served directly by Django in dev. That's fine for a single-container demo but won't survive a redeploy or scale past one instance — set `AWS_STORAGE_BUCKET_NAME` (and friends, see `.env.example`) to switch to S3-compatible storage instead; see [Deploying](#deploying) below. Max upload size is capped at 2MB (`MAX_AVATAR_UPLOAD_SIZE` in settings).
 
 ## Styling
 
@@ -85,3 +85,59 @@ docker compose run --rm web python manage.py test
 ```
 
 Builds the image, brings up Postgres, runs migrations, runs the test suite, and runs `manage.py check --deploy`.
+
+## Deploying
+
+Free-tier deployment target: **Render** (runs the existing `Dockerfile` directly, no code changes needed beyond what's already in this repo) + **Neon** (serverless Postgres). Both have generous, non-time-limited free tiers.
+
+### 1. Create the database (Neon)
+
+1. Sign up at [neon.tech](https://neon.tech) and create a project.
+2. On the project dashboard, copy the **connection string** (Neon shows it as a full `postgres://...` URL, already including `?sslmode=require`). You'll paste this into Render as `DATABASE_URL` in step 3.
+3. Either connection string variant Neon offers (pooled, with `-pooler` in the hostname, or direct) works here — `conn_max_age=0` in `config/settings.py` deliberately avoids holding a persistent connection open, so it won't fight Neon's PgBouncer pooling either way.
+
+### 2. Deploy the app (Render)
+
+1. Sign up at [render.com](https://render.com) and connect your GitHub account.
+2. **New > Blueprint**, and point it at this repo. Render reads `render.yaml` at the repo root and provisions a single Docker-based web service on the free plan.
+3. Render will prompt for the blueprint's `sync: false` env vars before the first deploy, or you can fill them in afterward under the service's **Environment** tab:
+   - `DATABASE_URL` — the Neon connection string from step 1.
+   - `GOOGLE_OAUTH_CLIENT_ID` / `GOOGLE_OAUTH_CLIENT_SECRET` — optional, see below.
+   - `EMAIL_HOST` / `EMAIL_PORT` / `EMAIL_HOST_USER` / `EMAIL_HOST_PASSWORD` / `DEFAULT_FROM_EMAIL` — optional, see below.
+   - `ALLOWED_HOSTS` — leave blank for now; Render doesn't know the service's hostname until after the first deploy (see step 4).
+   - `SECRET_KEY` is generated for you automatically (`generateValue: true` in `render.yaml`) — you don't need to set it.
+4. Deploy. Once it's live, Render shows the assigned hostname (`<service-name>.onrender.com`, or check the service's **Settings** tab). Go back to **Environment** and set:
+   ```
+   ALLOWED_HOSTS=<service-name>.onrender.com
+   ```
+   then let it redeploy. Until this is set, Django rejects every request with a 400 (`DisallowedHost`) — including Render's own health check, so the service may show as unhealthy until this step is done.
+5. Visit the site. First registration/login should work immediately with username/password (email verification links print to Render's log viewer if `EMAIL_HOST` isn't set — see below).
+
+### 3. Optional: real outgoing email
+
+Without `EMAIL_HOST` set, verification emails aren't sent — they print to Render's log viewer instead (**Logs** tab), same as the local dev console backend. That's fine for trying things out, but you'll want real email for actual users. Any SMTP provider works; a few with usable free tiers: Brevo (300 emails/day free), Resend, or Mailgun's trial tier. Set `EMAIL_HOST`, `EMAIL_PORT`, `EMAIL_HOST_USER`, `EMAIL_HOST_PASSWORD`, and `DEFAULT_FROM_EMAIL` in Render's environment settings once you have credentials from one.
+
+### 4. Optional: Google sign-in
+
+If you want "Continue with Google" to work on the deployed site, add a second **Authorized redirect URI** in the same Google Cloud Console OAuth client from the [Google sign-in](#google-sign-in) section above:
+```
+https://<service-name>.onrender.com/accounts/google/login/callback/
+```
+then set `GOOGLE_OAUTH_CLIENT_ID`/`GOOGLE_OAUTH_CLIENT_SECRET` in Render's environment (same values as local dev — one OAuth client can have multiple redirect URIs registered).
+
+### 5. Optional: persistent avatar storage
+
+Render's free-tier web service has **ephemeral disk** — uploaded avatars are wiped on every redeploy/restart unless you switch to S3-compatible storage. [Cloudflare R2](https://developers.cloudflare.com/r2/) has a permanent free tier (10GB storage, no egress fees) and works as a drop-in S3-compatible backend. Once you have a bucket and API token, set in Render's environment:
+```
+AWS_STORAGE_BUCKET_NAME=<your-bucket-name>
+AWS_ACCESS_KEY_ID=<r2-access-key-id>
+AWS_SECRET_ACCESS_KEY=<r2-secret-access-key>
+AWS_S3_ENDPOINT_URL=https://<account-id>.r2.cloudflarestorage.com
+```
+Leave these unset to keep local disk storage (fine until you care about avatars surviving a redeploy).
+
+### Known free-tier limitations
+
+- Render's free web service **spins down after ~15 minutes of inactivity**; the next request pays a cold-start delay (usually a few seconds) while it wakes back up.
+- Neon's free tier also autosuspends its compute after a period of inactivity, with a similar (usually sub-second to a few seconds) wake-up delay on the next query.
+- Neither of these affects correctness — just expect the first request after a quiet period to be slower than the rest.
