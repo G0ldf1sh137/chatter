@@ -116,10 +116,13 @@ class ProfileView(DetailView):
         context["connect4_record"] = {"wins": c4_wins, "losses": c4_losses, "draws": c4_draws}
         chk_wins, chk_losses, chk_draws = game_stats.match_record(profile_user, Match.Game.CHECKERS)
         context["checkers_record"] = {"wins": chk_wins, "losses": chk_losses, "draws": chk_draws}
+        oth_wins, oth_losses, oth_draws = game_stats.match_record(profile_user, Match.Game.OTHELLO)
+        context["othello_record"] = {"wins": oth_wins, "losses": oth_losses, "draws": oth_draws}
         context["hangman_wins"] = game_stats.hangman_wins(profile_user)
         context["high_score_2048"] = game_stats.high_score_2048(profile_user)
         context["snake_high_score"] = game_stats.snake_high_score(profile_user)
         context["doodle_high_score"] = game_stats.doodle_high_score(profile_user)
+        context["wordle_high_score"] = game_stats.wordle_high_score(profile_user)
         return context
 
 

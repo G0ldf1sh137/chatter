@@ -11,7 +11,7 @@ from django.views import View
 from django.views.generic import DetailView, TemplateView
 
 from . import stats
-from .logic import checkers, connect_four, hangman, rock_paper_scissors, tic_tac_toe
+from .logic import checkers, connect_four, hangman, othello, rock_paper_scissors, tic_tac_toe, wordle
 from .logic.exceptions import InvalidMove
 from .models import Match, SinglePlayerResult
 
@@ -41,10 +41,12 @@ class LeaderboardView(TemplateView):
         context["rps_leaders"] = stats.match_win_leaders(Match.Game.ROCK_PAPER_SCISSORS)
         context["connect4_leaders"] = stats.match_win_leaders(Match.Game.CONNECT_FOUR)
         context["checkers_leaders"] = stats.match_win_leaders(Match.Game.CHECKERS)
+        context["othello_leaders"] = stats.match_win_leaders(Match.Game.OTHELLO)
         context["hangman_leaders"] = stats.hangman_leaders()
         context["game2048_leaders"] = stats.game_2048_leaders()
         context["snake_leaders"] = stats.snake_leaders()
         context["doodle_leaders"] = stats.doodle_leaders()
+        context["wordle_leaders"] = stats.wordle_leaders()
         return context
 
 
@@ -359,6 +361,92 @@ class CheckersMoveView(LoginRequiredMixin, View):
         return redirect("checkers-match", pk=pk)
 
 
+class OthelloChallengeView(LoginRequiredMixin, View):
+    def post(self, request, username):
+        opponent = get_object_or_404(User, username=username)
+        if opponent == request.user:
+            messages.error(request, "You can't challenge yourself.")
+            return redirect("profile", username=username)
+        match = Match.objects.create(
+            game=Match.Game.OTHELLO,
+            player1=request.user,
+            player2=opponent,
+            state=othello.initial_state(),
+            turn=request.user,  # player1 is always Black, who moves first
+        )
+        return redirect("othello-match", pk=match.pk)
+
+
+class OthelloMatchView(LoginRequiredMixin, UserPassesTestMixin, DetailView):
+    template_name = "games/othello_match.html"
+    context_object_name = "match"
+
+    def test_func(self):
+        match = self.get_object()
+        return self.request.user.id in (match.player1_id, match.player2_id)
+
+    def get_queryset(self):
+        return Match.objects.filter(game=Match.Game.OTHELLO).select_related("player1", "player2", "winner")
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        match = context["match"]
+        board = match.state["board"]
+        your_color = "B" if self.request.user.id == match.player1_id else "W"
+        is_your_turn = match.status == Match.Status.ACTIVE and match.turn_id == self.request.user.id
+
+        legal = set(othello.legal_moves(match.state, your_color)) if is_your_turn else set()
+        context["board_cells"] = [
+            [{"piece": cell, "legal": (r, c) in legal, "r": r, "c": c} for c, cell in enumerate(row)]
+            for r, row in enumerate(board)
+        ]
+        context["your_color"] = your_color
+        context["is_your_turn"] = is_your_turn
+        context["opponent"] = match.opponent_of(self.request.user)
+
+        opponent_color = "W" if your_color == "B" else "B"
+        context["just_passed"] = is_your_turn and not othello.legal_moves(match.state, opponent_color)
+
+        if match.status == Match.Status.FINISHED:
+            context["black_count"], context["white_count"] = othello.piece_counts(match.state)
+        return context
+
+
+class OthelloMoveView(LoginRequiredMixin, View):
+    def post(self, request, pk):
+        try:
+            row, col = int(request.POST.get("row")), int(request.POST.get("col"))
+        except (TypeError, ValueError):
+            return redirect("othello-match", pk=pk)
+
+        with transaction.atomic():
+            match = get_object_or_404(
+                Match.objects.select_for_update(), pk=pk, game=Match.Game.OTHELLO
+            )
+            if request.user.id not in (match.player1_id, match.player2_id):
+                raise Http404
+            if match.status != Match.Status.ACTIVE or match.turn_id != request.user.id:
+                return redirect("othello-match", pk=pk)
+
+            color = "B" if request.user.id == match.player1_id else "W"
+            try:
+                match.state = othello.apply_move(match.state, row, col, color)
+            except InvalidMove:
+                return redirect("othello-match", pk=pk)
+
+            opponent_color = "W" if color == "B" else "B"
+            outcome, value = othello.next_turn_state(match.state, color, opponent_color)
+            color_to_user = {"B": match.player1, "W": match.player2}
+            if outcome in ("continue", "pass"):
+                match.turn = color_to_user[value]
+            else:
+                match.status = Match.Status.FINISHED
+                match.turn = None
+                match.winner = color_to_user[value] if value else None
+            match.save()
+        return redirect("othello-match", pk=pk)
+
+
 class HangmanNewView(LoginRequiredMixin, View):
     def post(self, request):
         request.session[SESSION_KEY_HANGMAN] = hangman.initial_state()
@@ -470,3 +558,46 @@ class DoodleJumpFinishView(LoginRequiredMixin, View):
             player=request.user, game=SinglePlayerResult.Game.DOODLE_JUMP, won=False, score=score
         )
         return JsonResponse({"ok": True})
+
+
+SESSION_KEY_WORDLE = "wordle_game"
+
+
+class WordleNewView(LoginRequiredMixin, View):
+    def post(self, request):
+        request.session[SESSION_KEY_WORDLE] = wordle.initial_state()
+        return redirect("wordle-play")
+
+
+class WordlePlayView(LoginRequiredMixin, TemplateView):
+    template_name = "games/wordle_play.html"
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        state = self.request.session.get(SESSION_KEY_WORDLE)
+        context["state"] = state
+        if state:
+            context["status"] = wordle.game_status(state)
+            context["guesses_left"] = wordle.MAX_GUESSES - len(state["guesses"])
+        return context
+
+
+class WordleGuessView(LoginRequiredMixin, View):
+    def post(self, request):
+        state = request.session.get(SESSION_KEY_WORDLE)
+        guess = request.POST.get("guess", "")
+        if state and wordle.game_status(state) == "playing":
+            try:
+                state = wordle.apply_guess(state, guess)
+            except InvalidMove:
+                return redirect("wordle-play")
+            request.session[SESSION_KEY_WORDLE] = state
+            status = wordle.game_status(state)
+            if status in ("won", "lost"):
+                SinglePlayerResult.objects.create(
+                    player=request.user,
+                    game=SinglePlayerResult.Game.WORDLE,
+                    won=status == "won",
+                    score=(wordle.MAX_GUESSES - len(state["guesses"]) + 1) if status == "won" else 0,
+                )
+        return redirect("wordle-play")

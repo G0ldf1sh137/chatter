@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+
+{% block title %}Wordle — Chatter{% endblock %}
+
+{% block content %}
+    <div class="mx-auto max-w-sm rounded-2xl border border-border bg-surface p-6 text-center shadow-sm">
+        {% if not state %}
+            <p class="mb-4 text-muted">Guess the 5-letter word in 6 tries.</p>
+            <form method="post" action="{% url 'wordle-new' %}">
+                {% csrf_token %}
+                <button type="submit">Start a game</button>
+            </form>
+        {% else %}
+            <div class="mb-4 space-y-1.5">
+                {% for row in state.guesses %}
+                    <div class="flex justify-center gap-1.5">
+                        {% for cell in row.letters %}
+                            <span class="flex h-10 w-10 items-center justify-center rounded font-bold uppercase {% if cell.status == 'correct' %}bg-upvote text-white{% elif cell.status == 'present' %}bg-accent text-accent-fg{% else %}bg-surface-hover text-muted{% endif %}">{{ cell.char }}</span>
+                        {% endfor %}
+                    </div>
+                {% endfor %}
+            </div>
+
+            {% if status == "won" %}
+                <p class="mb-4 font-semibold text-accent">You won in {{ state.guesses|length }} guess{{ state.guesses|length|pluralize:"es" }}! The word was "{{ state.target }}".</p>
+                <form method="post" action="{% url 'wordle-new' %}">
+                    {% csrf_token %}
+                    <button type="submit">Play again</button>
+                </form>
+            {% elif status == "lost" %}
+                <p class="mb-4 font-semibold text-downvote">Out of guesses. The word was "{{ state.target }}".</p>
+                <form method="post" action="{% url 'wordle-new' %}">
+                    {% csrf_token %}
+                    <button type="submit">Play again</button>
+                </form>
+            {% else %}
+                <p class="mb-3 text-sm text-muted">{{ guesses_left }} guess{{ guesses_left|pluralize:"es" }} left</p>
+                <form method="post" action="{% url 'wordle-guess' %}" class="flex items-center justify-center gap-2">
+                    {% csrf_token %}
+                    <input type="text" name="guess" maxlength="5" minlength="5" pattern="[A-Za-z]{5}" autocomplete="off" required class="w-32 text-center uppercase tracking-widest">
+                    <button type="submit">Guess</button>
+                </form>
+            {% endif %}
+        {% endif %}
+    </div>
+{% endblock %}

@@ -17,6 +17,9 @@ urlpatterns = [
     path("checkers/challenge/<str:username>/", views.CheckersChallengeView.as_view(), name="checkers-challenge"),
     path("checkers/<int:pk>/", views.CheckersMatchView.as_view(), name="checkers-match"),
     path("checkers/<int:pk>/move/", views.CheckersMoveView.as_view(), name="checkers-move"),
+    path("othello/challenge/<str:username>/", views.OthelloChallengeView.as_view(), name="othello-challenge"),
+    path("othello/<int:pk>/", views.OthelloMatchView.as_view(), name="othello-match"),
+    path("othello/<int:pk>/move/", views.OthelloMoveView.as_view(), name="othello-move"),
     path("hangman/new/", views.HangmanNewView.as_view(), name="hangman-new"),
     path("hangman/", views.HangmanPlayView.as_view(), name="hangman-play"),
     path("hangman/guess/", views.HangmanGuessView.as_view(), name="hangman-guess"),
@@ -26,4 +29,7 @@ urlpatterns = [
     path("snake/finish/", views.SnakeFinishView.as_view(), name="snake-finish"),
     path("doodle/", views.DoodleJumpView.as_view(), name="doodle-play"),
     path("doodle/finish/", views.DoodleJumpFinishView.as_view(), name="doodle-finish"),
+    path("wordle/new/", views.WordleNewView.as_view(), name="wordle-new"),
+    path("wordle/", views.WordlePlayView.as_view(), name="wordle-play"),
+    path("wordle/guess/", views.WordleGuessView.as_view(), name="wordle-guess"),
 ]
