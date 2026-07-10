@@ -20,6 +20,7 @@ from .logic import (
     nim,
     othello,
     rock_paper_scissors,
+    stratego,
     tic_tac_toe,
     wordle,
 )
@@ -55,6 +56,7 @@ class LeaderboardView(TemplateView):
         context["othello_leaders"] = stats.match_win_leaders(Match.Game.OTHELLO)
         context["nim_leaders"] = stats.match_win_leaders(Match.Game.NIM)
         context["battleship_leaders"] = stats.match_win_leaders(Match.Game.BATTLESHIP)
+        context["stratego_leaders"] = stats.match_win_leaders(Match.Game.STRATEGO)
         context["hangman_leaders"] = stats.hangman_leaders()
         context["game2048_leaders"] = stats.game_2048_leaders()
         context["snake_leaders"] = stats.snake_leaders()
@@ -701,6 +703,151 @@ class BattleshipMoveView(LoginRequiredMixin, View):
                 match.turn = opponent
             match.save()
         return redirect("battleship-match", pk=pk)
+
+
+class StrategoChallengeView(LoginRequiredMixin, View):
+    def post(self, request, username):
+        opponent = get_object_or_404(User, username=username)
+        if opponent == request.user:
+            messages.error(request, "You can't challenge yourself.")
+            return redirect("profile", username=username)
+        match = Match.objects.create(
+            game=Match.Game.STRATEGO,
+            player1=request.user,
+            player2=opponent,
+            state=stratego.initial_state(),
+            turn=None,
+        )
+        return redirect("stratego-match", pk=match.pk)
+
+
+class StrategoMatchView(LoginRequiredMixin, UserPassesTestMixin, DetailView):
+    template_name = "games/stratego_match.html"
+    context_object_name = "match"
+
+    def test_func(self):
+        match = self.get_object()
+        return self.request.user.id in (match.player1_id, match.player2_id)
+
+    def get_queryset(self):
+        return Match.objects.filter(game=Match.Game.STRATEGO).select_related("player1", "player2", "winner")
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        match = context["match"]
+        my_id = str(self.request.user.id)
+        is_player1 = self.request.user.id == match.player1_id
+        opponent = match.opponent_of(self.request.user)
+        opponent_id = str(opponent.id)
+        size_range = range(stratego.BOARD_SIZE)
+        context["opponent"] = opponent
+        context["phase"] = match.state["phase"]
+
+        if match.state["phase"] == "placement":
+            my_pieces = stratego.pieces_for(match.state, my_id)
+            fully_placed = stratego.is_fully_placed(match.state, my_id)
+            context["fully_placed"] = fully_placed
+            if not fully_placed:
+                context["next_rank"] = stratego.FLEET[len(my_pieces)]
+            valid_rows = stratego.deployment_rows(is_player1)
+            my_piece_at = {(p["row"], p["col"]): p["rank"] for p in my_pieces}
+            context["board_cells"] = [
+                [
+                    {"rank": my_piece_at.get((r, c)), "in_zone": r in valid_rows, "r": r, "c": c}
+                    for c in size_range
+                ]
+                for r in size_range
+            ]
+        else:
+            viewer = stratego.viewer_state(match.state, my_id, opponent_id)
+            your_piece_at = {(p["row"], p["col"]): p for p in viewer["your_pieces"]}
+            opponent_piece_at = {(p["row"], p["col"]): p for p in viewer["opponent_pieces"]}
+            is_your_turn = match.status == Match.Status.ACTIVE and match.turn_id == self.request.user.id
+            context["is_your_turn"] = is_your_turn
+            context["last_combat"] = viewer["last_combat"]
+            context["board_cells"] = [
+                [
+                    {
+                        "your_rank": your_piece_at.get((r, c), {}).get("rank"),
+                        "opponent_present": (r, c) in opponent_piece_at,
+                        "opponent_rank": opponent_piece_at.get((r, c), {}).get("rank"),
+                        "r": r,
+                        "c": c,
+                    }
+                    for c in size_range
+                ]
+                for r in size_range
+            ]
+        return context
+
+
+class StrategoPlaceView(LoginRequiredMixin, View):
+    def post(self, request, pk):
+        try:
+            row, col = (int(n) for n in request.POST.get("cell", "").split(","))
+        except (TypeError, ValueError):
+            return redirect("stratego-match", pk=pk)
+
+        with transaction.atomic():
+            match = get_object_or_404(Match.objects.select_for_update(), pk=pk, game=Match.Game.STRATEGO)
+            if request.user.id not in (match.player1_id, match.player2_id):
+                raise Http404
+            if match.status != Match.Status.ACTIVE or match.state["phase"] != "placement":
+                return redirect("stratego-match", pk=pk)
+
+            is_player1 = request.user.id == match.player1_id
+            valid_rows = stratego.deployment_rows(is_player1)
+            try:
+                match.state = stratego.apply_placement(match.state, str(request.user.id), row, col, valid_rows)
+            except InvalidMove as e:
+                messages.error(request, str(e))
+                return redirect("stratego-match", pk=pk)
+
+            p1_id, p2_id = str(match.player1_id), str(match.player2_id)
+            if stratego.both_players_placed(match.state, p1_id, p2_id):
+                match.state = {**match.state, "phase": "battle"}
+                match.turn = match.player1
+            match.save()
+        return redirect("stratego-match", pk=pk)
+
+
+class StrategoMoveView(LoginRequiredMixin, View):
+    def post(self, request, pk):
+        try:
+            from_row, from_col = int(request.POST.get("from_row")), int(request.POST.get("from_col"))
+            to_row, to_col = int(request.POST.get("to_row")), int(request.POST.get("to_col"))
+        except (TypeError, ValueError):
+            return redirect("stratego-match", pk=pk)
+
+        with transaction.atomic():
+            match = get_object_or_404(Match.objects.select_for_update(), pk=pk, game=Match.Game.STRATEGO)
+            if request.user.id not in (match.player1_id, match.player2_id):
+                raise Http404
+            if (
+                match.status != Match.Status.ACTIVE
+                or match.state.get("phase") != "battle"
+                or match.turn_id != request.user.id
+            ):
+                return redirect("stratego-match", pk=pk)
+
+            opponent = match.opponent_of(request.user)
+            mover_id, opponent_id = str(request.user.id), str(opponent.id)
+            try:
+                match.state = stratego.apply_move(
+                    match.state, mover_id, opponent_id, from_row, from_col, to_row, to_col
+                )
+            except InvalidMove as e:
+                messages.error(request, str(e))
+                return redirect("stratego-match", pk=pk)
+
+            if stratego.flag_captured(match.state, opponent_id):
+                match.status = Match.Status.FINISHED
+                match.turn = None
+                match.winner = request.user
+            else:
+                match.turn = opponent
+            match.save()
+        return redirect("stratego-match", pk=pk)
 
 
 class HangmanNewView(LoginRequiredMixin, View):

@@ -12,6 +12,7 @@ from .logic import (
     nim,
     othello,
     rock_paper_scissors,
+    stratego,
     tic_tac_toe,
     wordle,
 )
@@ -1802,6 +1803,366 @@ class BattleshipMatchTests(TestCase):
                 self.assertNotIn("ship", cell)
         your_cells = response.context["your_board_cells"]
         self.assertTrue(any(cell["ship"] for row in your_cells for cell in row))
+
+
+class StrategoLogicTests(TestCase):
+    def test_initial_state_is_placement_phase_with_no_boards(self):
+        state = stratego.initial_state()
+        self.assertEqual(state["phase"], "placement")
+        self.assertEqual(state["boards"], {})
+        self.assertIsNone(state["last_combat"])
+
+    def test_apply_placement_places_piece_in_own_zone(self):
+        state = stratego.apply_placement(stratego.initial_state(), "u1", 1, 2, stratego.PLAYER1_ROWS)
+        self.assertEqual(state["boards"]["u1"]["pieces"][0]["rank"], stratego.FLEET[0])
+        self.assertEqual((state["boards"]["u1"]["pieces"][0]["row"], state["boards"]["u1"]["pieces"][0]["col"]), (1, 2))
+        self.assertFalse(state["boards"]["u1"]["pieces"][0]["revealed"])
+
+    def test_apply_placement_rejects_outside_own_zone(self):
+        with self.assertRaises(InvalidMove):
+            stratego.apply_placement(stratego.initial_state(), "u1", 5, 2, stratego.PLAYER1_ROWS)
+
+    def test_apply_placement_rejects_occupied_cell(self):
+        state = stratego.apply_placement(stratego.initial_state(), "u1", 1, 2, stratego.PLAYER1_ROWS)
+        with self.assertRaises(InvalidMove):
+            stratego.apply_placement(state, "u1", 1, 2, stratego.PLAYER1_ROWS)
+
+    def test_apply_placement_rejects_once_fleet_is_full(self):
+        state = stratego.initial_state()
+        for i in range(len(stratego.FLEET)):
+            state = stratego.apply_placement(state, "u1", i // 8, i % 8, stratego.PLAYER1_ROWS)
+        with self.assertRaises(InvalidMove):
+            stratego.apply_placement(state, "u1", 2, 7, stratego.PLAYER1_ROWS)
+
+    def test_apply_placement_does_not_mutate_original_state(self):
+        original = stratego.initial_state()
+        stratego.apply_placement(original, "u1", 1, 2, stratego.PLAYER1_ROWS)
+        self.assertEqual(original["boards"], {})
+
+    def test_is_fully_placed_and_both_players_placed(self):
+        state = stratego.initial_state()
+        for i in range(len(stratego.FLEET)):
+            state = stratego.apply_placement(state, "u1", i // 8, i % 8, stratego.PLAYER1_ROWS)
+        self.assertTrue(stratego.is_fully_placed(state, "u1"))
+        self.assertFalse(stratego.both_players_placed(state, "u1", "u2"))
+
+    def test_resolve_combat_higher_rank_wins(self):
+        marshal = {"rank": "marshal"}
+        captain = {"rank": "captain"}
+        self.assertEqual(stratego.resolve_combat(marshal, captain), "attacker_wins")
+        self.assertEqual(stratego.resolve_combat(captain, marshal), "defender_wins")
+
+    def test_resolve_combat_tie_on_equal_rank(self):
+        self.assertEqual(stratego.resolve_combat({"rank": "captain"}, {"rank": "captain"}), "tie")
+
+    def test_resolve_combat_spy_beats_marshal_when_attacking(self):
+        self.assertEqual(stratego.resolve_combat({"rank": "spy"}, {"rank": "marshal"}), "attacker_wins")
+
+    def test_resolve_combat_marshal_beats_spy_when_attacking(self):
+        self.assertEqual(stratego.resolve_combat({"rank": "marshal"}, {"rank": "spy"}), "attacker_wins")
+
+    def test_resolve_combat_bomb_defeats_non_miner_attacker(self):
+        self.assertEqual(stratego.resolve_combat({"rank": "marshal"}, {"rank": "bomb"}), "defender_wins")
+
+    def test_resolve_combat_miner_defuses_bomb(self):
+        self.assertEqual(stratego.resolve_combat({"rank": "miner"}, {"rank": "bomb"}), "attacker_wins")
+
+    def test_resolve_combat_any_attacker_captures_flag(self):
+        self.assertEqual(stratego.resolve_combat({"rank": "scout"}, {"rank": "flag"}), "attacker_wins")
+
+    def test_apply_move_to_empty_cell_just_relocates(self):
+        state = {
+            "phase": "battle",
+            "boards": {
+                "u1": {"pieces": [{"id": 0, "rank": "scout", "row": 3, "col": 3, "revealed": False}]},
+                "u2": {"pieces": []},
+            },
+            "last_combat": None,
+        }
+        new_state = stratego.apply_move(state, "u1", "u2", 3, 3, 3, 4)
+        piece = new_state["boards"]["u1"]["pieces"][0]
+        self.assertEqual((piece["row"], piece["col"]), (3, 4))
+        self.assertIsNone(new_state["last_combat"])
+
+    def test_apply_move_rejects_immobile_piece(self):
+        state = {
+            "phase": "battle",
+            "boards": {"u1": {"pieces": [{"id": 0, "rank": "bomb", "row": 3, "col": 3, "revealed": False}]}, "u2": {"pieces": []}},
+            "last_combat": None,
+        }
+        with self.assertRaises(InvalidMove):
+            stratego.apply_move(state, "u1", "u2", 3, 3, 3, 4)
+
+    def test_apply_move_rejects_non_adjacent_destination(self):
+        state = {
+            "phase": "battle",
+            "boards": {"u1": {"pieces": [{"id": 0, "rank": "scout", "row": 3, "col": 3, "revealed": False}]}, "u2": {"pieces": []}},
+            "last_combat": None,
+        }
+        with self.assertRaises(InvalidMove):
+            stratego.apply_move(state, "u1", "u2", 3, 3, 3, 5)
+        with self.assertRaises(InvalidMove):
+            stratego.apply_move(state, "u1", "u2", 3, 3, 4, 4)
+
+    def test_apply_move_rejects_own_piece_at_destination(self):
+        state = {
+            "phase": "battle",
+            "boards": {
+                "u1": {
+                    "pieces": [
+                        {"id": 0, "rank": "scout", "row": 3, "col": 3, "revealed": False},
+                        {"id": 1, "rank": "captain", "row": 3, "col": 4, "revealed": False},
+                    ]
+                },
+                "u2": {"pieces": []},
+            },
+            "last_combat": None,
+        }
+        with self.assertRaises(InvalidMove):
+            stratego.apply_move(state, "u1", "u2", 3, 3, 3, 4)
+
+    def test_apply_move_combat_attacker_wins_reveals_both_and_removes_defender(self):
+        state = {
+            "phase": "battle",
+            "boards": {
+                "u1": {"pieces": [{"id": 0, "rank": "marshal", "row": 3, "col": 3, "revealed": False}]},
+                "u2": {"pieces": [{"id": 0, "rank": "captain", "row": 3, "col": 4, "revealed": False}]},
+            },
+            "last_combat": None,
+        }
+        new_state = stratego.apply_move(state, "u1", "u2", 3, 3, 3, 4)
+        self.assertEqual(new_state["boards"]["u2"]["pieces"], [])
+        attacker = new_state["boards"]["u1"]["pieces"][0]
+        self.assertEqual((attacker["row"], attacker["col"]), (3, 4))
+        self.assertTrue(attacker["revealed"])
+        self.assertEqual(new_state["last_combat"], {"attacker_rank": "marshal", "defender_rank": "captain", "outcome": "attacker_wins"})
+
+    def test_apply_move_combat_defender_wins_removes_attacker_and_stays_put(self):
+        state = {
+            "phase": "battle",
+            "boards": {
+                "u1": {"pieces": [{"id": 0, "rank": "captain", "row": 3, "col": 3, "revealed": False}]},
+                "u2": {"pieces": [{"id": 0, "rank": "marshal", "row": 3, "col": 4, "revealed": False}]},
+            },
+            "last_combat": None,
+        }
+        new_state = stratego.apply_move(state, "u1", "u2", 3, 3, 3, 4)
+        self.assertEqual(new_state["boards"]["u1"]["pieces"], [])
+        defender = new_state["boards"]["u2"]["pieces"][0]
+        self.assertEqual((defender["row"], defender["col"]), (3, 4))
+        self.assertTrue(defender["revealed"])
+
+    def test_apply_move_combat_tie_removes_both(self):
+        state = {
+            "phase": "battle",
+            "boards": {
+                "u1": {"pieces": [{"id": 0, "rank": "captain", "row": 3, "col": 3, "revealed": False}]},
+                "u2": {"pieces": [{"id": 0, "rank": "captain", "row": 3, "col": 4, "revealed": False}]},
+            },
+            "last_combat": None,
+        }
+        new_state = stratego.apply_move(state, "u1", "u2", 3, 3, 3, 4)
+        self.assertEqual(new_state["boards"]["u1"]["pieces"], [])
+        self.assertEqual(new_state["boards"]["u2"]["pieces"], [])
+
+    def test_flag_captured_false_while_flag_remains(self):
+        state = {"boards": {"u2": {"pieces": [{"id": 0, "rank": "flag", "row": 7, "col": 7, "revealed": False}]}}}
+        self.assertFalse(stratego.flag_captured(state, "u2"))
+
+    def test_flag_captured_true_once_removed(self):
+        state = {"boards": {"u2": {"pieces": [{"id": 0, "rank": "scout", "row": 7, "col": 7, "revealed": False}]}}}
+        self.assertTrue(stratego.flag_captured(state, "u2"))
+
+    def test_viewer_state_hides_unrevealed_opponent_rank_but_shows_position(self):
+        state = {
+            "phase": "battle",
+            "boards": {
+                "alice": {"pieces": [{"id": 0, "rank": "marshal", "row": 0, "col": 0, "revealed": False}]},
+                "bob": {
+                    "pieces": [
+                        {"id": 0, "rank": "captain", "row": 5, "col": 5, "revealed": False},
+                        {"id": 1, "rank": "scout", "row": 6, "col": 6, "revealed": True},
+                    ]
+                },
+            },
+            "last_combat": None,
+        }
+        viewer = stratego.viewer_state(state, "alice", "bob")
+        self.assertEqual(viewer["your_pieces"], state["boards"]["alice"]["pieces"])
+        opponent_by_pos = {(p["row"], p["col"]): p["rank"] for p in viewer["opponent_pieces"]}
+        self.assertEqual(opponent_by_pos[(5, 5)], None)
+        self.assertEqual(opponent_by_pos[(6, 6)], "scout")
+        self.assertEqual(set(opponent_by_pos), {(5, 5), (6, 6)})
+
+
+class StrategoMatchTests(TestCase):
+    def setUp(self):
+        self.alice = make_user("alice")
+        self.bob = make_user("bob")
+
+    def _place_full_fleet(self, user, is_player1):
+        zone_start = stratego.PLAYER1_ROWS[0] if is_player1 else stratego.PLAYER2_ROWS[0]
+        self.client.force_login(user)
+        for i in range(len(stratego.FLEET)):
+            row, col = zone_start + i // 8, i % 8
+            self.client.post(reverse("stratego-place", args=[self.match.pk]), {"cell": f"{row},{col}"})
+
+    def test_challenge_creates_active_match_in_placement_phase(self):
+        self.client.force_login(self.alice)
+        response = self.client.post(reverse("stratego-challenge", args=["bob"]))
+        match = Match.objects.get()
+        self.assertRedirects(response, reverse("stratego-match", args=[match.pk]))
+        self.assertEqual(match.game, Match.Game.STRATEGO)
+        self.assertEqual(match.state["phase"], "placement")
+        self.assertIsNone(match.turn)
+        self.assertEqual(match.status, Match.Status.ACTIVE)
+
+    def test_cannot_challenge_self(self):
+        self.client.force_login(self.alice)
+        self.client.post(reverse("stratego-challenge", args=["alice"]))
+        self.assertEqual(Match.objects.count(), 0)
+
+    def test_non_participant_cannot_view_match(self):
+        self.match = Match.objects.create(
+            game=Match.Game.STRATEGO, player1=self.alice, player2=self.bob,
+            state=stratego.initial_state(), turn=None,
+        )
+        carol = make_user("carol")
+        self.client.force_login(carol)
+        response = self.client.get(reverse("stratego-match", args=[self.match.pk]))
+        self.assertEqual(response.status_code, 403)
+
+    def test_placing_piece_appends_to_boards(self):
+        self.match = Match.objects.create(
+            game=Match.Game.STRATEGO, player1=self.alice, player2=self.bob,
+            state=stratego.initial_state(), turn=None,
+        )
+        self.client.force_login(self.alice)
+        self.client.post(reverse("stratego-place", args=[self.match.pk]), {"cell": "0,0"})
+        self.match.refresh_from_db()
+        self.assertEqual(len(self.match.state["boards"][str(self.alice.id)]["pieces"]), 1)
+
+    def test_placement_outside_own_zone_is_rejected_with_error(self):
+        self.match = Match.objects.create(
+            game=Match.Game.STRATEGO, player1=self.alice, player2=self.bob,
+            state=stratego.initial_state(), turn=None,
+        )
+        self.client.force_login(self.alice)
+        response = self.client.post(
+            reverse("stratego-place", args=[self.match.pk]), {"cell": "5,0"}, follow=True
+        )
+        self.match.refresh_from_db()
+        self.assertEqual(self.match.state["boards"], {})
+        self.assertContains(response, "own three rows")
+
+    def test_cannot_move_before_both_players_have_placed(self):
+        self.match = Match.objects.create(
+            game=Match.Game.STRATEGO, player1=self.alice, player2=self.bob,
+            state=stratego.initial_state(), turn=None,
+        )
+        self._place_full_fleet(self.alice, is_player1=True)
+        self.client.force_login(self.alice)
+        self.client.post(
+            reverse("stratego-move", args=[self.match.pk]), {"from_row": 0, "from_col": 0, "to_row": 1, "to_col": 0}
+        )
+        self.match.refresh_from_db()
+        self.assertEqual(self.match.state["phase"], "placement")
+
+    def test_phase_flips_to_battle_once_both_have_placed(self):
+        self.match = Match.objects.create(
+            game=Match.Game.STRATEGO, player1=self.alice, player2=self.bob,
+            state=stratego.initial_state(), turn=None,
+        )
+        self._place_full_fleet(self.alice, is_player1=True)
+        self._place_full_fleet(self.bob, is_player1=False)
+        self.match.refresh_from_db()
+        self.assertEqual(self.match.state["phase"], "battle")
+        self.assertEqual(self.match.turn, self.alice)
+
+    def test_move_by_wrong_player_is_ignored(self):
+        state = {
+            "phase": "battle",
+            "boards": {
+                str(self.alice.id): {"pieces": [{"id": 0, "rank": "scout", "row": 3, "col": 3, "revealed": False}]},
+                str(self.bob.id): {"pieces": [{"id": 0, "rank": "flag", "row": 7, "col": 7, "revealed": False}]},
+            },
+            "last_combat": None,
+        }
+        self.match = Match.objects.create(
+            game=Match.Game.STRATEGO, player1=self.alice, player2=self.bob, state=state, turn=self.alice,
+        )
+        self.client.force_login(self.bob)
+        self.client.post(
+            reverse("stratego-move", args=[self.match.pk]), {"from_row": 7, "from_col": 7, "to_row": 6, "to_col": 7}
+        )
+        self.match.refresh_from_db()
+        self.assertEqual(self.match.turn, self.alice)
+
+    def test_combat_move_reveals_both_and_switches_turn(self):
+        state = {
+            "phase": "battle",
+            "boards": {
+                str(self.alice.id): {"pieces": [{"id": 0, "rank": "marshal", "row": 3, "col": 3, "revealed": False}]},
+                str(self.bob.id): {
+                    "pieces": [
+                        {"id": 0, "rank": "captain", "row": 3, "col": 4, "revealed": False},
+                        {"id": 1, "rank": "flag", "row": 7, "col": 7, "revealed": False},
+                    ]
+                },
+            },
+            "last_combat": None,
+        }
+        self.match = Match.objects.create(
+            game=Match.Game.STRATEGO, player1=self.alice, player2=self.bob, state=state, turn=self.alice,
+        )
+        self.client.force_login(self.alice)
+        self.client.post(
+            reverse("stratego-move", args=[self.match.pk]), {"from_row": 3, "from_col": 3, "to_row": 3, "to_col": 4}
+        )
+        self.match.refresh_from_db()
+        self.assertEqual(len(self.match.state["boards"][str(self.bob.id)]["pieces"]), 1)
+        self.assertEqual(self.match.status, Match.Status.ACTIVE)
+        self.assertEqual(self.match.turn, self.bob)
+        self.assertEqual(self.match.state["last_combat"]["outcome"], "attacker_wins")
+
+    def test_capturing_flag_wins_the_match(self):
+        state = {
+            "phase": "battle",
+            "boards": {
+                str(self.alice.id): {"pieces": [{"id": 0, "rank": "scout", "row": 3, "col": 3, "revealed": False}]},
+                str(self.bob.id): {"pieces": [{"id": 0, "rank": "flag", "row": 3, "col": 4, "revealed": False}]},
+            },
+            "last_combat": None,
+        }
+        self.match = Match.objects.create(
+            game=Match.Game.STRATEGO, player1=self.alice, player2=self.bob, state=state, turn=self.alice,
+        )
+        self.client.force_login(self.alice)
+        self.client.post(
+            reverse("stratego-move", args=[self.match.pk]), {"from_row": 3, "from_col": 3, "to_row": 3, "to_col": 4}
+        )
+        self.match.refresh_from_db()
+        self.assertEqual(self.match.status, Match.Status.FINISHED)
+        self.assertEqual(self.match.winner, self.alice)
+        self.assertIsNone(self.match.turn)
+
+    def test_opponent_board_context_never_exposes_unrevealed_rank(self):
+        state = {
+            "phase": "battle",
+            "boards": {
+                str(self.alice.id): {"pieces": [{"id": 0, "rank": "marshal", "row": 0, "col": 0, "revealed": False}]},
+                str(self.bob.id): {"pieces": [{"id": 0, "rank": "captain", "row": 5, "col": 5, "revealed": False}]},
+            },
+            "last_combat": None,
+        }
+        self.match = Match.objects.create(
+            game=Match.Game.STRATEGO, player1=self.alice, player2=self.bob, state=state, turn=self.alice,
+        )
+        self.client.force_login(self.alice)
+        response = self.client.get(reverse("stratego-match", args=[self.match.pk]))
+        cell = response.context["board_cells"][5][5]
+        self.assertTrue(cell["opponent_present"])
+        self.assertIsNone(cell["opponent_rank"])
 
 
 class SnakeResultTests(TestCase):

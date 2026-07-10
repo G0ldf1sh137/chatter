@@ -1,0 +1,109 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Stratego — Chatter{% endblock %}
+
+{% block content %}
+    <div class="mx-auto max-w-sm rounded-2xl border border-border bg-surface p-6 shadow-sm">
+        <div class="mb-4 flex items-center justify-between">
+            <div class="flex items-center gap-2">
+                {% include "_avatar.html" with avatar_user=match.player1 %}
+                <span class="text-sm font-medium">{{ match.player1.username }}</span>
+            </div>
+            <span class="text-sm text-muted">vs</span>
+            <div class="flex items-center gap-2">
+                <span class="text-sm font-medium">{{ match.player2.username }}</span>
+                {% include "_avatar.html" with avatar_user=match.player2 %}
+            </div>
+        </div>
+
+        {% if match.status == "finished" %}
+            <p class="mb-4 text-center font-semibold text-accent">{{ match.winner.username }} captured the flag and won!</p>
+        {% elif phase == "placement" %}
+            {% if fully_placed %}
+                <p class="mb-4 text-center text-muted">Fleet placed &mdash; waiting on {{ opponent.username }} to place theirs.</p>
+            {% else %}
+                <p class="mb-4 text-center font-semibold text-accent">Place your next piece &mdash; {{ next_rank|title }}</p>
+            {% endif %}
+        {% elif is_your_turn %}
+            <p class="mb-4 text-center font-semibold text-accent">Your turn &mdash; click a piece, then click where to move it</p>
+        {% else %}
+            <p class="mb-4 text-center text-muted">Waiting on {{ opponent.username }}</p>
+        {% endif %}
+
+        {% if phase == "placement" %}
+            {% if not fully_placed %}
+                <form method="post" action="{% url 'stratego-place' match.pk %}">
+                    {% csrf_token %}
+                    <p class="mb-2 text-center text-sm text-muted">Click a cell in your own three rows to place it there</p>
+                    <div class="mx-auto grid w-full max-w-[320px] grid-cols-8 gap-0.5 rounded-lg bg-surface-hover p-1">
+                        {% for row in board_cells %}
+                            {% for cell in row %}
+                                {% if cell.rank %}
+                                    <div class="flex aspect-square items-center justify-center rounded-sm bg-accent text-[9px] font-bold text-accent-fg">{{ cell.rank|slice:":3"|upper }}</div>
+                                {% elif cell.in_zone %}
+                                    <button
+                                        type="submit"
+                                        name="cell"
+                                        value="{{ cell.r }},{{ cell.c }}"
+                                        aria-label="Place piece at row {{ cell.r }}, column {{ cell.c }}"
+                                        class="mt-0 aspect-square rounded-sm border-none bg-surface p-0 transition-colors hover:bg-border/60"
+                                    ></button>
+                                {% else %}
+                                    <div class="aspect-square rounded-sm bg-surface-hover/40"></div>
+                                {% endif %}
+                            {% endfor %}
+                        {% endfor %}
+                    </div>
+                </form>
+            {% else %}
+                <p class="mb-2 text-center text-sm text-muted">Your fleet so far</p>
+                <div class="mx-auto grid w-full max-w-[320px] grid-cols-8 gap-0.5 rounded-lg bg-surface-hover p-1">
+                    {% for row in board_cells %}
+                        {% for cell in row %}
+                            {% if cell.rank %}
+                                <div class="flex aspect-square items-center justify-center rounded-sm bg-accent text-[9px] font-bold text-accent-fg">{{ cell.rank|slice:":3"|upper }}</div>
+                            {% else %}
+                                <div class="aspect-square rounded-sm bg-surface"></div>
+                            {% endif %}
+                        {% endfor %}
+                    {% endfor %}
+                </div>
+            {% endif %}
+        {% else %}
+            <p class="mb-2 text-center text-xs text-muted">Solid = your piece &middot; hollow "?" = unknown enemy piece &middot; red = revealed enemy piece</p>
+            <div id="board" class="mx-auto grid w-full max-w-[320px] grid-cols-8 gap-0.5 rounded-lg bg-surface-hover p-1">
+                {% for row in board_cells %}
+                    {% for cell in row %}
+                        <button
+                            type="button"
+                            data-row="{{ cell.r }}"
+                            data-col="{{ cell.c }}"
+                            {% if not is_your_turn %}disabled{% endif %}
+                            class="mt-0 flex aspect-square items-center justify-center rounded-sm border-none p-0 text-[9px] font-bold transition-colors {% if cell.your_rank %}bg-accent text-accent-fg{% elif cell.opponent_rank %}bg-downvote text-white{% elif cell.opponent_present %}bg-surface-hover text-muted{% else %}bg-surface{% endif %} {% if is_your_turn %}hover:brightness-110{% endif %}"
+                        >{% if cell.your_rank %}{{ cell.your_rank|slice:":3"|upper }}{% elif cell.opponent_rank %}{{ cell.opponent_rank|slice:":3"|upper }}{% elif cell.opponent_present %}?{% endif %}</button>
+                    {% endfor %}
+                {% endfor %}
+            </div>
+
+            <form id="move-form" method="post" action="{% url 'stratego-move' match.pk %}">
+                {% csrf_token %}
+                <input type="hidden" id="from_row" name="from_row">
+                <input type="hidden" id="from_col" name="from_col">
+                <input type="hidden" id="to_row" name="to_row">
+                <input type="hidden" id="to_col" name="to_col">
+            </form>
+            {% if is_your_turn %}
+                <script src="{% static 'games/js/checkers.js' %}"></script>
+            {% endif %}
+
+            {% if last_combat %}
+                <p class="mt-3 text-center text-sm text-muted">
+                    Last combat: {{ last_combat.attacker_rank|title }} vs {{ last_combat.defender_rank|title }} &mdash;
+                    {% if last_combat.outcome == "tie" %}both were destroyed{% elif last_combat.outcome == "attacker_wins" %}the defender was destroyed{% else %}the attacker was destroyed{% endif %}
+                </p>
+            {% endif %}
+        {% endif %}
+    </div>
+    {% include "games/_match_poll.html" %}
+{% endblock %}
