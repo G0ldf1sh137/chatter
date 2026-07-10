@@ -3,6 +3,8 @@
     var NOISE_SCALE = 0.01;
     var SPEED = 2;
     var NOISE_Z_STEP = 0.003;
+    var REPEL_RADIUS = 150;
+    var REPEL_STRENGTH = 3;
 
     var particles;
     var zOffset;
@@ -33,6 +35,16 @@
             var angle = noise(p.x * NOISE_SCALE, p.y * NOISE_SCALE, zOffset) * Math.PI * 4;
             var vx = Math.cos(angle) * SPEED;
             var vy = Math.sin(angle) * SPEED;
+
+            if (mouseIsPressed && mouseX >= 0 && mouseX <= width && mouseY >= 0 && mouseY <= height) {
+                var dx = p.x - mouseX;
+                var dy = p.y - mouseY;
+                var d = Math.sqrt(dx * dx + dy * dy) || 1;
+                if (d < REPEL_RADIUS) {
+                    vx += (dx / d) * REPEL_STRENGTH;
+                    vy += (dy / d) * REPEL_STRENGTH;
+                }
+            }
 
             var prevX = p.x;
             var prevY = p.y;

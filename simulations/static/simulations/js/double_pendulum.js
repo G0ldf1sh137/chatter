@@ -12,6 +12,7 @@
     var theta1, theta2, omega1, omega2;
     var pivotX, pivotY;
     var trail;
+    var draggingBob;
 
     window.setup = function () {
         var canvas = createCanvas(500, 500);
@@ -23,7 +24,16 @@
         omega1 = 0;
         omega2 = 0;
         trail = [];
+        draggingBob = null;
     };
+
+    function bobPositions() {
+        var x1 = pivotX + L1 * PIXELS_PER_UNIT * Math.sin(theta1);
+        var y1 = pivotY + L1 * PIXELS_PER_UNIT * Math.cos(theta1);
+        var x2 = x1 + L2 * PIXELS_PER_UNIT * Math.sin(theta2);
+        var y2 = y1 + L2 * PIXELS_PER_UNIT * Math.cos(theta2);
+        return { x1: x1, y1: y1, x2: x2, y2: y2 };
+    }
 
     function step() {
         var num1 = -G * (2 * M1 + M2) * Math.sin(theta1);
@@ -48,12 +58,12 @@
     window.draw = function () {
         background(15, 23, 42);
 
-        for (var s = 0; s < STEPS_PER_FRAME; s++) step();
+        if (draggingBob === null) {
+            for (var s = 0; s < STEPS_PER_FRAME; s++) step();
+        }
 
-        var x1 = pivotX + L1 * PIXELS_PER_UNIT * Math.sin(theta1);
-        var y1 = pivotY + L1 * PIXELS_PER_UNIT * Math.cos(theta1);
-        var x2 = x1 + L2 * PIXELS_PER_UNIT * Math.sin(theta2);
-        var y2 = y1 + L2 * PIXELS_PER_UNIT * Math.cos(theta2);
+        var pos = bobPositions();
+        var x1 = pos.x1, y1 = pos.y1, x2 = pos.x2, y2 = pos.y2;
 
         trail.push({ x: x2, y: y2 });
         if (trail.length > TRAIL_LENGTH) trail.shift();
@@ -76,5 +86,30 @@
         fill(96, 165, 250);
         circle(x1, y1, 16);
         circle(x2, y2, 16);
+    };
+
+    window.mousePressed = function () {
+        if (mouseX < 0 || mouseX > width || mouseY < 0 || mouseY > height) return;
+        var pos = bobPositions();
+        if (dist(mouseX, mouseY, pos.x2, pos.y2) < 20) {
+            draggingBob = 2;
+        } else if (dist(mouseX, mouseY, pos.x1, pos.y1) < 20) {
+            draggingBob = 1;
+        }
+    };
+
+    window.mouseDragged = function () {
+        if (draggingBob === 1) {
+            theta1 = Math.atan2(mouseX - pivotX, mouseY - pivotY);
+            omega1 = 0;
+        } else if (draggingBob === 2) {
+            var pos = bobPositions();
+            theta2 = Math.atan2(mouseX - pos.x1, mouseY - pos.y1);
+            omega2 = 0;
+        }
+    };
+
+    window.mouseReleased = function () {
+        draggingBob = null;
     };
 })();

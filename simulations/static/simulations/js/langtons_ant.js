@@ -6,6 +6,7 @@
 
     var grid;
     var antX, antY, antDir;
+    var paused;
 
     window.setup = function () {
         var canvas = createCanvas(COLS * CELL_SIZE, ROWS * CELL_SIZE);
@@ -17,6 +18,7 @@
         antX = Math.floor(COLS / 2);
         antY = Math.floor(ROWS / 2);
         antDir = 0;
+        paused = false;
     };
 
     function step() {
@@ -39,7 +41,9 @@
     }
 
     window.draw = function () {
-        for (var i = 0; i < STEPS_PER_FRAME; i++) step();
+        if (!paused) {
+            for (var i = 0; i < STEPS_PER_FRAME; i++) step();
+        }
 
         background(15, 23, 42);
         noStroke();
@@ -54,5 +58,18 @@
 
         fill(250, 204, 21);
         rect(antX * CELL_SIZE, antY * CELL_SIZE, CELL_SIZE, CELL_SIZE);
+    };
+
+    window.mousePressed = function () {
+        if (mouseX < 0 || mouseX > width || mouseY < 0 || mouseY > height) return;
+        var c = Math.floor(mouseX / CELL_SIZE);
+        var r = Math.floor(mouseY / CELL_SIZE);
+        if (r >= 0 && r < ROWS && c >= 0 && c < COLS) {
+            grid[r][c] = grid[r][c] === 1 ? 0 : 1;
+        }
+    };
+
+    window.keyPressed = function () {
+        if (key === " ") paused = !paused;
     };
 })();

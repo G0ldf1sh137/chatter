@@ -93,4 +93,25 @@
         }
         updatePixels();
     };
+
+    function seedAt(gx, gy) {
+        var radius = 4;
+        for (var dy = -radius; dy <= radius; dy++) {
+            for (var dx = -radius; dx <= radius; dx++) {
+                if (dx * dx + dy * dy <= radius * radius) {
+                    b[index(gx + dx, gy + dy)] = 1;
+                }
+            }
+        }
+    }
+
+    window.mousePressed = function () {
+        if (mouseX < 0 || mouseX > width || mouseY < 0 || mouseY > height) return;
+        seedAt(Math.floor(mouseX), Math.floor(mouseY));
+    };
+
+    window.mouseDragged = function () {
+        if (mouseX < 0 || mouseX > width || mouseY < 0 || mouseY > height) return;
+        seedAt(Math.floor(mouseX), Math.floor(mouseY));
+    };
 })();

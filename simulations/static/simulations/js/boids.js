@@ -72,6 +72,11 @@
             steer.y += (cohY / cohCount - boid.y) * 0.01;
         }
 
+        if (mouseIsPressed && mouseX >= 0 && mouseX <= width && mouseY >= 0 && mouseY <= height) {
+            steer.x += (mouseX - boid.x) * 0.002;
+            steer.y += (mouseY - boid.y) * 0.002;
+        }
+
         return limitVector(steer, MAX_FORCE);
     }
 
@@ -107,5 +112,15 @@
             triangle(-6, -4, -6, 4, 8, 0);
             pop();
         }
+    };
+
+    window.mousePressed = function () {
+        if (mouseX < 0 || mouseX > width || mouseY < 0 || mouseY > height) return;
+        boids.push({
+            x: mouseX,
+            y: mouseY,
+            vx: random(-MAX_SPEED, MAX_SPEED),
+            vy: random(-MAX_SPEED, MAX_SPEED),
+        });
     };
 })();

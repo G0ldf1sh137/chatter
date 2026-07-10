@@ -7,6 +7,7 @@
 
     var grid;
     var frame;
+    var paused;
 
     function makeGrid() {
         var g = [];
@@ -53,6 +54,7 @@
         canvas.parent("sketch-container");
         grid = makeGrid();
         frame = 0;
+        paused = false;
     };
 
     window.draw = function () {
@@ -69,8 +71,21 @@
         }
 
         frame++;
-        if (frame % UPDATE_EVERY === 0) {
+        if (!paused && frame % UPDATE_EVERY === 0) {
             grid = step(grid);
         }
+    };
+
+    window.mousePressed = function () {
+        if (mouseX < 0 || mouseX > width || mouseY < 0 || mouseY > height) return;
+        var c = Math.floor(mouseX / CELL_SIZE);
+        var r = Math.floor(mouseY / CELL_SIZE);
+        if (r >= 0 && r < ROWS && c >= 0 && c < COLS) {
+            grid[r][c] = grid[r][c] === 1 ? 0 : 1;
+        }
+    };
+
+    window.keyPressed = function () {
+        if (key === " ") paused = !paused;
     };
 })();

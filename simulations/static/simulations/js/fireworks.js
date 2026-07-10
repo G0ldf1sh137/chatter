@@ -7,9 +7,9 @@
     var particles;
     var frameCounter;
 
-    function makeRocket() {
+    function makeRocket(x) {
         return {
-            x: random(width * 0.2, width * 0.8),
+            x: x === undefined ? random(width * 0.2, width * 0.8) : x,
             y: height,
             vx: random(-0.5, 0.5),
             vy: random(-9, -7),
@@ -83,5 +83,10 @@
             fill(p.hue, 80, 100, p.life);
             circle(p.x, p.y, 3);
         }
+    };
+
+    window.mousePressed = function () {
+        if (mouseX < 0 || mouseX > width || mouseY < 0 || mouseY > height) return;
+        rockets.push(makeRocket(mouseX));
     };
 })();

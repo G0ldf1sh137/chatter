@@ -9,6 +9,7 @@
     var points;
     var constraints;
     var frame;
+    var draggedPoint;
 
     function makePoint(x, y, pinned) {
         return { x: x, y: y, oldX: x, oldY: y, pinned: pinned };
@@ -25,6 +26,7 @@
         points = [];
         constraints = [];
         frame = 0;
+        draggedPoint = null;
 
         for (var r = 0; r < ROWS; r++) {
             for (var c = 0; c < COLS; c++) {
@@ -51,7 +53,7 @@
         var wind = Math.sin(frame * 0.02) * 0.3;
         for (var i = 0; i < points.length; i++) {
             var p = points[i];
-            if (p.pinned) continue;
+            if (p.pinned || i === draggedPoint) continue;
             var vx = (p.x - p.oldX) * DAMPING;
             var vy = (p.y - p.oldY) * DAMPING;
             p.oldX = p.x;
@@ -74,11 +76,11 @@
                 var offsetX = dx * 0.5 * diff;
                 var offsetY = dy * 0.5 * diff;
 
-                if (!a.pinned) {
+                if (!a.pinned && con.a !== draggedPoint) {
                     a.x += offsetX;
                     a.y += offsetY;
                 }
-                if (!b.pinned) {
+                if (!b.pinned && con.b !== draggedPoint) {
                     b.x -= offsetX;
                     b.y -= offsetY;
                 }
@@ -107,5 +109,41 @@
         for (var j = 0; j < points.length; j++) {
             if (points[j].pinned) circle(points[j].x, points[j].y, 6);
         }
+    };
+
+    function nearestPointIndex(mx, my) {
+        var best = null;
+        var bestDist = 15;
+        for (var i = 0; i < points.length; i++) {
+            var d = dist(mx, my, points[i].x, points[i].y);
+            if (d < bestDist) {
+                bestDist = d;
+                best = i;
+            }
+        }
+        return best;
+    }
+
+    window.mousePressed = function () {
+        if (mouseX < 0 || mouseX > width || mouseY < 0 || mouseY > height) return;
+        var idx = nearestPointIndex(mouseX, mouseY);
+        if (idx === null) return;
+        if (points[idx].pinned) {
+            points[idx].pinned = false;
+        } else {
+            draggedPoint = idx;
+        }
+    };
+
+    window.mouseDragged = function () {
+        if (draggedPoint === null) return;
+        points[draggedPoint].x = mouseX;
+        points[draggedPoint].y = mouseY;
+        points[draggedPoint].oldX = mouseX;
+        points[draggedPoint].oldY = mouseY;
+    };
+
+    window.mouseReleased = function () {
+        draggedPoint = null;
     };
 })();

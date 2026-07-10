@@ -57,4 +57,12 @@
         zoom *= ZOOM_FACTOR;
         if (zoom > ZOOM_RESET_THRESHOLD) zoom = 1;
     };
+
+    window.mousePressed = function () {
+        if (mouseX < 0 || mouseX > W || mouseY < 0 || mouseY > H) return;
+        var scale = 3.0 / zoom;
+        CENTER_X += ((mouseX - W / 2) / W) * scale;
+        CENTER_Y += ((mouseY - H / 2) / H) * scale;
+        zoom = 1;
+    };
 })();
