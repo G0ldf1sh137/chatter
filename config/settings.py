@@ -88,6 +88,7 @@ TEMPLATES = [
                 "django.contrib.messages.context_processors.messages",
                 "games.context_processors.your_turn_count",
                 "posts.context_processors.unread_messages",
+                "accounts.context_processors.site_admin",
             ],
         },
     },

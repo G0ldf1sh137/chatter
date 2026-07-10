@@ -8,15 +8,15 @@
         <nav class="flex items-center gap-1 text-sm font-medium">
             <a href="{% url 'simulations-hub' %}" class="rounded-full px-3 py-1.5 text-fg no-underline transition-colors hover:bg-surface-hover">Simulations</a>
             {% if user.is_authenticated %}
-                <a href="{% url 'post-create' %}" class="rounded-full px-3 py-1.5 text-fg no-underline transition-colors hover:bg-surface-hover">New post</a>
-                <a href="{% url 'games-hub' %}" class="relative rounded-full px-3 py-1.5 text-fg no-underline transition-colors hover:bg-surface-hover">
-                    Games
-                    <span
-                        id="your-turn-badge"
-                        data-count-url="{% url 'your-turn-count' %}"
-                        class="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-accent px-1 text-[10px] font-bold text-accent-fg {% if not your_turn_count %}hidden{% endif %}"
-                    >{{ your_turn_count }}</span>
-                </a>
+            <a href="{% url 'games-hub' %}" class="relative rounded-full px-3 py-1.5 text-fg no-underline transition-colors hover:bg-surface-hover">
+                Games
+                <span
+                id="your-turn-badge"
+                data-count-url="{% url 'your-turn-count' %}"
+                class="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-accent px-1 text-[10px] font-bold text-accent-fg {% if not your_turn_count %}hidden{% endif %}"
+                >{{ your_turn_count }}</span>
+            </a>
+            <a href="{% url 'post-create' %}" class="rounded-full px-3 py-1.5 text-fg no-underline transition-colors hover:bg-surface-hover">New post</a>
                 <a href="{% url 'conversation-list' %}" class="relative rounded-full px-3 py-1.5 text-fg no-underline transition-colors hover:bg-surface-hover">
                     Messages
                     <span

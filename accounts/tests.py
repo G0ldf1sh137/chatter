@@ -13,7 +13,7 @@ from django.test import RequestFactory, TestCase, override_settings
 from django.urls import reverse
 
 from games.models import Match, SinglePlayerResult
-from posts.models import Comment, CommentVote, Post, PostVote
+from posts.models import Comment, CommentVote, Conversation, Post, PostVote
 
 from .adapter import SocialAccountAdapter
 from .models import Follow, Profile
@@ -684,6 +684,50 @@ class UserSearchViewTests(TestCase):
         response = self.client.get(reverse("user-search"), {"q": "car"})
 
         self.assertEqual(len(response.json()["usernames"]), 8)
+
+
+class SiteFooterTests(TestCase):
+    def setUp(self):
+        self.admin = User.objects.create_superuser(
+            username="admin", email="admin@example.com", password="correct-horse-battery-staple"
+        )
+        self.dave = User.objects.create_user(username="dave", password="correct-horse-battery-staple")
+
+    def test_copyright_shows_current_year(self):
+        current_year = str(datetime.now().year)
+
+        response = self.client.get(reverse("feed"))
+
+        self.assertContains(response, f"&copy; {current_year} Chatter.")
+
+    def test_anonymous_visitor_does_not_see_message_link(self):
+        response = self.client.get(reverse("feed"))
+        self.assertNotContains(response, "Send us a message")
+
+    def test_logged_in_user_sees_message_link_to_admin(self):
+        self.client.force_login(self.dave)
+
+        response = self.client.get(reverse("feed"))
+
+        self.assertContains(response, "Send us a message")
+        self.assertContains(response, reverse("conversation-start", args=["admin"]))
+
+    def test_admin_does_not_see_a_self_message_link(self):
+        self.client.force_login(self.admin)
+
+        response = self.client.get(reverse("feed"))
+
+        self.assertNotContains(response, "Send us a message")
+
+    def test_message_link_starts_a_conversation_with_the_admin(self):
+        self.client.force_login(self.dave)
+
+        response = self.client.post(reverse("conversation-start", args=["admin"]))
+
+        conversation = Conversation.objects.get()
+        self.assertRedirects(response, reverse("conversation-detail", args=[conversation.pk]))
+        self.assertIn(self.dave, [conversation.user1, conversation.user2])
+        self.assertIn(self.admin, [conversation.user1, conversation.user2])
 
 
 class FollowTests(TestCase):

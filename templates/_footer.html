@@ -1,0 +1,11 @@
+<footer class="mt-10 border-t border-border">
+    <div class="mx-auto flex max-w-[700px] flex-col items-center gap-2 px-4 py-6 text-sm text-muted sm:flex-row sm:justify-between">
+        <p>&copy; {% now "Y" %} Chatter. All rights reserved.</p>
+        {% if user.is_authenticated and site_admin and site_admin != user %}
+            <form method="post" action="{% url 'conversation-start' site_admin.username %}" class="inline">
+                {% csrf_token %}
+                <button type="submit" class="mt-0 border-none bg-transparent p-0 text-sm font-medium text-accent no-underline hover:underline">Send us a message</button>
+            </form>
+        {% endif %}
+    </div>
+</footer>
