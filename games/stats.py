@@ -147,3 +147,20 @@ def mastermind_leaders(limit=10):
         .annotate(high_score=Max("score"))
         .order_by("-high_score")[:limit]
     )
+
+
+def flappy_high_score(user):
+    return (
+        SinglePlayerResult.objects.filter(player=user, game=SinglePlayerResult.Game.FLAPPY_BIRD)
+        .aggregate(Max("score"))["score__max"]
+        or 0
+    )
+
+
+def flappy_leaders(limit=10):
+    return (
+        SinglePlayerResult.objects.filter(game=SinglePlayerResult.Game.FLAPPY_BIRD)
+        .values("player__username")
+        .annotate(high_score=Max("score"))
+        .order_by("-high_score")[:limit]
+    )

@@ -2545,3 +2545,41 @@ class DoodleJumpResultTests(TestCase):
         response = self.post_json({"score": 100})
         self.assertEqual(response.status_code, 302)
         self.assertEqual(SinglePlayerResult.objects.count(), 0)
+
+
+class FlappyBirdResultTests(TestCase):
+    def setUp(self):
+        self.alice = make_user("alice")
+        self.client.force_login(self.alice)
+
+    def post_json(self, payload):
+        return self.client.post(reverse("flappy-finish"), data=payload, content_type="application/json")
+
+    def test_valid_score_is_recorded(self):
+        response = self.post_json({"score": 12})
+        self.assertEqual(response.status_code, 200)
+        result = SinglePlayerResult.objects.get()
+        self.assertEqual(result.player, self.alice)
+        self.assertEqual(result.game, SinglePlayerResult.Game.FLAPPY_BIRD)
+        self.assertEqual(result.score, 12)
+        self.assertFalse(result.won)
+
+    def test_negative_score_is_rejected(self):
+        response = self.post_json({"score": -1})
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(SinglePlayerResult.objects.count(), 0)
+
+    def test_out_of_range_score_is_rejected(self):
+        response = self.post_json({"score": 50_000})
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(SinglePlayerResult.objects.count(), 0)
+
+    def test_malformed_payload_is_rejected(self):
+        response = self.client.post(reverse("flappy-finish"), data="not json", content_type="application/json")
+        self.assertEqual(response.status_code, 400)
+
+    def test_anonymous_cannot_submit_score(self):
+        self.client.logout()
+        response = self.post_json({"score": 5})
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(SinglePlayerResult.objects.count(), 0)
