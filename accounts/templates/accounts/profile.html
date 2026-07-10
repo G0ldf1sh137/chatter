@@ -64,6 +64,10 @@
                         {% csrf_token %}
                         <button type="submit" class="mt-0 rounded-full border border-border bg-transparent px-4 py-1.5 text-sm text-fg transition-colors hover:bg-surface-hover">Challenge to Stratego</button>
                     </form>
+                    <form method="post" action="{% url 'morris-challenge' profile_user.username %}" class="inline">
+                        {% csrf_token %}
+                        <button type="submit" class="mt-0 rounded-full border border-border bg-transparent px-4 py-1.5 text-sm text-fg transition-colors hover:bg-surface-hover">Challenge to Nine Men's Morris</button>
+                    </form>
                 </div>
             {% endif %}
         </div>
@@ -188,6 +192,11 @@
         <div class="rounded-2xl border border-border bg-surface p-4 text-center shadow-sm">
             <p class="text-xs text-muted">Stratego</p>
             <p class="text-lg font-bold text-fg">{{ stratego_record.wins }}-{{ stratego_record.losses }}-{{ stratego_record.draws }}</p>
+            <p class="text-xs text-muted">W-L-D</p>
+        </div>
+        <div class="rounded-2xl border border-border bg-surface p-4 text-center shadow-sm">
+            <p class="text-xs text-muted">Nine Men's Morris</p>
+            <p class="text-lg font-bold text-fg">{{ morris_record.wins }}-{{ morris_record.losses }}-{{ morris_record.draws }}</p>
             <p class="text-xs text-muted">W-L-D</p>
         </div>
     </div>

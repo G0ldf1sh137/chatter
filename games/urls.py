@@ -41,6 +41,13 @@ urlpatterns = [
     path("stratego/<uuid:pk>/", views.StrategoMatchView.as_view(), name="stratego-match"),
     path("stratego/<uuid:pk>/place/", views.StrategoPlaceView.as_view(), name="stratego-place"),
     path("stratego/<uuid:pk>/move/", views.StrategoMoveView.as_view(), name="stratego-move"),
+    path(
+        "morris/challenge/<str:username>/",
+        views.NineMensMorrisChallengeView.as_view(),
+        name="morris-challenge",
+    ),
+    path("morris/<uuid:pk>/", views.NineMensMorrisMatchView.as_view(), name="morris-match"),
+    path("morris/<uuid:pk>/move/", views.NineMensMorrisMoveView.as_view(), name="morris-move"),
     path("hangman/new/", views.HangmanNewView.as_view(), name="hangman-new"),
     path("hangman/", views.HangmanPlayView.as_view(), name="hangman-play"),
     path("hangman/guess/", views.HangmanGuessView.as_view(), name="hangman-guess"),

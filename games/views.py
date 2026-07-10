@@ -18,6 +18,7 @@ from .logic import (
     hangman,
     mastermind,
     nim,
+    nine_mens_morris,
     othello,
     rock_paper_scissors,
     stratego,
@@ -43,6 +44,14 @@ MAX_SNAKE_SCORE = SNAKE_GRID_SIZE * SNAKE_GRID_SIZE
 # in principle) - just a generous sanity bound, same anti-cheat proportionality.
 MAX_DOODLE_SCORE = 1_000_000
 
+# Pixel layout for the Nine Men's Morris board: nine_mens_morris.POINT_COORDS
+# is a 0-6 unit grid: MORRIS_SCALE converts a unit to pixels, MORRIS_MARGIN
+# leaves room for the outermost points' circles, MORRIS_POINT_SIZE is the
+# rendered diameter of each point's clickable circle.
+MORRIS_SCALE = 40
+MORRIS_MARGIN = 24
+MORRIS_POINT_SIZE = 22
+
 
 class LeaderboardView(TemplateView):
     template_name = "games/leaderboard.html"
@@ -57,6 +66,7 @@ class LeaderboardView(TemplateView):
         context["nim_leaders"] = stats.match_win_leaders(Match.Game.NIM)
         context["battleship_leaders"] = stats.match_win_leaders(Match.Game.BATTLESHIP)
         context["stratego_leaders"] = stats.match_win_leaders(Match.Game.STRATEGO)
+        context["morris_leaders"] = stats.match_win_leaders(Match.Game.NINE_MENS_MORRIS)
         context["hangman_leaders"] = stats.hangman_leaders()
         context["game2048_leaders"] = stats.game_2048_leaders()
         context["snake_leaders"] = stats.snake_leaders()
@@ -848,6 +858,148 @@ class StrategoMoveView(LoginRequiredMixin, View):
                 match.turn = opponent
             match.save()
         return redirect("stratego-match", pk=pk)
+
+
+class NineMensMorrisChallengeView(LoginRequiredMixin, View):
+    def post(self, request, username):
+        opponent = get_object_or_404(User, username=username)
+        if opponent == request.user:
+            messages.error(request, "You can't challenge yourself.")
+            return redirect("profile", username=username)
+        match = Match.objects.create(
+            game=Match.Game.NINE_MENS_MORRIS,
+            player1=request.user,
+            player2=opponent,
+            state=nine_mens_morris.initial_state(),
+            turn=request.user,
+        )
+        return redirect("morris-match", pk=match.pk)
+
+
+class NineMensMorrisMatchView(LoginRequiredMixin, UserPassesTestMixin, DetailView):
+    template_name = "games/nine_mens_morris_match.html"
+    context_object_name = "match"
+
+    def test_func(self):
+        match = self.get_object()
+        return self.request.user.id in (match.player1_id, match.player2_id)
+
+    def get_queryset(self):
+        return Match.objects.filter(game=Match.Game.NINE_MENS_MORRIS).select_related(
+            "player1", "player2", "winner"
+        )
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        match = context["match"]
+        my_id = str(self.request.user.id)
+        opponent = match.opponent_of(self.request.user)
+        opponent_id = str(opponent.id)
+        is_your_turn = match.status == Match.Status.ACTIVE and match.turn_id == self.request.user.id
+        context["opponent"] = opponent
+        context["is_your_turn"] = is_your_turn
+        context["your_to_place"] = nine_mens_morris.to_place_count(match.state, my_id)
+        context["opponent_to_place"] = nine_mens_morris.to_place_count(match.state, opponent_id)
+
+        pending_removal = match.state.get("pending_removal") == my_id
+        if is_your_turn and pending_removal:
+            mode = "removal"
+        elif is_your_turn and context["your_to_place"] > 0:
+            mode = "placement"
+        elif is_your_turn:
+            mode = "movement"
+        else:
+            mode = "readonly"
+        context["mode"] = mode
+
+        removable = nine_mens_morris.removable_points(match.state, opponent_id) if mode == "removal" else set()
+        points_state = match.state["points"]
+        context["points"] = [
+            {
+                "id": p,
+                "left": nine_mens_morris.POINT_COORDS[p][0] * MORRIS_SCALE + MORRIS_MARGIN - MORRIS_POINT_SIZE // 2,
+                "top": nine_mens_morris.POINT_COORDS[p][1] * MORRIS_SCALE + MORRIS_MARGIN - MORRIS_POINT_SIZE // 2,
+                "is_yours": points_state[p] == my_id,
+                "is_opponents": points_state[p] == opponent_id,
+                "empty": points_state[p] is None,
+                "removable": p in removable,
+            }
+            for p in range(nine_mens_morris.NUM_POINTS)
+        ]
+
+        board_lines = []
+        seen_edges = set()
+        for a in range(nine_mens_morris.NUM_POINTS):
+            for b in nine_mens_morris.ADJACENCY[a]:
+                edge = frozenset((a, b))
+                if edge in seen_edges:
+                    continue
+                seen_edges.add(edge)
+                ax, ay = nine_mens_morris.POINT_COORDS[a]
+                bx, by = nine_mens_morris.POINT_COORDS[b]
+                x1, y1 = ax * MORRIS_SCALE + MORRIS_MARGIN, ay * MORRIS_SCALE + MORRIS_MARGIN
+                x2, y2 = bx * MORRIS_SCALE + MORRIS_MARGIN, by * MORRIS_SCALE + MORRIS_MARGIN
+                board_lines.append(
+                    {
+                        "left": min(x1, x2),
+                        "top": min(y1, y2),
+                        "width": abs(x2 - x1) or 2,
+                        "height": abs(y2 - y1) or 2,
+                    }
+                )
+        context["board_lines"] = board_lines
+        context["board_size"] = 6 * MORRIS_SCALE + 2 * MORRIS_MARGIN
+        return context
+
+
+class NineMensMorrisMoveView(LoginRequiredMixin, View):
+    def post(self, request, pk):
+        with transaction.atomic():
+            match = get_object_or_404(
+                Match.objects.select_for_update(), pk=pk, game=Match.Game.NINE_MENS_MORRIS
+            )
+            if request.user.id not in (match.player1_id, match.player2_id):
+                raise Http404
+            if match.status != Match.Status.ACTIVE or match.turn_id != request.user.id:
+                return redirect("morris-match", pk=pk)
+
+            mover_id = str(request.user.id)
+            opponent = match.opponent_of(request.user)
+            opponent_id = str(opponent.id)
+
+            if match.state.get("pending_removal") == mover_id:
+                try:
+                    remove_point = int(request.POST.get("remove_point"))
+                except (TypeError, ValueError):
+                    return redirect("morris-match", pk=pk)
+                try:
+                    match.state = nine_mens_morris.apply_removal(match.state, mover_id, opponent_id, remove_point)
+                except InvalidMove as e:
+                    messages.error(request, str(e))
+                    return redirect("morris-match", pk=pk)
+            else:
+                try:
+                    to_point = int(request.POST.get("to_point"))
+                    from_point_raw = request.POST.get("from_point")
+                    from_point = int(from_point_raw) if from_point_raw else None
+                except (TypeError, ValueError):
+                    return redirect("morris-match", pk=pk)
+                try:
+                    match.state = nine_mens_morris.apply_move(match.state, mover_id, from_point, to_point)
+                except InvalidMove as e:
+                    messages.error(request, str(e))
+                    return redirect("morris-match", pk=pk)
+
+            if match.state.get("pending_removal") == mover_id:
+                pass  # formed a mill just now - same player goes again for the removal
+            elif nine_mens_morris.is_game_over(match.state, opponent_id):
+                match.status = Match.Status.FINISHED
+                match.turn = None
+                match.winner = request.user
+            else:
+                match.turn = opponent
+            match.save()
+        return redirect("morris-match", pk=pk)
 
 
 class HangmanNewView(LoginRequiredMixin, View):

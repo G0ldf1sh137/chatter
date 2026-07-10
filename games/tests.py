@@ -10,6 +10,7 @@ from .logic import (
     hangman,
     mastermind,
     nim,
+    nine_mens_morris,
     othello,
     rock_paper_scissors,
     stratego,
@@ -2163,6 +2164,311 @@ class StrategoMatchTests(TestCase):
         cell = response.context["board_cells"][5][5]
         self.assertTrue(cell["opponent_present"])
         self.assertIsNone(cell["opponent_rank"])
+
+
+class NineMensMorrisLogicTests(TestCase):
+    def test_initial_state_has_empty_board(self):
+        state = nine_mens_morris.initial_state()
+        self.assertEqual(state["points"], [None] * 24)
+        self.assertIsNone(state["pending_removal"])
+
+    def test_apply_move_placement_decrements_to_place(self):
+        state = nine_mens_morris.apply_move(nine_mens_morris.initial_state(), "u1", None, 5)
+        self.assertEqual(state["points"][5], "u1")
+        self.assertEqual(nine_mens_morris.to_place_count(state, "u1"), 8)
+
+    def test_apply_move_placement_rejects_occupied_point(self):
+        state = nine_mens_morris.apply_move(nine_mens_morris.initial_state(), "u1", None, 5)
+        with self.assertRaises(InvalidMove):
+            nine_mens_morris.apply_move(state, "u2", None, 5)
+
+    def test_apply_move_rejects_from_point_while_still_placing(self):
+        with self.assertRaises(InvalidMove):
+            nine_mens_morris.apply_move(nine_mens_morris.initial_state(), "u1", 0, 5)
+
+    def test_apply_move_does_not_mutate_original_state(self):
+        original = nine_mens_morris.initial_state()
+        nine_mens_morris.apply_move(original, "u1", None, 5)
+        self.assertEqual(original["points"], [None] * 24)
+
+    def test_apply_move_rejects_placement_once_fully_placed(self):
+        state = {"points": [None] * 24, "to_place": {"u1": 0}, "pending_removal": None}
+        with self.assertRaises(InvalidMove):
+            nine_mens_morris.apply_move(state, "u1", None, 5)
+
+    def test_slide_requires_adjacency_with_more_than_three_pieces(self):
+        points = [None] * 24
+        points[0], points[10], points[20], points[15] = "u1", "u1", "u1", "u1"
+        state = {"points": points, "to_place": {"u1": 0}, "pending_removal": None}
+        with self.assertRaises(InvalidMove):
+            nine_mens_morris.apply_move(state, "u1", 0, 3)
+
+    def test_slide_to_adjacent_point_succeeds(self):
+        points = [None] * 24
+        points[0], points[10], points[20], points[15] = "u1", "u1", "u1", "u1"
+        state = {"points": points, "to_place": {"u1": 0}, "pending_removal": None}
+        new_state = nine_mens_morris.apply_move(state, "u1", 0, 1)
+        self.assertIsNone(new_state["points"][0])
+        self.assertEqual(new_state["points"][1], "u1")
+
+    def test_flying_allows_non_adjacent_destination_at_three_pieces(self):
+        points = [None] * 24
+        points[0], points[10], points[20] = "u1", "u1", "u1"
+        state = {"points": points, "to_place": {"u1": 0}, "pending_removal": None}
+        new_state = nine_mens_morris.apply_move(state, "u1", 0, 15)
+        self.assertEqual(new_state["points"][15], "u1")
+
+    def test_slide_rejects_occupied_destination(self):
+        points = [None] * 24
+        points[0], points[1], points[10], points[15] = "u1", "u2", "u1", "u1"
+        state = {"points": points, "to_place": {"u1": 0}, "pending_removal": None}
+        with self.assertRaises(InvalidMove):
+            nine_mens_morris.apply_move(state, "u1", 0, 1)
+
+    def test_slide_rejects_moving_someone_elses_piece(self):
+        points = [None] * 24
+        points[0], points[10], points[20], points[15] = "u2", "u1", "u1", "u1"
+        state = {"points": points, "to_place": {"u1": 0}, "pending_removal": None}
+        with self.assertRaises(InvalidMove):
+            nine_mens_morris.apply_move(state, "u1", 0, 1)
+
+    def test_forming_a_mill_sets_pending_removal(self):
+        points = [None] * 24
+        points[0], points[2], points[9], points[15] = "u1", "u1", "u1", "u1"
+        state = {"points": points, "to_place": {"u1": 0}, "pending_removal": None}
+        new_state = nine_mens_morris.apply_move(state, "u1", 9, 1)
+        self.assertEqual(new_state["pending_removal"], "u1")
+
+    def test_no_mill_leaves_pending_removal_none(self):
+        points = [None] * 24
+        points[0], points[10], points[20], points[15] = "u1", "u1", "u1", "u1"
+        state = {"points": points, "to_place": {"u1": 0}, "pending_removal": None}
+        new_state = nine_mens_morris.apply_move(state, "u1", 0, 1)
+        self.assertIsNone(new_state["pending_removal"])
+
+    def test_removable_points_excludes_mill_pieces_unless_all_protected(self):
+        points = [None] * 24
+        points[0], points[1], points[2], points[5] = "u2", "u2", "u2", "u2"
+        state = {"points": points, "to_place": {}, "pending_removal": "u1"}
+        self.assertEqual(nine_mens_morris.removable_points(state, "u2"), {5})
+
+    def test_removable_points_allows_all_when_every_piece_is_protected(self):
+        points = [None] * 24
+        points[0], points[1], points[2] = "u2", "u2", "u2"
+        state = {"points": points, "to_place": {}, "pending_removal": "u1"}
+        self.assertEqual(nine_mens_morris.removable_points(state, "u2"), {0, 1, 2})
+
+    def test_apply_removal_rejects_when_not_pending(self):
+        points = [None] * 24
+        points[5] = "u2"
+        state = {"points": points, "to_place": {}, "pending_removal": None}
+        with self.assertRaises(InvalidMove):
+            nine_mens_morris.apply_removal(state, "u1", "u2", 5)
+
+    def test_apply_removal_rejects_removing_own_piece(self):
+        points = [None] * 24
+        points[5] = "u1"
+        state = {"points": points, "to_place": {}, "pending_removal": "u1"}
+        with self.assertRaises(InvalidMove):
+            nine_mens_morris.apply_removal(state, "u1", "u2", 5)
+
+    def test_apply_removal_rejects_protected_piece(self):
+        points = [None] * 24
+        points[0], points[1], points[2], points[5] = "u2", "u2", "u2", "u2"
+        state = {"points": points, "to_place": {}, "pending_removal": "u1"}
+        with self.assertRaises(InvalidMove):
+            nine_mens_morris.apply_removal(state, "u1", "u2", 0)
+
+    def test_apply_removal_clears_pending_removal_and_removes_piece(self):
+        points = [None] * 24
+        points[0], points[1], points[2], points[5] = "u2", "u2", "u2", "u2"
+        state = {"points": points, "to_place": {}, "pending_removal": "u1"}
+        new_state = nine_mens_morris.apply_removal(state, "u1", "u2", 5)
+        self.assertIsNone(new_state["points"][5])
+        self.assertIsNone(new_state["pending_removal"])
+
+    def test_is_defeated_by_piece_count(self):
+        points = [None] * 24
+        points[0], points[1] = "u1", "u1"
+        state = {"points": points, "to_place": {"u1": 0}, "pending_removal": None}
+        self.assertTrue(nine_mens_morris.is_defeated_by_piece_count(state, "u1"))
+
+    def test_not_defeated_while_still_placing(self):
+        points = [None] * 24
+        points[0], points[1] = "u1", "u1"
+        state = {"points": points, "to_place": {"u1": 7}, "pending_removal": None}
+        self.assertFalse(nine_mens_morris.is_defeated_by_piece_count(state, "u1"))
+
+    def test_has_legal_move_false_when_completely_blocked(self):
+        points = [None] * 24
+        points[0], points[7], points[1] = "u1", "u2", "u2"
+        state = {"points": points, "to_place": {"u1": 0}, "pending_removal": None}
+        self.assertFalse(nine_mens_morris.has_legal_move(state, "u1"))
+
+    def test_has_legal_move_true_when_flying_and_board_not_full(self):
+        points = [None] * 24
+        points[0], points[10], points[20] = "u1", "u1", "u1"
+        state = {"points": points, "to_place": {"u1": 0}, "pending_removal": None}
+        self.assertTrue(nine_mens_morris.has_legal_move(state, "u1"))
+
+    def test_is_game_over_true_when_opponent_has_no_legal_move(self):
+        points = [None] * 24
+        points[0], points[7], points[1] = "u2", "u1", "u1"
+        state = {"points": points, "to_place": {"u2": 0}, "pending_removal": None}
+        self.assertTrue(nine_mens_morris.is_game_over(state, "u2"))
+
+
+class NineMensMorrisMatchTests(TestCase):
+    def setUp(self):
+        self.alice = make_user("alice")
+        self.bob = make_user("bob")
+
+    def test_challenge_creates_active_match_with_player1_first(self):
+        self.client.force_login(self.alice)
+        response = self.client.post(reverse("morris-challenge", args=["bob"]))
+        match = Match.objects.get()
+        self.assertRedirects(response, reverse("morris-match", args=[match.pk]))
+        self.assertEqual(match.game, Match.Game.NINE_MENS_MORRIS)
+        self.assertEqual(match.turn, self.alice)
+        self.assertEqual(match.status, Match.Status.ACTIVE)
+
+    def test_cannot_challenge_self(self):
+        self.client.force_login(self.alice)
+        self.client.post(reverse("morris-challenge", args=["alice"]))
+        self.assertEqual(Match.objects.count(), 0)
+
+    def test_non_participant_cannot_view_match(self):
+        self.match = Match.objects.create(
+            game=Match.Game.NINE_MENS_MORRIS, player1=self.alice, player2=self.bob,
+            state=nine_mens_morris.initial_state(), turn=self.alice,
+        )
+        carol = make_user("carol")
+        self.client.force_login(carol)
+        response = self.client.get(reverse("morris-match", args=[self.match.pk]))
+        self.assertEqual(response.status_code, 403)
+
+    def test_placement_switches_turn_to_opponent(self):
+        self.match = Match.objects.create(
+            game=Match.Game.NINE_MENS_MORRIS, player1=self.alice, player2=self.bob,
+            state=nine_mens_morris.initial_state(), turn=self.alice,
+        )
+        self.client.force_login(self.alice)
+        self.client.post(reverse("morris-move", args=[self.match.pk]), {"to_point": 0})
+        self.match.refresh_from_db()
+        self.assertEqual(self.match.state["points"][0], str(self.alice.id))
+        self.assertEqual(self.match.turn, self.bob)
+
+    def test_move_by_wrong_player_is_ignored(self):
+        self.match = Match.objects.create(
+            game=Match.Game.NINE_MENS_MORRIS, player1=self.alice, player2=self.bob,
+            state=nine_mens_morris.initial_state(), turn=self.alice,
+        )
+        self.client.force_login(self.bob)
+        self.client.post(reverse("morris-move", args=[self.match.pk]), {"to_point": 0})
+        self.match.refresh_from_db()
+        self.assertIsNone(self.match.state["points"][0])
+        self.assertEqual(self.match.turn, self.alice)
+
+    def test_forming_a_mill_keeps_turn_with_mover_pending_removal(self):
+        points = [None] * 24
+        points[0] = str(self.alice.id)
+        points[2] = str(self.alice.id)
+        points[9] = str(self.alice.id)
+        points[15] = str(self.alice.id)
+        points[20] = str(self.bob.id)
+        state = {
+            "points": points,
+            "to_place": {str(self.alice.id): 0, str(self.bob.id): 0},
+            "pending_removal": None,
+        }
+        self.match = Match.objects.create(
+            game=Match.Game.NINE_MENS_MORRIS, player1=self.alice, player2=self.bob, state=state, turn=self.alice,
+        )
+        self.client.force_login(self.alice)
+        self.client.post(reverse("morris-move", args=[self.match.pk]), {"from_point": 9, "to_point": 1})
+        self.match.refresh_from_db()
+        self.assertEqual(self.match.state["pending_removal"], str(self.alice.id))
+        self.assertEqual(self.match.turn, self.alice)
+        self.assertEqual(self.match.status, Match.Status.ACTIVE)
+
+    def test_removal_after_mill_switches_turn(self):
+        # Bob's 20/21/22 form a mill (all protected) plus one unprotected
+        # piece at 10 - removing the unprotected one leaves bob with 3
+        # pieces, so the game continues and the turn just switches.
+        points = [None] * 24
+        points[0] = str(self.alice.id)
+        points[1] = str(self.alice.id)
+        points[2] = str(self.alice.id)
+        points[20] = str(self.bob.id)
+        points[21] = str(self.bob.id)
+        points[22] = str(self.bob.id)
+        points[10] = str(self.bob.id)
+        state = {
+            "points": points,
+            "to_place": {str(self.alice.id): 0, str(self.bob.id): 0},
+            "pending_removal": str(self.alice.id),
+        }
+        self.match = Match.objects.create(
+            game=Match.Game.NINE_MENS_MORRIS, player1=self.alice, player2=self.bob, state=state, turn=self.alice,
+        )
+        self.client.force_login(self.alice)
+        self.client.post(reverse("morris-move", args=[self.match.pk]), {"remove_point": 10})
+        self.match.refresh_from_db()
+        self.assertIsNone(self.match.state["points"][10])
+        self.assertIsNone(self.match.state["pending_removal"])
+        self.assertEqual(self.match.status, Match.Status.ACTIVE)
+        self.assertEqual(self.match.turn, self.bob)
+
+    def test_invalid_removal_of_protected_piece_shows_an_error(self):
+        points = [None] * 24
+        points[0] = str(self.alice.id)
+        points[1] = str(self.alice.id)
+        points[2] = str(self.alice.id)
+        points[20] = str(self.bob.id)
+        points[21] = str(self.bob.id)
+        points[22] = str(self.bob.id)
+        points[10] = str(self.bob.id)
+        state = {
+            "points": points,
+            "to_place": {str(self.alice.id): 0, str(self.bob.id): 0},
+            "pending_removal": str(self.alice.id),
+        }
+        self.match = Match.objects.create(
+            game=Match.Game.NINE_MENS_MORRIS, player1=self.alice, player2=self.bob, state=state, turn=self.alice,
+        )
+        self.client.force_login(self.alice)
+        response = self.client.post(
+            reverse("morris-move", args=[self.match.pk]), {"remove_point": 20}, follow=True
+        )
+        self.match.refresh_from_db()
+        self.assertEqual(self.match.state["pending_removal"], str(self.alice.id))
+        self.assertContains(response, "protected by a mill")
+
+    def test_removal_bringing_opponent_below_three_wins_the_match(self):
+        # Bob's only 3 pieces happen to form a mill - since all of his
+        # pieces are protected, the "all-protected" exception makes any of
+        # them removable anyway, and removing one drops him below 3.
+        points = [None] * 24
+        points[0] = str(self.alice.id)
+        points[1] = str(self.alice.id)
+        points[2] = str(self.alice.id)
+        points[20] = str(self.bob.id)
+        points[21] = str(self.bob.id)
+        points[22] = str(self.bob.id)
+        state = {
+            "points": points,
+            "to_place": {str(self.alice.id): 0, str(self.bob.id): 0},
+            "pending_removal": str(self.alice.id),
+        }
+        self.match = Match.objects.create(
+            game=Match.Game.NINE_MENS_MORRIS, player1=self.alice, player2=self.bob, state=state, turn=self.alice,
+        )
+        self.client.force_login(self.alice)
+        self.client.post(reverse("morris-move", args=[self.match.pk]), {"remove_point": 20})
+        self.match.refresh_from_db()
+        self.assertEqual(self.match.status, Match.Status.FINISHED)
+        self.assertEqual(self.match.winner, self.alice)
+        self.assertIsNone(self.match.turn)
 
 
 class SnakeResultTests(TestCase):

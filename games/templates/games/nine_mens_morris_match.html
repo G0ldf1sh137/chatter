@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Nine Men's Morris — Chatter{% endblock %}
+
+{% block content %}
+    <div class="mx-auto max-w-sm rounded-2xl border border-border bg-surface p-6 shadow-sm">
+        <div class="mb-4 flex items-center justify-between">
+            <div class="flex items-center gap-2">
+                {% include "_avatar.html" with avatar_user=match.player1 %}
+                <span class="text-sm font-medium">{{ match.player1.username }}</span>
+            </div>
+            <span class="text-sm text-muted">vs</span>
+            <div class="flex items-center gap-2">
+                <span class="text-sm font-medium">{{ match.player2.username }}</span>
+                {% include "_avatar.html" with avatar_user=match.player2 %}
+            </div>
+        </div>
+
+        {% if match.status == "finished" %}
+            <p class="mb-4 text-center font-semibold text-accent">{{ match.winner.username }} won!</p>
+        {% elif mode == "removal" %}
+            <p class="mb-4 text-center font-semibold text-accent">You formed a mill! Remove one of {{ opponent.username }}'s pieces.</p>
+        {% elif mode == "placement" %}
+            <p class="mb-4 text-center font-semibold text-accent">Your turn &mdash; place a piece ({{ your_to_place }} left)</p>
+        {% elif mode == "movement" %}
+            <p class="mb-4 text-center font-semibold text-accent">Your turn &mdash; click a piece, then click where to move it</p>
+        {% else %}
+            <p class="mb-4 text-center text-muted">Waiting on {{ opponent.username }}</p>
+        {% endif %}
+
+        <div id="board" class="relative mx-auto" style="width: {{ board_size }}px; height: {{ board_size }}px;">
+            {% for line in board_lines %}
+                <div class="absolute bg-border" style="left: {{ line.left }}px; top: {{ line.top }}px; width: {{ line.width }}px; height: {{ line.height }}px;"></div>
+            {% endfor %}
+
+            {% for point in points %}
+                {% if mode == "placement" and point.empty %}
+                    <form method="post" action="{% url 'morris-move' match.pk %}" class="contents">
+                        {% csrf_token %}
+                        <input type="hidden" name="to_point" value="{{ point.id }}">
+                        <button
+                            type="submit"
+                            aria-label="Place at point {{ point.id }}"
+                            class="absolute mt-0 rounded-full border-2 border-border bg-surface p-0 transition-colors hover:bg-border/60"
+                            style="left: {{ point.left }}px; top: {{ point.top }}px; width: 22px; height: 22px;"
+                        ></button>
+                    </form>
+                {% elif mode == "removal" and point.removable %}
+                    <form method="post" action="{% url 'morris-move' match.pk %}" class="contents">
+                        {% csrf_token %}
+                        <input type="hidden" name="remove_point" value="{{ point.id }}">
+                        <button
+                            type="submit"
+                            aria-label="Remove piece at point {{ point.id }}"
+                            class="absolute mt-0 rounded-full border-2 border-downvote bg-downvote/40 p-0 transition-colors hover:bg-downvote/70"
+                            style="left: {{ point.left }}px; top: {{ point.top }}px; width: 22px; height: 22px;"
+                        ></button>
+                    </form>
+                {% elif mode == "movement" %}
+                    <button
+                        type="button"
+                        data-point="{{ point.id }}"
+                        class="absolute mt-0 rounded-full p-0 transition-colors {% if point.is_yours %}bg-accent hover:brightness-110{% elif point.is_opponents %}bg-fg{% else %}border-2 border-border bg-surface hover:bg-border/60{% endif %}"
+                        style="left: {{ point.left }}px; top: {{ point.top }}px; width: 22px; height: 22px;"
+                    ></button>
+                {% else %}
+                    <div
+                        class="absolute rounded-full {% if point.is_yours %}bg-accent{% elif point.is_opponents %}bg-fg{% else %}border-2 border-border bg-surface{% endif %}"
+                        style="left: {{ point.left }}px; top: {{ point.top }}px; width: 22px; height: 22px;"
+                    ></div>
+                {% endif %}
+            {% endfor %}
+        </div>
+
+        {% if mode == "movement" %}
+            <form id="move-form" method="post" action="{% url 'morris-move' match.pk %}">
+                {% csrf_token %}
+                <input type="hidden" id="from_point" name="from_point">
+                <input type="hidden" id="to_point" name="to_point">
+            </form>
+            <script src="{% static 'games/js/nine_mens_morris.js' %}"></script>
+        {% endif %}
+
+        <p class="mt-3 text-center text-xs text-muted">Pieces left to place &mdash; you: {{ your_to_place }}, {{ opponent.username }}: {{ opponent_to_place }}</p>
+    </div>
+    {% include "games/_match_poll.html" %}
+{% endblock %}
