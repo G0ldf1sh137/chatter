@@ -49,6 +49,10 @@ MAX_DOODLE_SCORE = 1_000_000
 # natural ceiling either.
 MAX_FLAPPY_SCORE = 10_000
 
+# Generous ceiling well above any realistic Tetris score (the highest
+# possible per-drop bonus is an 800-point Tetris at a high level).
+MAX_TETRIS_SCORE = 10_000_000
+
 # Pixel layout for the Nine Men's Morris board: nine_mens_morris.POINT_COORDS
 # is a 0-6 unit grid: MORRIS_SCALE converts a unit to pixels, MORRIS_MARGIN
 # leaves room for the outermost points' circles, MORRIS_POINT_SIZE is the
@@ -80,6 +84,7 @@ class LeaderboardView(TemplateView):
         context["wordle_leaders"] = stats.wordle_leaders()
         context["mastermind_leaders"] = stats.mastermind_leaders()
         context["flappy_leaders"] = stats.flappy_leaders()
+        context["tetris_leaders"] = stats.tetris_leaders()
         return context
 
 
@@ -1247,6 +1252,27 @@ class FlappyBirdFinishView(LoginRequiredMixin, View):
 
         SinglePlayerResult.objects.create(
             player=request.user, game=SinglePlayerResult.Game.FLAPPY_BIRD, won=False, score=score
+        )
+        return JsonResponse({"ok": True})
+
+
+class TetrisView(LoginRequiredMixin, TemplateView):
+    template_name = "games/tetris.html"
+
+
+class TetrisFinishView(LoginRequiredMixin, View):
+    def post(self, request):
+        try:
+            data = json.loads(request.body)
+            score = int(data["score"])
+        except (ValueError, KeyError, TypeError, json.JSONDecodeError):
+            return JsonResponse({"error": "invalid payload"}, status=400)
+
+        if not (0 <= score <= MAX_TETRIS_SCORE):
+            return JsonResponse({"error": "invalid score"}, status=400)
+
+        SinglePlayerResult.objects.create(
+            player=request.user, game=SinglePlayerResult.Game.TETRIS, won=False, score=score
         )
         return JsonResponse({"ok": True})
 

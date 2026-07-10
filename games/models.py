@@ -67,6 +67,7 @@ class SinglePlayerResult(models.Model):
         WORDLE = "wordle", "Wordle"
         MASTERMIND = "mmind", "Mastermind"
         FLAPPY_BIRD = "flappy", "Flappy Bird"
+        TETRIS = "tetris", "Tetris"
 
     player = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="game_results")
     game = models.CharField(max_length=8, choices=Game.choices)

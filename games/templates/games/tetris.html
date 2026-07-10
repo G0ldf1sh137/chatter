@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Tetris — Chatter{% endblock %}
+
+{% block content %}
+    <div class="mx-auto max-w-sm rounded-2xl border border-border bg-surface p-6 shadow-sm">
+        <div class="mb-4 flex items-center justify-between">
+            <div class="flex gap-4">
+                <div>
+                    <p class="text-xs text-muted">Score</p>
+                    <p id="score" class="text-2xl font-bold">0</p>
+                </div>
+                <div>
+                    <p class="text-xs text-muted">Level</p>
+                    <p id="level" class="text-2xl font-bold">1</p>
+                </div>
+            </div>
+            <div class="text-center">
+                <p class="mb-1 text-xs text-muted">Hold</p>
+                <div id="hold-piece" class="mx-auto grid w-12 grid-cols-4 gap-0.5"></div>
+            </div>
+            <div class="text-center">
+                <p class="mb-1 text-xs text-muted">Next</p>
+                <div id="next-piece" class="mx-auto grid w-12 grid-cols-4 gap-0.5"></div>
+            </div>
+        </div>
+        <div
+            id="board"
+            class="grid grid-cols-10 gap-px rounded-xl bg-surface-hover p-2"
+            data-finish-url="{% url 'tetris-finish' %}"
+            data-csrf-token="{{ csrf_token }}"
+        ></div>
+        <div class="mt-4 flex items-center justify-center gap-2">
+            <button type="button" id="btn-left" aria-label="Move left" class="mt-0 rounded-full border border-border bg-transparent px-4 py-2 text-fg transition-colors hover:bg-surface-hover">&larr;</button>
+            <button type="button" id="btn-rotate" aria-label="Rotate" class="mt-0 rounded-full border border-border bg-transparent px-4 py-2 text-fg transition-colors hover:bg-surface-hover">&#8635;</button>
+            <button type="button" id="btn-right" aria-label="Move right" class="mt-0 rounded-full border border-border bg-transparent px-4 py-2 text-fg transition-colors hover:bg-surface-hover">&rarr;</button>
+            <button type="button" id="btn-down" aria-label="Soft drop" class="mt-0 rounded-full border border-border bg-transparent px-4 py-2 text-fg transition-colors hover:bg-surface-hover">&darr;</button>
+            <button type="button" id="btn-drop" aria-label="Hard drop" class="mt-0 rounded-full border border-border bg-transparent px-4 py-2 text-sm text-fg transition-colors hover:bg-surface-hover">Drop</button>
+            <button type="button" id="btn-hold" aria-label="Hold" class="mt-0 rounded-full border border-border bg-transparent px-4 py-2 text-sm text-fg transition-colors hover:bg-surface-hover">Hold</button>
+        </div>
+        <button type="button" id="new-game" class="mt-4 w-full rounded-full border border-border bg-transparent px-4 py-1.5 text-sm text-fg transition-colors hover:bg-surface-hover">New game</button>
+        <p id="game-message" class="mt-4 text-center font-semibold text-accent hidden"></p>
+        <p class="mt-4 text-center text-xs text-muted">Arrow keys to move, Z/X or the &#8635; button to rotate counter/clockwise, C or Hold to hold a piece, space or Drop to hard-drop.</p>
+    </div>
+    <script src="{% static 'games/js/tetris.js' %}"></script>
+{% endblock %}

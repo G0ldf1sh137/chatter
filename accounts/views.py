@@ -136,6 +136,7 @@ class ProfileView(DetailView):
         context["wordle_high_score"] = game_stats.wordle_high_score(profile_user)
         context["mastermind_high_score"] = game_stats.mastermind_high_score(profile_user)
         context["flappy_high_score"] = game_stats.flappy_high_score(profile_user)
+        context["tetris_high_score"] = game_stats.tetris_high_score(profile_user)
         return context
 
 
