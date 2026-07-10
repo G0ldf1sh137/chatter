@@ -1,5 +1,7 @@
 import shutil
 import tempfile
+from datetime import datetime
+from datetime import timezone as dt_timezone
 
 from allauth.socialaccount.models import SocialAccount, SocialLogin
 from django.contrib.auth.models import User
@@ -369,7 +371,7 @@ class ProfileEditTests(TestCase):
         avatar = SimpleUploadedFile("avatar.gif", TINY_GIF, content_type="image/gif")
 
         response = self.client.post(
-            reverse("profile-edit"), {"username": "dave", "bio": "Hello!", "avatar": avatar}
+            reverse("profile-edit"), {"username": "dave", "bio": "Hello!", "avatar": avatar, "timezone": "UTC"}
         )
 
         self.assertRedirects(response, reverse("profile", args=["dave"]))
@@ -382,7 +384,9 @@ class ProfileEditTests(TestCase):
         self.client.force_login(self.user)
         avatar = SimpleUploadedFile("avatar.gif", TINY_GIF, content_type="image/gif")
 
-        response = self.client.post(reverse("profile-edit"), {"username": "dave", "bio": "", "avatar": avatar})
+        response = self.client.post(
+            reverse("profile-edit"), {"username": "dave", "bio": "", "avatar": avatar, "timezone": "UTC"}
+        )
 
         self.assertEqual(response.status_code, 200)
         self.assertFalse(Profile.objects.get(user=self.user).avatar)
@@ -393,7 +397,7 @@ class ProfileEditTests(TestCase):
 
         response = self.client.post(
             reverse("profile-edit"),
-            {"username": "davethegreat", "first_name": "Dave", "last_name": "Grohl", "bio": ""},
+            {"username": "davethegreat", "first_name": "Dave", "last_name": "Grohl", "bio": "", "timezone": "UTC"},
         )
 
         self.assertRedirects(response, reverse("profile", args=["davethegreat"]))
@@ -406,7 +410,7 @@ class ProfileEditTests(TestCase):
         User.objects.create_user(username="erin", password="correct-horse-battery-staple")
         self.client.force_login(self.user)
 
-        response = self.client.post(reverse("profile-edit"), {"username": "erin", "bio": ""})
+        response = self.client.post(reverse("profile-edit"), {"username": "erin", "bio": "", "timezone": "UTC"})
 
         self.assertEqual(response.status_code, 200)
         self.assertFormError(
@@ -424,7 +428,7 @@ class ProfileEditTests(TestCase):
     def test_blank_username_rejected(self):
         self.client.force_login(self.user)
 
-        response = self.client.post(reverse("profile-edit"), {"username": "", "bio": ""})
+        response = self.client.post(reverse("profile-edit"), {"username": "", "bio": "", "timezone": "UTC"})
 
         self.assertEqual(response.status_code, 200)
         self.assertFormError(response.context["user_form"], "username", "This field is required.")
@@ -434,7 +438,9 @@ class ProfileEditTests(TestCase):
     def test_username_with_at_sign_rejected(self):
         self.client.force_login(self.user)
 
-        response = self.client.post(reverse("profile-edit"), {"username": "dave@example", "bio": ""})
+        response = self.client.post(
+            reverse("profile-edit"), {"username": "dave@example", "bio": "", "timezone": "UTC"}
+        )
 
         self.assertEqual(response.status_code, 200)
         self.assertFormError(
@@ -442,6 +448,60 @@ class ProfileEditTests(TestCase):
         )
         self.user.refresh_from_db()
         self.assertEqual(self.user.username, "dave")
+
+
+class UserTimezoneTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(username="dave", password="correct-horse-battery-staple")
+
+    def test_profile_edit_saves_timezone(self):
+        self.client.force_login(self.user)
+
+        response = self.client.post(
+            reverse("profile-edit"), {"username": "dave", "bio": "", "timezone": "America/New_York"}
+        )
+
+        self.assertRedirects(response, reverse("profile", args=["dave"]))
+        self.assertEqual(Profile.objects.get(user=self.user).timezone, "America/New_York")
+
+    def test_invalid_timezone_rejected(self):
+        self.client.force_login(self.user)
+
+        response = self.client.post(
+            reverse("profile-edit"), {"username": "dave", "bio": "", "timezone": "Not/A_Zone"}
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(Profile.objects.get(user=self.user).timezone, "UTC")
+
+    def test_datetimes_render_in_the_viewers_timezone(self):
+        author = User.objects.create_user(username="erin", password="correct-horse-battery-staple")
+        post = Post.objects.create(author=author, body="Hello")
+        # auto_now_add ignores an explicit value passed to create(), so set
+        # a known UTC instant directly via update() instead.
+        utc_instant = datetime(2026, 1, 1, 12, 0, tzinfo=dt_timezone.utc)
+        Post.objects.filter(pk=post.pk).update(created_at=utc_instant)
+
+        profile = Profile.objects.get(user=self.user)
+        profile.timezone = "America/New_York"
+        profile.save(update_fields=["timezone"])
+        self.client.force_login(self.user)
+
+        response = self.client.get(reverse("post-detail", args=[post.pk]))
+
+        # Noon UTC on Jan 1 is 7 a.m. in New York (UTC-5 in January).
+        self.assertContains(response, "7 a.m.")
+        self.assertNotContains(response, "noon")
+
+    def test_anonymous_viewer_sees_utc(self):
+        author = User.objects.create_user(username="erin", password="correct-horse-battery-staple")
+        post = Post.objects.create(author=author, body="Hello")
+        utc_instant = datetime(2026, 1, 1, 12, 0, tzinfo=dt_timezone.utc)
+        Post.objects.filter(pk=post.pk).update(created_at=utc_instant)
+
+        response = self.client.get(reverse("post-detail", args=[post.pk]))
+
+        self.assertContains(response, "noon")
 
 
 class PasswordChangeTests(TestCase):

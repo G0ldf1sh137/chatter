@@ -1,7 +1,10 @@
 import uuid
+import zoneinfo
 
 from django.conf import settings
 from django.db import models
+
+TIMEZONE_CHOICES = sorted((tz, tz) for tz in zoneinfo.available_timezones())
 
 
 class Profile(models.Model):
@@ -10,6 +13,7 @@ class Profile(models.Model):
     bio = models.TextField(blank=True)
     avatar = models.ImageField(upload_to="avatars/", blank=True)
     email_verified = models.BooleanField(default=False)
+    timezone = models.CharField(max_length=64, choices=TIMEZONE_CHOICES, default="UTC")
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):

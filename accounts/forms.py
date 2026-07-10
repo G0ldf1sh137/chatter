@@ -50,7 +50,7 @@ class UserProfileForm(NoAtSignInUsernameMixin, forms.ModelForm):
 class ProfileForm(forms.ModelForm):
     class Meta:
         model = Profile
-        fields = ["bio", "avatar"]
+        fields = ["bio", "avatar", "timezone"]
         widgets = {
             "bio": forms.Textarea(attrs={"rows": 4}),
         }
