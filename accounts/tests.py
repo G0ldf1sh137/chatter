@@ -132,6 +132,11 @@ class RegistrationTests(TestCase):
         self.assertFalse(User.objects.filter(username="bob@example").exists())
         self.assertFormError(response.context["form"], "username", "Usernames can't contain the '@' symbol.")
 
+    def test_username_help_text_does_not_mention_at_sign(self):
+        response = self.client.get(reverse("register"))
+        self.assertContains(response, "Letters, digits and ./+/-/_ only.")
+        self.assertNotContains(response, "@/./+/-/_ only.")
+
     def test_email_is_required(self):
         response = self.client.post(
             reverse("register"),
@@ -448,6 +453,14 @@ class ProfileEditTests(TestCase):
         )
         self.user.refresh_from_db()
         self.assertEqual(self.user.username, "dave")
+
+    def test_username_help_text_does_not_mention_at_sign(self):
+        self.client.force_login(self.user)
+
+        response = self.client.get(reverse("profile-edit"))
+
+        self.assertContains(response, "Letters, digits and ./+/-/_ only.")
+        self.assertNotContains(response, "@/./+/-/_ only.")
 
 
 class UserTimezoneTests(TestCase):

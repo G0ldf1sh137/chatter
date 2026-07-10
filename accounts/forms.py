@@ -10,6 +10,10 @@ class NoAtSignInUsernameMixin:
     # '@' is reserved for referencing a username elsewhere (e.g. @mentions),
     # so it can't be part of the username itself - Django's own username
     # validator otherwise allows it alongside letters/digits/./+/-/_.
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["username"].help_text = "Required. 150 characters or fewer. Letters, digits and ./+/-/_ only."
+
     def clean_username(self):
         username = self.cleaned_data.get("username", "")
         if "@" in username:
