@@ -11,7 +11,7 @@ from django.views import View
 from django.views.generic import DetailView, TemplateView
 
 from . import stats
-from .logic import checkers, connect_four, hangman, othello, rock_paper_scissors, tic_tac_toe, wordle
+from .logic import checkers, connect_four, hangman, mastermind, nim, othello, rock_paper_scissors, tic_tac_toe, wordle
 from .logic.exceptions import InvalidMove
 from .models import Match, SinglePlayerResult
 
@@ -42,11 +42,13 @@ class LeaderboardView(TemplateView):
         context["connect4_leaders"] = stats.match_win_leaders(Match.Game.CONNECT_FOUR)
         context["checkers_leaders"] = stats.match_win_leaders(Match.Game.CHECKERS)
         context["othello_leaders"] = stats.match_win_leaders(Match.Game.OTHELLO)
+        context["nim_leaders"] = stats.match_win_leaders(Match.Game.NIM)
         context["hangman_leaders"] = stats.hangman_leaders()
         context["game2048_leaders"] = stats.game_2048_leaders()
         context["snake_leaders"] = stats.snake_leaders()
         context["doodle_leaders"] = stats.doodle_leaders()
         context["wordle_leaders"] = stats.wordle_leaders()
+        context["mastermind_leaders"] = stats.mastermind_leaders()
         return context
 
 
@@ -464,6 +466,83 @@ class OthelloMoveView(LoginRequiredMixin, View):
         return redirect("othello-match", pk=pk)
 
 
+class NimChallengeView(LoginRequiredMixin, View):
+    def post(self, request, username):
+        opponent = get_object_or_404(User, username=username)
+        if opponent == request.user:
+            messages.error(request, "You can't challenge yourself.")
+            return redirect("profile", username=username)
+        match = Match.objects.create(
+            game=Match.Game.NIM,
+            player1=request.user,
+            player2=opponent,
+            state=nim.initial_state(),
+            turn=request.user,
+        )
+        return redirect("nim-match", pk=match.pk)
+
+
+class NimMatchView(LoginRequiredMixin, UserPassesTestMixin, DetailView):
+    template_name = "games/nim_match.html"
+    context_object_name = "match"
+
+    def test_func(self):
+        match = self.get_object()
+        return self.request.user.id in (match.player1_id, match.player2_id)
+
+    def get_queryset(self):
+        return Match.objects.filter(game=Match.Game.NIM).select_related("player1", "player2", "winner")
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        match = context["match"]
+        is_your_turn = match.status == Match.Status.ACTIVE and match.turn_id == self.request.user.id
+        # Flattened per-stick data (index/remove-count) computed here rather
+        # than in the template - same fix as Othello's board_cells, since
+        # templates can't cleanly do the arithmetic for "clicking the nth
+        # stick removes it and everything to its right" on their own.
+        context["piles"] = [
+            {
+                "index": i,
+                "sticks": [{"remove_count": count - position + 1} for position in range(1, count + 1)],
+            }
+            for i, count in enumerate(match.state["piles"])
+        ]
+        context["is_your_turn"] = is_your_turn
+        context["opponent"] = match.opponent_of(self.request.user)
+        return context
+
+
+class NimMoveView(LoginRequiredMixin, View):
+    def post(self, request, pk):
+        try:
+            pile_index = int(request.POST.get("pile"))
+            count = int(request.POST.get("count"))
+        except (TypeError, ValueError):
+            return redirect("nim-match", pk=pk)
+
+        with transaction.atomic():
+            match = get_object_or_404(Match.objects.select_for_update(), pk=pk, game=Match.Game.NIM)
+            if request.user.id not in (match.player1_id, match.player2_id):
+                raise Http404
+            if match.status != Match.Status.ACTIVE or match.turn_id != request.user.id:
+                return redirect("nim-match", pk=pk)
+
+            try:
+                match.state = nim.apply_move(match.state, pile_index, count)
+            except InvalidMove:
+                return redirect("nim-match", pk=pk)
+
+            if nim.is_game_over(match.state):
+                match.status = Match.Status.FINISHED
+                match.turn = None
+                match.winner = request.user
+            else:
+                match.turn = match.opponent_of(request.user)
+            match.save()
+        return redirect("nim-match", pk=pk)
+
+
 class HangmanNewView(LoginRequiredMixin, View):
     def post(self, request):
         request.session[SESSION_KEY_HANGMAN] = hangman.initial_state()
@@ -618,3 +697,55 @@ class WordleGuessView(LoginRequiredMixin, View):
                     score=(wordle.MAX_GUESSES - len(state["guesses"]) + 1) if status == "won" else 0,
                 )
         return redirect("wordle-play")
+
+
+SESSION_KEY_MASTERMIND = "mastermind_game"
+
+
+class MastermindNewView(LoginRequiredMixin, View):
+    def post(self, request):
+        request.session[SESSION_KEY_MASTERMIND] = mastermind.initial_state()
+        return redirect("mastermind-play")
+
+
+class MastermindPlayView(LoginRequiredMixin, TemplateView):
+    template_name = "games/mastermind_play.html"
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        state = self.request.session.get(SESSION_KEY_MASTERMIND)
+        context["state"] = state
+        context["colors"] = mastermind.COLORS
+        if state:
+            context["status"] = mastermind.game_status(state)
+            context["guesses_left"] = mastermind.MAX_GUESSES - len(state["guesses"])
+            # Django templates can't call range() themselves, so the
+            # black/white peg counts are turned into actual iterable ranges
+            # here rather than in the template - same fix as Othello's
+            # board_cells/Nim's per-stick data.
+            context["guesses_display"] = [
+                {"pegs": row["pegs"], "black_dots": range(row["black"]), "white_dots": range(row["white"])}
+                for row in state["guesses"]
+            ]
+        return context
+
+
+class MastermindGuessView(LoginRequiredMixin, View):
+    def post(self, request):
+        state = request.session.get(SESSION_KEY_MASTERMIND)
+        guess = request.POST.getlist("peg")
+        if state and mastermind.game_status(state) == "playing":
+            try:
+                state = mastermind.apply_guess(state, guess)
+            except InvalidMove:
+                return redirect("mastermind-play")
+            request.session[SESSION_KEY_MASTERMIND] = state
+            status = mastermind.game_status(state)
+            if status in ("won", "lost"):
+                SinglePlayerResult.objects.create(
+                    player=request.user,
+                    game=SinglePlayerResult.Game.MASTERMIND,
+                    won=status == "won",
+                    score=(mastermind.MAX_GUESSES - len(state["guesses"]) + 1) if status == "won" else 0,
+                )
+        return redirect("mastermind-play")

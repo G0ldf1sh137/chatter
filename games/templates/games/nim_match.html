@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+
+{% block title %}Nim — Chatter{% endblock %}
+
+{% block content %}
+    <div class="mx-auto max-w-sm rounded-2xl border border-border bg-surface p-6 shadow-sm">
+        <div class="mb-4 flex items-center justify-between">
+            <div class="flex items-center gap-2">
+                {% include "_avatar.html" with avatar_user=match.player1 %}
+                <span class="text-sm font-medium">{{ match.player1.username }}</span>
+            </div>
+            <span class="text-sm text-muted">vs</span>
+            <div class="flex items-center gap-2">
+                <span class="text-sm font-medium">{{ match.player2.username }}</span>
+                {% include "_avatar.html" with avatar_user=match.player2 %}
+            </div>
+        </div>
+
+        {% if match.status == "finished" %}
+            <p class="mb-4 text-center font-semibold text-accent">{{ match.winner.username }} took the last stick and won!</p>
+        {% elif is_your_turn %}
+            <p class="mb-4 text-center font-semibold text-accent">Your turn — take one or more sticks from a single pile</p>
+        {% else %}
+            <p class="mb-4 text-center text-muted">Waiting on {{ opponent.username }}</p>
+        {% endif %}
+
+        <div class="space-y-3">
+            {% for pile in piles %}
+                <div class="flex flex-wrap items-center gap-1.5">
+                    {% for stick in pile.sticks %}
+                        {% if is_your_turn %}
+                            <form method="post" action="{% url 'nim-move' match.pk %}" class="contents">
+                                {% csrf_token %}
+                                <input type="hidden" name="pile" value="{{ pile.index }}">
+                                <input type="hidden" name="count" value="{{ stick.remove_count }}">
+                                <button
+                                    type="submit"
+                                    aria-label="Take {{ stick.remove_count }} stick{{ stick.remove_count|pluralize }} from pile {{ pile.index|add:1 }}"
+                                    class="mt-0 h-10 w-3 rounded-sm border-none bg-accent transition-colors hover:bg-downvote"
+                                ></button>
+                            </form>
+                        {% else %}
+                            <div class="h-10 w-3 rounded-sm bg-surface-hover"></div>
+                        {% endif %}
+                    {% endfor %}
+                </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% include "games/_match_poll.html" %}
+{% endblock %}

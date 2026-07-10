@@ -3,7 +3,7 @@ from django.test import TestCase
 from django.urls import reverse
 
 from . import stats
-from .logic import checkers, connect_four, hangman, othello, rock_paper_scissors, tic_tac_toe, wordle
+from .logic import checkers, connect_four, hangman, mastermind, nim, othello, rock_paper_scissors, tic_tac_toe, wordle
 from .logic.exceptions import InvalidMove
 from .models import Match, SinglePlayerResult
 
@@ -615,6 +615,110 @@ class WordleSessionTests(TestCase):
     def test_anonymous_cannot_play(self):
         self.client.logout()
         response = self.client.post(reverse("wordle-new"))
+        self.assertEqual(response.status_code, 302)
+
+
+class MastermindLogicTests(TestCase):
+    def test_initial_state_has_secret_of_code_length_and_no_guesses(self):
+        state = mastermind.initial_state()
+        self.assertEqual(len(state["secret"]), mastermind.CODE_LENGTH)
+        self.assertTrue(all(c in mastermind.COLORS for c in state["secret"]))
+        self.assertEqual(state["guesses"], [])
+
+    def test_feedback_all_black_on_exact_match(self):
+        secret = ["red", "green", "blue", "yellow"]
+        black, white = mastermind._feedback(secret, secret)
+        self.assertEqual((black, white), (4, 0))
+
+    def test_feedback_no_overlap_is_zero_zero(self):
+        black, white = mastermind._feedback(["red", "red", "red", "red"], ["blue", "blue", "blue", "blue"])
+        self.assertEqual((black, white), (0, 0))
+
+    def test_feedback_handles_duplicate_colors_correctly(self):
+        # secret has two reds; guess has two reds in different spots plus a
+        # third red - the third can't earn a peg since only 2 reds exist.
+        secret = ["red", "red", "green", "yellow"]
+        guess = ["green", "red", "red", "red"]
+        black, white = mastermind._feedback(secret, guess)
+        self.assertEqual((black, white), (1, 2))
+
+    def test_apply_guess_rejects_wrong_length(self):
+        state = mastermind.initial_state()
+        with self.assertRaises(InvalidMove):
+            mastermind.apply_guess(state, ["red", "green", "blue"])
+
+    def test_apply_guess_rejects_unknown_color(self):
+        state = mastermind.initial_state()
+        with self.assertRaises(InvalidMove):
+            mastermind.apply_guess(state, ["red", "green", "blue", "black"])
+
+    def test_game_status_won_on_all_black(self):
+        secret = ["red", "green", "blue", "yellow"]
+        state = mastermind.apply_guess({"secret": secret, "guesses": []}, secret)
+        self.assertEqual(mastermind.game_status(state), "won")
+
+    def test_game_status_lost_after_max_guesses(self):
+        secret = ["red", "red", "red", "red"]
+        state = {"secret": secret, "guesses": []}
+        for _ in range(mastermind.MAX_GUESSES):
+            state = mastermind.apply_guess(state, ["blue", "blue", "blue", "blue"])
+        self.assertEqual(mastermind.game_status(state), "lost")
+
+    def test_game_status_playing_before_max_guesses(self):
+        secret = ["red", "red", "red", "red"]
+        state = {"secret": secret, "guesses": []}
+        for _ in range(mastermind.MAX_GUESSES - 1):
+            state = mastermind.apply_guess(state, ["blue", "blue", "blue", "blue"])
+        self.assertEqual(mastermind.game_status(state), "playing")
+
+
+class MastermindSessionTests(TestCase):
+    def setUp(self):
+        self.alice = make_user("alice")
+        self.client.force_login(self.alice)
+
+    def test_new_game_stores_state_in_session(self):
+        self.client.post(reverse("mastermind-new"))
+        self.assertIn("mastermind_game", self.client.session)
+
+    def test_winning_guess_records_result_with_guesses_remaining_score(self):
+        self.client.post(reverse("mastermind-new"))
+        secret = self.client.session["mastermind_game"]["secret"]
+        distractor = ["red" if c != "red" else "blue" for c in secret]
+        self.client.post(reverse("mastermind-guess"), {"peg": distractor})
+        self.client.post(reverse("mastermind-guess"), {"peg": distractor})
+        self.client.post(reverse("mastermind-guess"), {"peg": secret})
+        result = SinglePlayerResult.objects.get()
+        self.assertTrue(result.won)
+        self.assertEqual(result.score, mastermind.MAX_GUESSES - 3 + 1)
+
+    def test_exhausting_guesses_records_loss(self):
+        self.client.post(reverse("mastermind-new"))
+        secret = self.client.session["mastermind_game"]["secret"]
+        distractor = ["red" if c != "red" else "blue" for c in secret]
+        for _ in range(mastermind.MAX_GUESSES):
+            self.client.post(reverse("mastermind-guess"), {"peg": distractor})
+        result = SinglePlayerResult.objects.get()
+        self.assertFalse(result.won)
+        self.assertEqual(result.score, 0)
+
+    def test_guessing_after_game_over_does_not_record_twice(self):
+        self.client.post(reverse("mastermind-new"))
+        secret = self.client.session["mastermind_game"]["secret"]
+        self.client.post(reverse("mastermind-guess"), {"peg": secret})
+        distractor = ["red" if c != "red" else "blue" for c in secret]
+        self.client.post(reverse("mastermind-guess"), {"peg": distractor})
+        self.assertEqual(SinglePlayerResult.objects.count(), 1)
+
+    def test_invalid_guess_does_not_consume_a_turn(self):
+        self.client.post(reverse("mastermind-new"))
+        self.client.post(reverse("mastermind-guess"), {"peg": ["red", "green"]})
+        state = self.client.session["mastermind_game"]
+        self.assertEqual(state["guesses"], [])
+
+    def test_anonymous_cannot_play(self):
+        self.client.logout()
+        response = self.client.post(reverse("mastermind-new"))
         self.assertEqual(response.status_code, 302)
 
 
@@ -1317,6 +1421,115 @@ class OthelloMatchTests(TestCase):
         )
         self.client.force_login(self.bob)
         self.client.post(reverse("othello-move", args=[match.pk]), {"row": 0, "col": 0})
+        match.refresh_from_db()
+        self.assertEqual(match.status, Match.Status.FINISHED)
+        self.assertEqual(match.winner, self.bob)
+        self.assertIsNone(match.turn)
+
+
+class NimLogicTests(TestCase):
+    def test_initial_state_has_three_piles(self):
+        state = nim.initial_state()
+        self.assertEqual(state["piles"], [3, 5, 7])
+
+    def test_apply_move_removes_from_one_pile(self):
+        state = nim.apply_move({"piles": [3, 5, 7]}, 1, 2)
+        self.assertEqual(state["piles"], [3, 3, 7])
+
+    def test_apply_move_does_not_mutate_original_state(self):
+        original = {"piles": [3, 5, 7]}
+        nim.apply_move(original, 0, 1)
+        self.assertEqual(original["piles"], [3, 5, 7])
+
+    def test_taking_more_than_the_pile_has_is_invalid(self):
+        with self.assertRaises(InvalidMove):
+            nim.apply_move({"piles": [3, 5, 7]}, 0, 4)
+
+    def test_taking_zero_is_invalid(self):
+        with self.assertRaises(InvalidMove):
+            nim.apply_move({"piles": [3, 5, 7]}, 0, 0)
+
+    def test_pile_index_out_of_range_is_invalid(self):
+        with self.assertRaises(InvalidMove):
+            nim.apply_move({"piles": [3, 5, 7]}, 3, 1)
+
+    def test_is_game_over_false_while_any_pile_has_sticks(self):
+        self.assertFalse(nim.is_game_over({"piles": [0, 0, 1]}))
+
+    def test_is_game_over_true_when_all_piles_empty(self):
+        self.assertTrue(nim.is_game_over({"piles": [0, 0, 0]}))
+
+
+class NimMatchTests(TestCase):
+    def setUp(self):
+        self.alice = make_user("alice")
+        self.bob = make_user("bob")
+
+    def test_challenge_creates_active_match(self):
+        self.client.force_login(self.alice)
+        response = self.client.post(reverse("nim-challenge", args=["bob"]))
+        match = Match.objects.get()
+        self.assertRedirects(response, reverse("nim-match", args=[match.pk]))
+        self.assertEqual(match.game, Match.Game.NIM)
+        self.assertEqual(match.turn, self.alice)
+        self.assertEqual(match.status, Match.Status.ACTIVE)
+
+    def test_cannot_challenge_self(self):
+        self.client.force_login(self.alice)
+        self.client.post(reverse("nim-challenge", args=["alice"]))
+        self.assertEqual(Match.objects.count(), 0)
+
+    def test_non_participant_cannot_view_match(self):
+        match = Match.objects.create(
+            game=Match.Game.NIM, player1=self.alice, player2=self.bob,
+            state=nim.initial_state(), turn=self.alice,
+        )
+        carol = make_user("carol")
+        self.client.force_login(carol)
+        response = self.client.get(reverse("nim-match", args=[match.pk]))
+        self.assertEqual(response.status_code, 403)
+
+    def test_move_by_wrong_player_is_ignored(self):
+        match = Match.objects.create(
+            game=Match.Game.NIM, player1=self.alice, player2=self.bob,
+            state=nim.initial_state(), turn=self.alice,
+        )
+        self.client.force_login(self.bob)
+        self.client.post(reverse("nim-move", args=[match.pk]), {"pile": 0, "count": 1})
+        match.refresh_from_db()
+        self.assertEqual(match.turn, self.alice)
+        self.assertEqual(match.state["piles"], [3, 5, 7])
+
+    def test_illegal_move_is_ignored(self):
+        match = Match.objects.create(
+            game=Match.Game.NIM, player1=self.alice, player2=self.bob,
+            state=nim.initial_state(), turn=self.alice,
+        )
+        self.client.force_login(self.alice)
+        self.client.post(reverse("nim-move", args=[match.pk]), {"pile": 0, "count": 99})
+        match.refresh_from_db()
+        self.assertEqual(match.turn, self.alice)
+        self.assertEqual(match.state["piles"], [3, 5, 7])
+
+    def test_valid_move_switches_turn(self):
+        match = Match.objects.create(
+            game=Match.Game.NIM, player1=self.alice, player2=self.bob,
+            state=nim.initial_state(), turn=self.alice,
+        )
+        self.client.force_login(self.alice)
+        self.client.post(reverse("nim-move", args=[match.pk]), {"pile": 2, "count": 3})
+        match.refresh_from_db()
+        self.assertEqual(match.state["piles"], [3, 5, 4])
+        self.assertEqual(match.turn, self.bob)
+        self.assertEqual(match.status, Match.Status.ACTIVE)
+
+    def test_taking_the_last_stick_wins_the_match(self):
+        match = Match.objects.create(
+            game=Match.Game.NIM, player1=self.alice, player2=self.bob,
+            state={"piles": [0, 0, 1]}, turn=self.bob,
+        )
+        self.client.force_login(self.bob)
+        self.client.post(reverse("nim-move", args=[match.pk]), {"pile": 2, "count": 1})
         match.refresh_from_db()
         self.assertEqual(match.status, Match.Status.FINISHED)
         self.assertEqual(match.winner, self.bob)

@@ -22,6 +22,9 @@ urlpatterns = [
     path("othello/challenge/<str:username>/", views.OthelloChallengeView.as_view(), name="othello-challenge"),
     path("othello/<uuid:pk>/", views.OthelloMatchView.as_view(), name="othello-match"),
     path("othello/<uuid:pk>/move/", views.OthelloMoveView.as_view(), name="othello-move"),
+    path("nim/challenge/<str:username>/", views.NimChallengeView.as_view(), name="nim-challenge"),
+    path("nim/<uuid:pk>/", views.NimMatchView.as_view(), name="nim-match"),
+    path("nim/<uuid:pk>/move/", views.NimMoveView.as_view(), name="nim-move"),
     path("hangman/new/", views.HangmanNewView.as_view(), name="hangman-new"),
     path("hangman/", views.HangmanPlayView.as_view(), name="hangman-play"),
     path("hangman/guess/", views.HangmanGuessView.as_view(), name="hangman-guess"),
@@ -34,4 +37,7 @@ urlpatterns = [
     path("wordle/new/", views.WordleNewView.as_view(), name="wordle-new"),
     path("wordle/", views.WordlePlayView.as_view(), name="wordle-play"),
     path("wordle/guess/", views.WordleGuessView.as_view(), name="wordle-guess"),
+    path("mastermind/new/", views.MastermindNewView.as_view(), name="mastermind-new"),
+    path("mastermind/", views.MastermindPlayView.as_view(), name="mastermind-play"),
+    path("mastermind/guess/", views.MastermindGuessView.as_view(), name="mastermind-guess"),
 ]

@@ -65,6 +65,18 @@
         {% endfor %}
     </ol>
 
+    <h2 class="mb-3 mt-6 text-lg font-bold">Nim (wins)</h2>
+    <ol class="divide-y divide-border rounded-2xl border border-border bg-surface">
+        {% for entry in nim_leaders %}
+            <li class="flex items-center justify-between px-4 py-2 text-sm">
+                <span>{{ forloop.counter }}. {{ entry.winner__username }}</span>
+                <span class="font-semibold text-fg">{{ entry.wins }}</span>
+            </li>
+        {% empty %}
+            <li class="px-4 py-2 text-sm text-muted">No games finished yet.</li>
+        {% endfor %}
+    </ol>
+
     <h2 class="mb-3 mt-6 text-lg font-bold">Word Guess (wins)</h2>
     <ol class="divide-y divide-border rounded-2xl border border-border bg-surface">
         {% for entry in hangman_leaders %}
@@ -116,6 +128,18 @@
     <h2 class="mb-3 mt-6 text-lg font-bold">Wordle (high score)</h2>
     <ol class="divide-y divide-border rounded-2xl border border-border bg-surface">
         {% for entry in wordle_leaders %}
+            <li class="flex items-center justify-between px-4 py-2 text-sm">
+                <span>{{ forloop.counter }}. {{ entry.player__username }}</span>
+                <span class="font-semibold text-fg">{{ entry.high_score }}</span>
+            </li>
+        {% empty %}
+            <li class="px-4 py-2 text-sm text-muted">No games played yet.</li>
+        {% endfor %}
+    </ol>
+
+    <h2 class="mb-3 mt-6 text-lg font-bold">Mastermind (high score)</h2>
+    <ol class="divide-y divide-border rounded-2xl border border-border bg-surface">
+        {% for entry in mastermind_leaders %}
             <li class="flex items-center justify-between px-4 py-2 text-sm">
                 <span>{{ forloop.counter }}. {{ entry.player__username }}</span>
                 <span class="font-semibold text-fg">{{ entry.high_score }}</span>

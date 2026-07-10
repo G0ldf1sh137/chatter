@@ -13,6 +13,7 @@ class Match(models.Model):
         CONNECT_FOUR = "connect4", "Connect Four"
         CHECKERS = "checkers", "Checkers"
         OTHELLO = "othello", "Othello"
+        NIM = "nim", "Nim"
 
     class Status(models.TextChoices):
         ACTIVE = "active", "Active"
@@ -60,6 +61,7 @@ class SinglePlayerResult(models.Model):
         SNAKE = "snake", "Snake"
         DOODLE_JUMP = "doodle", "Doodle Jump"
         WORDLE = "wordle", "Wordle"
+        MASTERMIND = "mmind", "Mastermind"
 
     player = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="game_results")
     game = models.CharField(max_length=8, choices=Game.choices)

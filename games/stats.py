@@ -3,7 +3,7 @@ from django.db.models import Count, Max, Q
 from .models import Match, SinglePlayerResult
 
 
-def is_users_turn(match, user):
+def is_users_turn(match: Match, user):
     """Whether `user` currently has an action to take in an active match.
 
     Rock-Paper-Scissors has no match.turn (both players choose
@@ -119,6 +119,23 @@ def wordle_high_score(user):
 def wordle_leaders(limit=10):
     return (
         SinglePlayerResult.objects.filter(game=SinglePlayerResult.Game.WORDLE)
+        .values("player__username")
+        .annotate(high_score=Max("score"))
+        .order_by("-high_score")[:limit]
+    )
+
+
+def mastermind_high_score(user):
+    return (
+        SinglePlayerResult.objects.filter(player=user, game=SinglePlayerResult.Game.MASTERMIND)
+        .aggregate(Max("score"))["score__max"]
+        or 0
+    )
+
+
+def mastermind_leaders(limit=10):
+    return (
+        SinglePlayerResult.objects.filter(game=SinglePlayerResult.Game.MASTERMIND)
         .values("player__username")
         .annotate(high_score=Max("score"))
         .order_by("-high_score")[:limit]

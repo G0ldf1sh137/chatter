@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+
+{% block title %}Mastermind — Chatter{% endblock %}
+
+{% block content %}
+    <div class="mx-auto max-w-sm rounded-2xl border border-border bg-surface p-6 text-center shadow-sm">
+        {% if not state %}
+            <p class="mb-4 text-muted">Guess the secret 4-color code in 10 tries. Colors can repeat.</p>
+            <form method="post" action="{% url 'mastermind-new' %}">
+                {% csrf_token %}
+                <button type="submit">Start a game</button>
+            </form>
+        {% else %}
+            <div class="mb-4 space-y-1.5">
+                {% for row in guesses_display %}
+                    <div class="flex items-center justify-center gap-3">
+                        <div class="flex gap-1.5">
+                            {% for peg in row.pegs %}
+                                <span class="h-8 w-8 rounded-full border border-border" style="background-color: {{ peg }};"></span>
+                            {% endfor %}
+                        </div>
+                        <div class="grid grid-cols-2 gap-0.5">
+                            {% for _ in row.black_dots %}
+                                <span class="h-2.5 w-2.5 rounded-full bg-fg"></span>
+                            {% endfor %}
+                            {% for _ in row.white_dots %}
+                                <span class="h-2.5 w-2.5 rounded-full border border-fg"></span>
+                            {% endfor %}
+                        </div>
+                    </div>
+                {% endfor %}
+            </div>
+
+            {% if status == "won" %}
+                <p class="mb-4 font-semibold text-accent">You won in {{ state.guesses|length }} guess{{ state.guesses|length|pluralize:"es" }}!</p>
+                <form method="post" action="{% url 'mastermind-new' %}">
+                    {% csrf_token %}
+                    <button type="submit">Play again</button>
+                </form>
+            {% elif status == "lost" %}
+                <p class="mb-4 font-semibold text-downvote">Out of guesses. The code was: {{ state.secret|join:", " }}.</p>
+                <form method="post" action="{% url 'mastermind-new' %}">
+                    {% csrf_token %}
+                    <button type="submit">Play again</button>
+                </form>
+            {% else %}
+                <p class="mb-3 text-sm text-muted">{{ guesses_left }} guess{{ guesses_left|pluralize:"es" }} left &middot; solid = right color &amp; spot, hollow = right color, wrong spot</p>
+                <form method="post" action="{% url 'mastermind-guess' %}" class="flex flex-wrap items-center justify-center gap-2">
+                    {% csrf_token %}
+                    {% for i in "xxxx" %}
+                        <select name="peg" required>
+                            {% for color in colors %}
+                                <option value="{{ color }}">{{ color|capfirst }}</option>
+                            {% endfor %}
+                        </select>
+                    {% endfor %}
+                    <button type="submit">Guess</button>
+                </form>
+            {% endif %}
+        {% endif %}
+    </div>
+{% endblock %}
