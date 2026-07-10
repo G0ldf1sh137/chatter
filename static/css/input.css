@@ -157,17 +157,28 @@
     /*
      * Direct-message chat bubbles (posts/templates/posts/conversation_detail.html)
      * always use a solid bubble color (bg-accent+text-accent-fg when sent,
-     * bg-surface-hover+text-fg when received) regardless of light/dark mode,
-     * so Markdown text inside one should always match that bubble color too
-     * - not the Tailwind Typography plugin's own light/dark text-color
+     * bg-accent/25+text-fg when received) regardless of light/dark mode, so
+     * Markdown text inside one should always match that bubble color too -
+     * not the Tailwind Typography plugin's own light/dark text-color
      * variables, which the bubble doesn't use dark:prose-invert to opt into.
-     * Syntax-highlighted code (below) is the deliberate exception: its
-     * <pre class="highlight"> gets its own background chip from Typography,
-     * so its token colors should stay as their own multi-color palette
-     * rather than collapsing to one flat bubble color.
+     * `.prose` itself sets a fixed `color: var(--tw-prose-body)` directly on
+     * this element (not just its descendants), and that rule lives in
+     * Tailwind's `utilities` cascade layer - a layer that always outranks
+     * this `@layer base` block regardless of selector specificity, which is
+     * why `color: inherit` on only the descendants was never enough to fix
+     * received messages in dark mode. `!important` is what actually lets a
+     * `base`-layer declaration win over a same-property `utilities`-layer
+     * one; per the Cascade Layers spec, `!important` reverses normal layer
+     * priority; needed here since there's no other way to outrank a plugin's
+     * own layered utility class from user CSS. Syntax-highlighted code
+     * (below) is the deliberate exception: its <pre class="highlight"> gets
+     * its own background chip from Typography, so its token colors should
+     * stay as their own multi-color palette rather than collapsing to one
+     * flat bubble color.
      */
+    .message-body,
     .message-body :not(pre.highlight, pre.highlight *) {
-        color: inherit;
+        color: inherit !important;
     }
 
     .message-body a {
