@@ -1,5 +1,6 @@
 from django.db.models import Count, Max, Q
 
+from .logic import battleship
 from .models import Match, SinglePlayerResult
 
 
@@ -8,12 +9,16 @@ def is_users_turn(match: Match, user):
 
     Rock-Paper-Scissors has no match.turn (both players choose
     simultaneously - see the Match.turn field's docstring) - "your turn"
-    there means "you haven't locked in a choice yet" instead.
+    there means "you haven't locked in a choice yet" instead. Battleship's
+    placement phase is the same shape: both players place independently
+    before match.turn means anything.
     """
     if match.status != Match.Status.ACTIVE:
         return False
     if match.game == Match.Game.ROCK_PAPER_SCISSORS:
         return not match.state.get("choices", {}).get(str(user.id))
+    if match.game == Match.Game.BATTLESHIP and match.state.get("phase") == "placement":
+        return not battleship.is_fully_placed(match.state, str(user.id))
     return match.turn_id == user.id
 
 

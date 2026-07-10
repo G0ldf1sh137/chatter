@@ -14,6 +14,7 @@ class Match(models.Model):
         CHECKERS = "checkers", "Checkers"
         OTHELLO = "othello", "Othello"
         NIM = "nim", "Nim"
+        BATTLESHIP = "battle", "Battleship"
 
     class Status(models.TextChoices):
         ACTIVE = "active", "Active"

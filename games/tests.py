@@ -3,7 +3,18 @@ from django.test import TestCase
 from django.urls import reverse
 
 from . import stats
-from .logic import checkers, connect_four, hangman, mastermind, nim, othello, rock_paper_scissors, tic_tac_toe, wordle
+from .logic import (
+    battleship,
+    checkers,
+    connect_four,
+    hangman,
+    mastermind,
+    nim,
+    othello,
+    rock_paper_scissors,
+    tic_tac_toe,
+    wordle,
+)
 from .logic.exceptions import InvalidMove
 from .models import Match, SinglePlayerResult
 
@@ -1534,6 +1545,262 @@ class NimMatchTests(TestCase):
         self.assertEqual(match.status, Match.Status.FINISHED)
         self.assertEqual(match.winner, self.bob)
         self.assertIsNone(match.turn)
+
+
+class BattleshipLogicTests(TestCase):
+    def test_initial_state_is_placement_phase_with_no_boards(self):
+        state = battleship.initial_state()
+        self.assertEqual(state["phase"], "placement")
+        self.assertEqual(state["boards"], {})
+
+    def test_apply_placement_places_first_ship_horizontally(self):
+        state = battleship.apply_placement(battleship.initial_state(), "u1", 0, 0, "h")
+        self.assertEqual(state["boards"]["u1"]["ships"], [[[0, 0], [0, 1], [0, 2], [0, 3]]])
+
+    def test_apply_placement_places_ship_vertically(self):
+        state = battleship.apply_placement(battleship.initial_state(), "u1", 0, 0, "v")
+        self.assertEqual(state["boards"]["u1"]["ships"], [[[0, 0], [1, 0], [2, 0], [3, 0]]])
+
+    def test_apply_placement_does_not_mutate_original_state(self):
+        original = battleship.initial_state()
+        battleship.apply_placement(original, "u1", 0, 0, "h")
+        self.assertEqual(original["boards"], {})
+
+    def test_apply_placement_rejects_off_board_ship(self):
+        with self.assertRaises(InvalidMove):
+            battleship.apply_placement(battleship.initial_state(), "u1", 0, 6, "h")
+
+    def test_apply_placement_rejects_overlap(self):
+        state = battleship.apply_placement(battleship.initial_state(), "u1", 0, 0, "h")
+        with self.assertRaises(InvalidMove):
+            battleship.apply_placement(state, "u1", 0, 3, "v")
+
+    def test_apply_placement_rejects_a_fifth_ship(self):
+        # Place all 4 fleet ships, each far enough apart not to overlap.
+        state = battleship.initial_state()
+        state = battleship.apply_placement(state, "u1", 0, 0, "h")
+        state = battleship.apply_placement(state, "u1", 2, 0, "h")
+        state = battleship.apply_placement(state, "u1", 4, 0, "h")
+        state = battleship.apply_placement(state, "u1", 6, 0, "h")
+        with self.assertRaises(InvalidMove):
+            battleship.apply_placement(state, "u1", 7, 0, "h")
+
+    def test_apply_placement_rejects_bad_orientation(self):
+        with self.assertRaises(InvalidMove):
+            battleship.apply_placement(battleship.initial_state(), "u1", 0, 0, "diagonal")
+
+    def test_is_fully_placed(self):
+        state = battleship.initial_state()
+        state = battleship.apply_placement(state, "u1", 0, 0, "h")
+        state = battleship.apply_placement(state, "u1", 2, 0, "h")
+        state = battleship.apply_placement(state, "u1", 4, 0, "h")
+        self.assertFalse(battleship.is_fully_placed(state, "u1"))
+        state = battleship.apply_placement(state, "u1", 6, 0, "h")
+        self.assertTrue(battleship.is_fully_placed(state, "u1"))
+
+    def test_both_players_placed_requires_both(self):
+        state = battleship.initial_state()
+        state = battleship.apply_placement(state, "u1", 0, 0, "h")
+        self.assertFalse(battleship.both_players_placed(state, "u1", "u2"))
+
+    def test_apply_shot_records_shot_against_target(self):
+        state = battleship.initial_state()
+        state = battleship.apply_shot(state, "u2", 3, 4)
+        self.assertEqual(state["boards"]["u2"]["shots_against"], [[3, 4]])
+
+    def test_apply_shot_rejects_off_board(self):
+        with self.assertRaises(InvalidMove):
+            battleship.apply_shot(battleship.initial_state(), "u2", 8, 0)
+
+    def test_apply_shot_rejects_repeat_shot(self):
+        state = battleship.apply_shot(battleship.initial_state(), "u2", 3, 4)
+        with self.assertRaises(InvalidMove):
+            battleship.apply_shot(state, "u2", 3, 4)
+
+    def test_is_hit_true_on_ship_cell(self):
+        state = battleship.apply_placement(battleship.initial_state(), "u2", 0, 0, "h")
+        self.assertTrue(battleship.is_hit(state, "u2", 0, 0))
+        self.assertFalse(battleship.is_hit(state, "u2", 5, 5))
+
+    def test_all_ships_sunk_false_until_every_cell_hit(self):
+        state = battleship.apply_placement(battleship.initial_state(), "u2", 0, 0, "h")
+        self.assertFalse(battleship.all_ships_sunk(state, "u2"))
+        for col in range(4):
+            state = battleship.apply_shot(state, "u2", 0, col)
+        self.assertTrue(battleship.all_ships_sunk(state, "u2"))
+
+    def test_all_ships_sunk_false_with_no_ships_placed_yet(self):
+        self.assertFalse(battleship.all_ships_sunk(battleship.initial_state(), "u2"))
+
+    def test_viewer_state_never_exposes_opponent_ship_layout(self):
+        state = battleship.initial_state()
+        state = battleship.apply_placement(state, "alice", 0, 0, "h")
+        state = battleship.apply_placement(state, "bob", 5, 3, "h")
+        state = battleship.apply_shot(state, "bob", 5, 5)  # alice hits bob
+        state = battleship.apply_shot(state, "bob", 7, 7)  # alice misses
+
+        viewer = battleship.viewer_state(state, "alice", "bob")
+        self.assertEqual(viewer["your_ships"], state["boards"]["alice"]["ships"])
+        self.assertNotIn("ships", viewer)
+        self.assertCountEqual(
+            viewer["your_shots"],
+            [{"row": 5, "col": 5, "hit": True}, {"row": 7, "col": 7, "hit": False}],
+        )
+        # Bob's unfired-upon ship cells (5,3)/(5,4)/(5,6) must not appear anywhere.
+        flattened = str(viewer)
+        self.assertNotIn("[5, 3]", flattened)
+        self.assertNotIn("[5, 4]", flattened)
+        self.assertNotIn("[5, 6]", flattened)
+
+
+class BattleshipMatchTests(TestCase):
+    def setUp(self):
+        self.alice = make_user("alice")
+        self.bob = make_user("bob")
+
+    def _place_full_fleet(self, user, row_offset=0):
+        for i, _ in enumerate(battleship.FLEET):
+            self.client.force_login(user)
+            self.client.post(
+                reverse("battleship-place", args=[self.match.pk]),
+                {"row": row_offset + i * 2, "col": 0, "orientation": "h"},
+            )
+
+    def test_challenge_creates_active_match_in_placement_phase(self):
+        self.client.force_login(self.alice)
+        response = self.client.post(reverse("battleship-challenge", args=["bob"]))
+        match = Match.objects.get()
+        self.assertRedirects(response, reverse("battleship-match", args=[match.pk]))
+        self.assertEqual(match.game, Match.Game.BATTLESHIP)
+        self.assertEqual(match.state["phase"], "placement")
+        self.assertIsNone(match.turn)
+        self.assertEqual(match.status, Match.Status.ACTIVE)
+
+    def test_cannot_challenge_self(self):
+        self.client.force_login(self.alice)
+        self.client.post(reverse("battleship-challenge", args=["alice"]))
+        self.assertEqual(Match.objects.count(), 0)
+
+    def test_non_participant_cannot_view_match(self):
+        self.match = Match.objects.create(
+            game=Match.Game.BATTLESHIP, player1=self.alice, player2=self.bob,
+            state=battleship.initial_state(), turn=None,
+        )
+        carol = make_user("carol")
+        self.client.force_login(carol)
+        response = self.client.get(reverse("battleship-match", args=[self.match.pk]))
+        self.assertEqual(response.status_code, 403)
+
+    def test_placing_ship_appends_to_boards(self):
+        self.match = Match.objects.create(
+            game=Match.Game.BATTLESHIP, player1=self.alice, player2=self.bob,
+            state=battleship.initial_state(), turn=None,
+        )
+        self.client.force_login(self.alice)
+        self.client.post(
+            reverse("battleship-place", args=[self.match.pk]), {"row": 0, "col": 0, "orientation": "h"}
+        )
+        self.match.refresh_from_db()
+        self.assertEqual(len(self.match.state["boards"][str(self.alice.id)]["ships"]), 1)
+
+    def test_invalid_placement_is_ignored(self):
+        self.match = Match.objects.create(
+            game=Match.Game.BATTLESHIP, player1=self.alice, player2=self.bob,
+            state=battleship.initial_state(), turn=None,
+        )
+        self.client.force_login(self.alice)
+        self.client.post(
+            reverse("battleship-place", args=[self.match.pk]), {"row": 0, "col": 6, "orientation": "h"}
+        )
+        self.match.refresh_from_db()
+        self.assertEqual(self.match.state["boards"], {})
+
+    def test_cannot_fire_before_both_players_have_placed(self):
+        self.match = Match.objects.create(
+            game=Match.Game.BATTLESHIP, player1=self.alice, player2=self.bob,
+            state=battleship.initial_state(), turn=None,
+        )
+        self._place_full_fleet(self.alice)
+        self.client.force_login(self.alice)
+        self.client.post(reverse("battleship-move", args=[self.match.pk]), {"row": 0, "col": 0})
+        self.match.refresh_from_db()
+        self.assertEqual(self.match.state["phase"], "placement")
+
+    def test_phase_flips_to_battle_once_both_have_placed(self):
+        self.match = Match.objects.create(
+            game=Match.Game.BATTLESHIP, player1=self.alice, player2=self.bob,
+            state=battleship.initial_state(), turn=None,
+        )
+        self._place_full_fleet(self.alice)
+        self._place_full_fleet(self.bob, row_offset=1)
+        self.match.refresh_from_db()
+        self.assertEqual(self.match.state["phase"], "battle")
+        self.assertEqual(self.match.turn, self.alice)
+
+    def test_move_by_wrong_player_is_ignored(self):
+        state = {
+            "phase": "battle",
+            "boards": {
+                str(self.alice.id): {"ships": [[[3, 3], [3, 4]]], "shots_against": []},
+                str(self.bob.id): {"ships": [[[0, 0], [0, 1]]], "shots_against": []},
+            },
+        }
+        self.match = Match.objects.create(
+            game=Match.Game.BATTLESHIP, player1=self.alice, player2=self.bob, state=state, turn=self.alice,
+        )
+        self.client.force_login(self.bob)
+        self.client.post(reverse("battleship-move", args=[self.match.pk]), {"row": 0, "col": 0})
+        self.match.refresh_from_db()
+        self.assertEqual(self.match.turn, self.alice)
+        self.assertEqual(self.match.state["boards"][str(self.alice.id)]["shots_against"], [])
+
+    def test_sinking_all_ships_wins_the_match(self):
+        state = {
+            "phase": "battle",
+            "boards": {
+                str(self.alice.id): {"ships": [[[3, 3], [3, 4], [3, 5], [3, 6]]], "shots_against": []},
+                str(self.bob.id): {"ships": [[[0, 0], [0, 1]]], "shots_against": []},
+            },
+        }
+        self.match = Match.objects.create(
+            game=Match.Game.BATTLESHIP, player1=self.alice, player2=self.bob, state=state, turn=self.alice,
+        )
+        self.client.force_login(self.alice)
+        self.client.post(reverse("battleship-move", args=[self.match.pk]), {"row": 0, "col": 0})
+        self.match.refresh_from_db()
+        self.assertEqual(self.match.status, Match.Status.ACTIVE)
+        self.assertEqual(self.match.turn, self.bob)
+
+        self.client.force_login(self.bob)
+        self.client.post(reverse("battleship-move", args=[self.match.pk]), {"row": 7, "col": 7})
+        self.match.refresh_from_db()
+        self.assertEqual(self.match.turn, self.alice)
+
+        self.client.force_login(self.alice)
+        self.client.post(reverse("battleship-move", args=[self.match.pk]), {"row": 0, "col": 1})
+        self.match.refresh_from_db()
+        self.assertEqual(self.match.status, Match.Status.FINISHED)
+        self.assertEqual(self.match.winner, self.alice)
+        self.assertIsNone(self.match.turn)
+
+    def test_opponent_board_context_never_includes_ship_positions(self):
+        state = {
+            "phase": "battle",
+            "boards": {
+                str(self.alice.id): {"ships": [[[0, 0], [0, 1], [0, 2], [0, 3]]], "shots_against": []},
+                str(self.bob.id): {"ships": [[[5, 5], [5, 6]]], "shots_against": []},
+            },
+        }
+        self.match = Match.objects.create(
+            game=Match.Game.BATTLESHIP, player1=self.alice, player2=self.bob, state=state, turn=self.alice,
+        )
+        self.client.force_login(self.alice)
+        response = self.client.get(reverse("battleship-match", args=[self.match.pk]))
+        for row in response.context["opponent_board_cells"]:
+            for cell in row:
+                self.assertNotIn("ship", cell)
+        your_cells = response.context["your_board_cells"]
+        self.assertTrue(any(cell["ship"] for row in your_cells for cell in row))
 
 
 class SnakeResultTests(TestCase):

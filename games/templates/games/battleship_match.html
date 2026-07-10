@@ -1,0 +1,115 @@
+{% extends "base.html" %}
+
+{% block title %}Battleship — Chatter{% endblock %}
+
+{% block content %}
+    <div class="mx-auto max-w-2xl rounded-2xl border border-border bg-surface p-6 shadow-sm">
+        <div class="mb-4 flex items-center justify-between">
+            <div class="flex items-center gap-2">
+                {% include "_avatar.html" with avatar_user=match.player1 %}
+                <span class="text-sm font-medium">{{ match.player1.username }}</span>
+            </div>
+            <span class="text-sm text-muted">vs</span>
+            <div class="flex items-center gap-2">
+                <span class="text-sm font-medium">{{ match.player2.username }}</span>
+                {% include "_avatar.html" with avatar_user=match.player2 %}
+            </div>
+        </div>
+
+        {% if match.status == "finished" %}
+            <p class="mb-4 text-center font-semibold text-accent">{{ match.winner.username }} sank the whole fleet and won!</p>
+        {% elif phase == "placement" %}
+            {% if fully_placed %}
+                <p class="mb-4 text-center text-muted">Fleet placed &mdash; waiting on {{ opponent.username }} to place theirs.</p>
+            {% else %}
+                <p class="mb-4 text-center font-semibold text-accent">Place your next ship &mdash; {{ next_ship_length }} cells long</p>
+            {% endif %}
+        {% elif is_your_turn %}
+            <p class="mb-4 text-center font-semibold text-accent">Your turn &mdash; fire!</p>
+        {% else %}
+            <p class="mb-4 text-center text-muted">Waiting on {{ opponent.username }}</p>
+        {% endif %}
+
+        {% if phase == "placement" %}
+            {% if not fully_placed %}
+                <form method="post" action="{% url 'battleship-place' match.pk %}" class="mb-4 flex flex-wrap items-center justify-center gap-2">
+                    {% csrf_token %}
+                    <select name="row" required>
+                        {% for n in board_size_range %}
+                            <option value="{{ n }}">Row {{ n }}</option>
+                        {% endfor %}
+                    </select>
+                    <select name="col" required>
+                        {% for n in board_size_range %}
+                            <option value="{{ n }}">Col {{ n }}</option>
+                        {% endfor %}
+                    </select>
+                    <select name="orientation" required>
+                        <option value="h">Horizontal (right)</option>
+                        <option value="v">Vertical (down)</option>
+                    </select>
+                    <button type="submit">Place ship</button>
+                </form>
+            {% endif %}
+
+            <p class="mb-2 text-center text-sm text-muted">Your fleet so far</p>
+            <div class="mx-auto grid w-full max-w-[320px] grid-cols-8 gap-0.5 rounded-lg bg-surface-hover p-1">
+                {% for row in my_board_cells %}
+                    {% for cell in row %}
+                        {% if cell.ship %}
+                            <div class="aspect-square rounded-sm bg-accent"></div>
+                        {% else %}
+                            <div class="aspect-square rounded-sm bg-surface"></div>
+                        {% endif %}
+                    {% endfor %}
+                {% endfor %}
+            </div>
+        {% else %}
+            <div class="flex flex-col gap-6 sm:flex-row sm:justify-center">
+                <div>
+                    <p class="mb-2 text-center text-sm text-muted">Your fleet</p>
+                    <div class="mx-auto grid w-full max-w-[260px] grid-cols-8 gap-0.5 rounded-lg bg-surface-hover p-1">
+                        {% for row in your_board_cells %}
+                            {% for cell in row %}
+                                {% if cell.hit %}
+                                    <div class="aspect-square rounded-sm bg-downvote"></div>
+                                {% elif cell.miss %}
+                                    <div class="aspect-square rounded-sm bg-surface-hover border border-border"></div>
+                                {% elif cell.ship %}
+                                    <div class="aspect-square rounded-sm bg-accent"></div>
+                                {% else %}
+                                    <div class="aspect-square rounded-sm bg-surface"></div>
+                                {% endif %}
+                            {% endfor %}
+                        {% endfor %}
+                    </div>
+                </div>
+
+                <div>
+                    <p class="mb-2 text-center text-sm text-muted">Enemy waters</p>
+                    <div class="mx-auto grid w-full max-w-[260px] grid-cols-8 gap-0.5 rounded-lg bg-surface-hover p-1">
+                        {% for row in opponent_board_cells %}
+                            {% for cell in row %}
+                                {% if cell.shot and cell.hit %}
+                                    <div class="aspect-square rounded-sm bg-downvote"></div>
+                                {% elif cell.shot %}
+                                    <div class="aspect-square rounded-sm bg-surface-hover border border-border"></div>
+                                {% elif cell.clickable %}
+                                    <form method="post" action="{% url 'battleship-move' match.pk %}" class="contents">
+                                        {% csrf_token %}
+                                        <input type="hidden" name="row" value="{{ cell.r }}">
+                                        <input type="hidden" name="col" value="{{ cell.c }}">
+                                        <button type="submit" aria-label="Fire at row {{ cell.r }}, column {{ cell.c }}" class="mt-0 aspect-square rounded-sm border-none bg-surface p-0 transition-colors hover:bg-border/60"></button>
+                                    </form>
+                                {% else %}
+                                    <div class="aspect-square rounded-sm bg-surface"></div>
+                                {% endif %}
+                            {% endfor %}
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        {% endif %}
+    </div>
+    {% include "games/_match_poll.html" %}
+{% endblock %}

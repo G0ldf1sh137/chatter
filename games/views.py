@@ -11,7 +11,18 @@ from django.views import View
 from django.views.generic import DetailView, TemplateView
 
 from . import stats
-from .logic import checkers, connect_four, hangman, mastermind, nim, othello, rock_paper_scissors, tic_tac_toe, wordle
+from .logic import (
+    battleship,
+    checkers,
+    connect_four,
+    hangman,
+    mastermind,
+    nim,
+    othello,
+    rock_paper_scissors,
+    tic_tac_toe,
+    wordle,
+)
 from .logic.exceptions import InvalidMove
 from .models import Match, SinglePlayerResult
 
@@ -43,6 +54,7 @@ class LeaderboardView(TemplateView):
         context["checkers_leaders"] = stats.match_win_leaders(Match.Game.CHECKERS)
         context["othello_leaders"] = stats.match_win_leaders(Match.Game.OTHELLO)
         context["nim_leaders"] = stats.match_win_leaders(Match.Game.NIM)
+        context["battleship_leaders"] = stats.match_win_leaders(Match.Game.BATTLESHIP)
         context["hangman_leaders"] = stats.hangman_leaders()
         context["game2048_leaders"] = stats.game_2048_leaders()
         context["snake_leaders"] = stats.snake_leaders()
@@ -541,6 +553,154 @@ class NimMoveView(LoginRequiredMixin, View):
                 match.turn = match.opponent_of(request.user)
             match.save()
         return redirect("nim-match", pk=pk)
+
+
+class BattleshipChallengeView(LoginRequiredMixin, View):
+    def post(self, request, username):
+        opponent = get_object_or_404(User, username=username)
+        if opponent == request.user:
+            messages.error(request, "You can't challenge yourself.")
+            return redirect("profile", username=username)
+        match = Match.objects.create(
+            game=Match.Game.BATTLESHIP,
+            player1=request.user,
+            player2=opponent,
+            state=battleship.initial_state(),
+            # No turn yet - both players place ships independently before
+            # battle starts, same as Rock-Paper-Scissors' simultaneous phase.
+            turn=None,
+        )
+        return redirect("battleship-match", pk=match.pk)
+
+
+class BattleshipMatchView(LoginRequiredMixin, UserPassesTestMixin, DetailView):
+    template_name = "games/battleship_match.html"
+    context_object_name = "match"
+
+    def test_func(self):
+        match = self.get_object()
+        return self.request.user.id in (match.player1_id, match.player2_id)
+
+    def get_queryset(self):
+        return Match.objects.filter(game=Match.Game.BATTLESHIP).select_related("player1", "player2", "winner")
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        match = context["match"]
+        my_id = str(self.request.user.id)
+        opponent = match.opponent_of(self.request.user)
+        opponent_id = str(opponent.id)
+        size_range = range(battleship.BOARD_SIZE)
+        context["opponent"] = opponent
+        context["phase"] = match.state["phase"]
+        context["board_size_range"] = size_range
+
+        if match.state["phase"] == "placement":
+            my_ships = battleship.ships_for(match.state, my_id)
+            fully_placed = len(my_ships) >= len(battleship.FLEET)
+            context["fully_placed"] = fully_placed
+            if not fully_placed:
+                context["next_ship_length"] = battleship.FLEET[len(my_ships)]
+            my_ship_cells = {(r, c) for ship in my_ships for r, c in ship}
+            context["my_board_cells"] = [
+                [{"ship": (r, c) in my_ship_cells} for c in size_range] for r in size_range
+            ]
+        else:
+            viewer = battleship.viewer_state(match.state, my_id, opponent_id)
+            your_ship_cells = {(r, c) for ship in viewer["your_ships"] for r, c in ship}
+            shots_against_you = {tuple(cell) for cell in viewer["shots_against_you"]}
+            context["your_board_cells"] = [
+                [
+                    {
+                        "ship": (r, c) in your_ship_cells,
+                        "hit": (r, c) in your_ship_cells and (r, c) in shots_against_you,
+                        "miss": (r, c) not in your_ship_cells and (r, c) in shots_against_you,
+                    }
+                    for c in size_range
+                ]
+                for r in size_range
+            ]
+
+            your_shots = {(shot["row"], shot["col"]): shot["hit"] for shot in viewer["your_shots"]}
+            is_your_turn = match.status == Match.Status.ACTIVE and match.turn_id == self.request.user.id
+            context["is_your_turn"] = is_your_turn
+            context["opponent_board_cells"] = [
+                [
+                    {
+                        "shot": (r, c) in your_shots,
+                        "hit": your_shots.get((r, c), False),
+                        "clickable": is_your_turn and (r, c) not in your_shots,
+                        "r": r,
+                        "c": c,
+                    }
+                    for c in size_range
+                ]
+                for r in size_range
+            ]
+        return context
+
+
+class BattleshipPlaceView(LoginRequiredMixin, View):
+    def post(self, request, pk):
+        try:
+            row, col = int(request.POST.get("row")), int(request.POST.get("col"))
+        except (TypeError, ValueError):
+            return redirect("battleship-match", pk=pk)
+        orientation = request.POST.get("orientation")
+
+        with transaction.atomic():
+            match = get_object_or_404(Match.objects.select_for_update(), pk=pk, game=Match.Game.BATTLESHIP)
+            if request.user.id not in (match.player1_id, match.player2_id):
+                raise Http404
+            if match.status != Match.Status.ACTIVE or match.state["phase"] != "placement":
+                return redirect("battleship-match", pk=pk)
+
+            try:
+                match.state = battleship.apply_placement(match.state, str(request.user.id), row, col, orientation)
+            except InvalidMove:
+                return redirect("battleship-match", pk=pk)
+
+            p1_id, p2_id = str(match.player1_id), str(match.player2_id)
+            if battleship.both_players_placed(match.state, p1_id, p2_id):
+                match.state = {**match.state, "phase": "battle"}
+                match.turn = match.player1
+            match.save()
+        return redirect("battleship-match", pk=pk)
+
+
+class BattleshipMoveView(LoginRequiredMixin, View):
+    def post(self, request, pk):
+        try:
+            row, col = int(request.POST.get("row")), int(request.POST.get("col"))
+        except (TypeError, ValueError):
+            return redirect("battleship-match", pk=pk)
+
+        with transaction.atomic():
+            match = get_object_or_404(Match.objects.select_for_update(), pk=pk, game=Match.Game.BATTLESHIP)
+            if request.user.id not in (match.player1_id, match.player2_id):
+                raise Http404
+            if (
+                match.status != Match.Status.ACTIVE
+                or match.state.get("phase") != "battle"
+                or match.turn_id != request.user.id
+            ):
+                return redirect("battleship-match", pk=pk)
+
+            opponent = match.opponent_of(request.user)
+            target_id = str(opponent.id)
+            try:
+                match.state = battleship.apply_shot(match.state, target_id, row, col)
+            except InvalidMove:
+                return redirect("battleship-match", pk=pk)
+
+            if battleship.all_ships_sunk(match.state, target_id):
+                match.status = Match.Status.FINISHED
+                match.turn = None
+                match.winner = request.user
+            else:
+                match.turn = opponent
+            match.save()
+        return redirect("battleship-match", pk=pk)
 
 
 class HangmanNewView(LoginRequiredMixin, View):
