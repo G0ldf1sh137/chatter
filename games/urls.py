@@ -48,6 +48,13 @@ urlpatterns = [
     ),
     path("morris/<uuid:pk>/", views.NineMensMorrisMatchView.as_view(), name="morris-match"),
     path("morris/<uuid:pk>/move/", views.NineMensMorrisMoveView.as_view(), name="morris-move"),
+    path(
+        "backgammon/challenge/<str:username>/",
+        views.BackgammonChallengeView.as_view(),
+        name="backgammon-challenge",
+    ),
+    path("backgammon/<uuid:pk>/", views.BackgammonMatchView.as_view(), name="backgammon-match"),
+    path("backgammon/<uuid:pk>/move/", views.BackgammonMoveView.as_view(), name="backgammon-move"),
     path("hangman/new/", views.HangmanNewView.as_view(), name="hangman-new"),
     path("hangman/", views.HangmanPlayView.as_view(), name="hangman-play"),
     path("hangman/guess/", views.HangmanGuessView.as_view(), name="hangman-guess"),

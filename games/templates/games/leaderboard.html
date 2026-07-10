@@ -113,6 +113,18 @@
         {% endfor %}
     </ol>
 
+    <h2 class="mb-3 mt-6 text-lg font-bold">Backgammon (wins)</h2>
+    <ol class="divide-y divide-border rounded-2xl border border-border bg-surface">
+        {% for entry in backgammon_leaders %}
+            <li class="flex items-center justify-between px-4 py-2 text-sm">
+                <span>{{ forloop.counter }}. {{ entry.winner__username }}</span>
+                <span class="font-semibold text-fg">{{ entry.wins }}</span>
+            </li>
+        {% empty %}
+            <li class="px-4 py-2 text-sm text-muted">No games finished yet.</li>
+        {% endfor %}
+    </ol>
+
     <h2 class="mb-3 mt-6 text-lg font-bold">Word Guess (wins)</h2>
     <ol class="divide-y divide-border rounded-2xl border border-border bg-surface">
         {% for entry in hangman_leaders %}

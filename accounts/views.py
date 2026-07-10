@@ -127,6 +127,8 @@ class ProfileView(DetailView):
         context["stratego_record"] = {"wins": str_wins, "losses": str_losses, "draws": str_draws}
         mor_wins, mor_losses, mor_draws = game_stats.match_record(profile_user, Match.Game.NINE_MENS_MORRIS)
         context["morris_record"] = {"wins": mor_wins, "losses": mor_losses, "draws": mor_draws}
+        bg_wins, bg_losses, bg_draws = game_stats.match_record(profile_user, Match.Game.BACKGAMMON)
+        context["backgammon_record"] = {"wins": bg_wins, "losses": bg_losses, "draws": bg_draws}
         context["hangman_wins"] = game_stats.hangman_wins(profile_user)
         context["high_score_2048"] = game_stats.high_score_2048(profile_user)
         context["snake_high_score"] = game_stats.snake_high_score(profile_user)

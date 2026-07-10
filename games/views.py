@@ -12,6 +12,7 @@ from django.views.generic import DetailView, TemplateView
 
 from . import stats
 from .logic import (
+    backgammon,
     battleship,
     checkers,
     connect_four,
@@ -71,6 +72,7 @@ class LeaderboardView(TemplateView):
         context["battleship_leaders"] = stats.match_win_leaders(Match.Game.BATTLESHIP)
         context["stratego_leaders"] = stats.match_win_leaders(Match.Game.STRATEGO)
         context["morris_leaders"] = stats.match_win_leaders(Match.Game.NINE_MENS_MORRIS)
+        context["backgammon_leaders"] = stats.match_win_leaders(Match.Game.BACKGAMMON)
         context["hangman_leaders"] = stats.hangman_leaders()
         context["game2048_leaders"] = stats.game_2048_leaders()
         context["snake_leaders"] = stats.snake_leaders()
@@ -1005,6 +1007,114 @@ class NineMensMorrisMoveView(LoginRequiredMixin, View):
                 match.turn = opponent
             match.save()
         return redirect("morris-match", pk=pk)
+
+
+class BackgammonChallengeView(LoginRequiredMixin, View):
+    def post(self, request, username):
+        opponent = get_object_or_404(User, username=username)
+        if opponent == request.user:
+            messages.error(request, "You can't challenge yourself.")
+            return redirect("profile", username=username)
+        state, first_mover = backgammon.start_turn(backgammon.initial_state(), "p1")
+        match = Match.objects.create(
+            game=Match.Game.BACKGAMMON,
+            player1=request.user,
+            player2=opponent,
+            state=state,
+            turn=request.user if first_mover == "p1" else opponent,
+        )
+        return redirect("backgammon-match", pk=match.pk)
+
+
+class BackgammonMatchView(LoginRequiredMixin, UserPassesTestMixin, DetailView):
+    template_name = "games/backgammon_match.html"
+    context_object_name = "match"
+
+    def test_func(self):
+        match = self.get_object()
+        return self.request.user.id in (match.player1_id, match.player2_id)
+
+    def get_queryset(self):
+        return Match.objects.filter(game=Match.Game.BACKGAMMON).select_related("player1", "player2", "winner")
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        match = context["match"]
+        is_player1 = self.request.user.id == match.player1_id
+        my_label = "p1" if is_player1 else "p2"
+        opponent_label = "p2" if is_player1 else "p1"
+        opponent = match.opponent_of(self.request.user)
+        is_your_turn = match.status == Match.Status.ACTIVE and match.turn_id == self.request.user.id
+
+        context["opponent"] = opponent
+        context["is_your_turn"] = is_your_turn
+        context["dice"] = match.state.get("dice", []) if is_your_turn else []
+        context["your_bar"] = match.state["bar"].get(my_label, 0)
+        context["opponent_bar"] = match.state["bar"].get(opponent_label, 0)
+        context["your_borne_off"] = match.state["borne_off"].get(my_label, 0)
+        context["opponent_borne_off"] = match.state["borne_off"].get(opponent_label, 0)
+        must_enter_from_bar = is_your_turn and context["your_bar"] > 0
+        context["must_enter_from_bar"] = must_enter_from_bar
+
+        context["points"] = [
+            {
+                "index": index,
+                "count": cell["count"],
+                "is_yours": cell["owner"] == my_label,
+                "is_opponents": cell["owner"] == opponent_label,
+                "clickable": (
+                    is_your_turn
+                    and not must_enter_from_bar
+                    and cell["owner"] == my_label
+                    and cell["count"] > 0
+                ),
+            }
+            for index, cell in enumerate(match.state["points"])
+        ]
+        context["top_row"] = context["points"][12:24]
+        context["bottom_row"] = list(reversed(context["points"][0:12]))
+        return context
+
+
+class BackgammonMoveView(LoginRequiredMixin, View):
+    def post(self, request, pk):
+        with transaction.atomic():
+            match = get_object_or_404(Match.objects.select_for_update(), pk=pk, game=Match.Game.BACKGAMMON)
+            if request.user.id not in (match.player1_id, match.player2_id):
+                raise Http404
+            if match.status != Match.Status.ACTIVE or match.turn_id != request.user.id:
+                return redirect("backgammon-match", pk=pk)
+
+            mover = "p1" if request.user.id == match.player1_id else "p2"
+            opponent_label = "p2" if mover == "p1" else "p1"
+            opponent = match.opponent_of(request.user)
+            label_to_user = {"p1": match.player1, "p2": match.player2}
+
+            source_raw = request.POST.get("source")
+            try:
+                source = source_raw if source_raw == "bar" else int(source_raw)
+                die_value = int(request.POST.get("die_value"))
+            except (TypeError, ValueError):
+                return redirect("backgammon-match", pk=pk)
+
+            try:
+                match.state = backgammon.apply_move(match.state, mover, source, die_value)
+            except InvalidMove as e:
+                messages.error(request, str(e))
+                return redirect("backgammon-match", pk=pk)
+
+            if backgammon.is_game_over(match.state, mover):
+                match.status = Match.Status.FINISHED
+                match.turn = None
+                match.winner = request.user
+            elif match.state["dice"] and backgammon.any_legal_move(match.state, mover):
+                pass  # same player continues, using the remaining dice
+            else:
+                next_state, actual_mover = backgammon.start_turn(match.state, opponent_label)
+                match.state = next_state
+                match.turn = label_to_user[actual_mover]
+            match.save()
+        return redirect("backgammon-match", pk=pk)
 
 
 class HangmanNewView(LoginRequiredMixin, View):

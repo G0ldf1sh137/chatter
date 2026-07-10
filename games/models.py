@@ -17,6 +17,7 @@ class Match(models.Model):
         BATTLESHIP = "battle", "Battleship"
         STRATEGO = "stratego", "Stratego"
         NINE_MENS_MORRIS = "morris", "Nine Men's Morris"
+        BACKGAMMON = "bg", "Backgammon"
 
     class Status(models.TextChoices):
         ACTIVE = "active", "Active"

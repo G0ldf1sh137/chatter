@@ -4,6 +4,7 @@ from django.urls import reverse
 
 from . import stats
 from .logic import (
+    backgammon,
     battleship,
     checkers,
     connect_four,
@@ -2465,6 +2466,233 @@ class NineMensMorrisMatchTests(TestCase):
         )
         self.client.force_login(self.alice)
         self.client.post(reverse("morris-move", args=[self.match.pk]), {"remove_point": 20})
+        self.match.refresh_from_db()
+        self.assertEqual(self.match.status, Match.Status.FINISHED)
+        self.assertEqual(self.match.winner, self.alice)
+        self.assertIsNone(self.match.turn)
+
+
+def _empty_backgammon_state(dice=None):
+    return {
+        "points": [{"owner": None, "count": 0} for _ in range(24)],
+        "bar": {"p1": 0, "p2": 0},
+        "borne_off": {"p1": 0, "p2": 0},
+        "dice": dice or [],
+    }
+
+
+class BackgammonLogicTests(TestCase):
+    def test_initial_state_has_correct_checker_counts(self):
+        state = backgammon.initial_state()
+        p1_on_board = sum(c["count"] for c in state["points"] if c["owner"] == "p1")
+        p2_on_board = sum(c["count"] for c in state["points"] if c["owner"] == "p2")
+        self.assertEqual(p1_on_board, 15)
+        self.assertEqual(p2_on_board, 15)
+        self.assertEqual(state["points"][23], {"owner": "p1", "count": 2})
+        self.assertEqual(state["points"][0], {"owner": "p2", "count": 2})
+
+    def test_roll_dice_returns_two_values_or_doubles_four(self):
+        for _ in range(30):
+            dice = backgammon.roll_dice()
+            self.assertIn(len(dice), (2, 4))
+            if len(dice) == 4:
+                self.assertEqual(len(set(dice)), 1)
+
+    def test_apply_move_relocates_checker(self):
+        state = _empty_backgammon_state(dice=[3])
+        state["points"][23] = {"owner": "p1", "count": 1}
+        new_state = backgammon.apply_move(state, "p1", 23, 3)
+        self.assertEqual(new_state["points"][23], {"owner": None, "count": 0})
+        self.assertEqual(new_state["points"][20], {"owner": "p1", "count": 1})
+        self.assertEqual(new_state["dice"], [])
+
+    def test_apply_move_does_not_mutate_original_state(self):
+        state = _empty_backgammon_state(dice=[3])
+        state["points"][23] = {"owner": "p1", "count": 1}
+        backgammon.apply_move(state, "p1", 23, 3)
+        self.assertEqual(state["points"][23], {"owner": "p1", "count": 1})
+        self.assertEqual(state["dice"], [3])
+
+    def test_apply_move_rejects_unavailable_die(self):
+        state = _empty_backgammon_state(dice=[5])
+        state["points"][23] = {"owner": "p1", "count": 1}
+        with self.assertRaises(InvalidMove):
+            backgammon.apply_move(state, "p1", 23, 3)
+
+    def test_apply_move_hits_lone_opponent_checker(self):
+        state = _empty_backgammon_state(dice=[3])
+        state["points"][23] = {"owner": "p1", "count": 1}
+        state["points"][20] = {"owner": "p2", "count": 1}
+        new_state = backgammon.apply_move(state, "p1", 23, 3)
+        self.assertEqual(new_state["points"][20], {"owner": "p1", "count": 1})
+        self.assertEqual(new_state["bar"]["p2"], 1)
+
+    def test_apply_move_rejects_blocked_point(self):
+        state = _empty_backgammon_state(dice=[3])
+        state["points"][23] = {"owner": "p1", "count": 1}
+        state["points"][20] = {"owner": "p2", "count": 2}
+        with self.assertRaises(InvalidMove):
+            backgammon.apply_move(state, "p1", 23, 3)
+
+    def test_apply_move_requires_bar_reentry_first(self):
+        state = _empty_backgammon_state(dice=[3])
+        state["points"][23] = {"owner": "p1", "count": 1}
+        state["bar"]["p1"] = 1
+        with self.assertRaises(InvalidMove):
+            backgammon.apply_move(state, "p1", 23, 3)
+
+    def test_apply_move_bar_reentry(self):
+        state = _empty_backgammon_state(dice=[3])
+        state["bar"]["p1"] = 1
+        new_state = backgammon.apply_move(state, "p1", "bar", 3)
+        self.assertEqual(new_state["bar"]["p1"], 0)
+        entry = backgammon.ENTRY_INDEX["p1"](3)
+        self.assertEqual(new_state["points"][entry], {"owner": "p1", "count": 1})
+
+    def test_apply_move_bear_off_exact_die(self):
+        state = _empty_backgammon_state(dice=[6])
+        state["points"][5] = {"owner": "p1", "count": 1}
+        new_state = backgammon.apply_move(state, "p1", 5, 6)
+        self.assertEqual(new_state["borne_off"]["p1"], 1)
+        self.assertEqual(new_state["points"][5], {"owner": None, "count": 0})
+
+    def test_apply_move_bear_off_overshoot_allowed_without_checker_further_back(self):
+        state = _empty_backgammon_state(dice=[6])
+        state["points"][3] = {"owner": "p1", "count": 1}
+        new_state = backgammon.apply_move(state, "p1", 3, 6)
+        self.assertEqual(new_state["borne_off"]["p1"], 1)
+
+    def test_apply_move_bear_off_overshoot_rejected_with_checker_further_back(self):
+        state = _empty_backgammon_state(dice=[6])
+        state["points"][3] = {"owner": "p1", "count": 1}
+        state["points"][5] = {"owner": "p1", "count": 1}
+        with self.assertRaises(InvalidMove):
+            backgammon.apply_move(state, "p1", 3, 6)
+
+    def test_apply_move_bear_off_rejected_when_not_all_home(self):
+        state = _empty_backgammon_state(dice=[6])
+        state["points"][5] = {"owner": "p1", "count": 1}
+        state["points"][10] = {"owner": "p1", "count": 1}
+        with self.assertRaises(InvalidMove):
+            backgammon.apply_move(state, "p1", 5, 6)
+
+    def test_any_legal_move_true_when_move_exists(self):
+        state = _empty_backgammon_state(dice=[3])
+        state["points"][23] = {"owner": "p1", "count": 1}
+        self.assertTrue(backgammon.any_legal_move(state, "p1"))
+
+    def test_any_legal_move_false_when_blocked(self):
+        state = _empty_backgammon_state(dice=[3])
+        state["points"][23] = {"owner": "p1", "count": 1}
+        state["points"][20] = {"owner": "p2", "count": 2}
+        self.assertFalse(backgammon.any_legal_move(state, "p1"))
+
+    def test_start_turn_returns_dice_and_mover(self):
+        state = backgammon.initial_state()
+        new_state, mover = backgammon.start_turn(state, "p1")
+        self.assertEqual(mover, "p1")
+        self.assertIn(len(new_state["dice"]), (2, 4))
+
+    def test_is_game_over(self):
+        state = _empty_backgammon_state()
+        state["borne_off"]["p1"] = 15
+        self.assertTrue(backgammon.is_game_over(state, "p1"))
+        self.assertFalse(backgammon.is_game_over(state, "p2"))
+
+
+class BackgammonMatchTests(TestCase):
+    def setUp(self):
+        self.alice = make_user("alice")
+        self.bob = make_user("bob")
+
+    def test_challenge_creates_active_match_with_dice_rolled(self):
+        self.client.force_login(self.alice)
+        response = self.client.post(reverse("backgammon-challenge", args=["bob"]))
+        match = Match.objects.get()
+        self.assertRedirects(response, reverse("backgammon-match", args=[match.pk]))
+        self.assertEqual(match.game, Match.Game.BACKGAMMON)
+        self.assertEqual(match.status, Match.Status.ACTIVE)
+        self.assertIn(len(match.state["dice"]), (2, 4))
+        self.assertIn(match.turn, (self.alice, self.bob))
+
+    def test_cannot_challenge_self(self):
+        self.client.force_login(self.alice)
+        self.client.post(reverse("backgammon-challenge", args=["alice"]))
+        self.assertEqual(Match.objects.count(), 0)
+
+    def test_non_participant_cannot_view_match(self):
+        self.match = Match.objects.create(
+            game=Match.Game.BACKGAMMON, player1=self.alice, player2=self.bob,
+            state=backgammon.initial_state(), turn=self.alice,
+        )
+        carol = make_user("carol")
+        self.client.force_login(carol)
+        response = self.client.get(reverse("backgammon-match", args=[self.match.pk]))
+        self.assertEqual(response.status_code, 403)
+
+    def test_move_by_wrong_player_is_ignored(self):
+        state = _empty_backgammon_state(dice=[3])
+        state["points"][23] = {"owner": "p1", "count": 1}
+        self.match = Match.objects.create(
+            game=Match.Game.BACKGAMMON, player1=self.alice, player2=self.bob, state=state, turn=self.alice,
+        )
+        self.client.force_login(self.bob)
+        self.client.post(reverse("backgammon-move", args=[self.match.pk]), {"source": 23, "die_value": 3})
+        self.match.refresh_from_db()
+        self.assertEqual(self.match.turn, self.alice)
+        self.assertEqual(self.match.state["points"][23], {"owner": "p1", "count": 1})
+
+    def test_invalid_move_shows_an_error(self):
+        state = _empty_backgammon_state(dice=[5])
+        state["points"][23] = {"owner": "p1", "count": 1}
+        self.match = Match.objects.create(
+            game=Match.Game.BACKGAMMON, player1=self.alice, player2=self.bob, state=state, turn=self.alice,
+        )
+        self.client.force_login(self.alice)
+        response = self.client.post(
+            reverse("backgammon-move", args=[self.match.pk]), {"source": 23, "die_value": 3}, follow=True
+        )
+        self.match.refresh_from_db()
+        self.assertEqual(self.match.state["points"][23], {"owner": "p1", "count": 1})
+        self.assertContains(response, "die value")
+
+    def test_valid_move_keeps_turn_while_dice_remain(self):
+        state = _empty_backgammon_state(dice=[3, 5])
+        state["points"][23] = {"owner": "p1", "count": 1}
+        state["points"][20] = {"owner": "p1", "count": 1}
+        self.match = Match.objects.create(
+            game=Match.Game.BACKGAMMON, player1=self.alice, player2=self.bob, state=state, turn=self.alice,
+        )
+        self.client.force_login(self.alice)
+        self.client.post(reverse("backgammon-move", args=[self.match.pk]), {"source": 23, "die_value": 3})
+        self.match.refresh_from_db()
+        self.assertEqual(self.match.state["dice"], [5])
+        self.assertEqual(self.match.status, Match.Status.ACTIVE)
+        self.assertEqual(self.match.turn, self.alice)
+
+    def test_turn_passes_and_rerolls_once_dice_are_exhausted(self):
+        state = _empty_backgammon_state(dice=[3])
+        state["points"][23] = {"owner": "p1", "count": 1}
+        for index, count in ((0, 2), (11, 5), (16, 3), (18, 5)):
+            state["points"][index] = {"owner": "p2", "count": count}
+        self.match = Match.objects.create(
+            game=Match.Game.BACKGAMMON, player1=self.alice, player2=self.bob, state=state, turn=self.alice,
+        )
+        self.client.force_login(self.alice)
+        self.client.post(reverse("backgammon-move", args=[self.match.pk]), {"source": 23, "die_value": 3})
+        self.match.refresh_from_db()
+        self.assertEqual(self.match.turn, self.bob)
+        self.assertIn(len(self.match.state["dice"]), (2, 4))
+
+    def test_bearing_off_last_checker_wins_the_match(self):
+        state = _empty_backgammon_state(dice=[4])
+        state["points"][3] = {"owner": "p1", "count": 1}
+        state["borne_off"]["p1"] = 14
+        self.match = Match.objects.create(
+            game=Match.Game.BACKGAMMON, player1=self.alice, player2=self.bob, state=state, turn=self.alice,
+        )
+        self.client.force_login(self.alice)
+        self.client.post(reverse("backgammon-move", args=[self.match.pk]), {"source": 3, "die_value": 4})
         self.match.refresh_from_db()
         self.assertEqual(self.match.status, Match.Status.FINISHED)
         self.assertEqual(self.match.winner, self.alice)

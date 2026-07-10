@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Backgammon — Chatter{% endblock %}
+
+{% block content %}
+    <div class="mx-auto max-w-2xl rounded-2xl border border-border bg-surface p-6 shadow-sm">
+        <div class="mb-4 flex items-center justify-between">
+            <div class="flex items-center gap-2">
+                {% include "_avatar.html" with avatar_user=match.player1 %}
+                <span class="text-sm font-medium">{{ match.player1.username }}</span>
+            </div>
+            <span class="text-sm text-muted">vs</span>
+            <div class="flex items-center gap-2">
+                <span class="text-sm font-medium">{{ match.player2.username }}</span>
+                {% include "_avatar.html" with avatar_user=match.player2 %}
+            </div>
+        </div>
+
+        {% if match.status == "finished" %}
+            <p class="mb-4 text-center font-semibold text-accent">{{ match.winner.username }} bore off all their checkers and won!</p>
+        {% elif must_enter_from_bar %}
+            <p class="mb-4 text-center font-semibold text-accent">Your turn &mdash; you must re-enter from the bar before anything else</p>
+        {% elif is_your_turn %}
+            <p class="mb-4 text-center font-semibold text-accent">Your turn &mdash; click a checker, then click a die to move it</p>
+        {% else %}
+            <p class="mb-4 text-center text-muted">Waiting on {{ opponent.username }}</p>
+        {% endif %}
+
+        <p class="mb-3 text-center text-xs text-muted">
+            Bar &mdash; you: {{ your_bar }}, {{ opponent.username }}: {{ opponent_bar }}
+            &middot; Borne off &mdash; you: {{ your_borne_off }}, {{ opponent.username }}: {{ opponent_borne_off }}
+        </p>
+
+        <div id="board" class="space-y-1 rounded-lg bg-surface-hover p-2">
+            <div class="grid grid-cols-12 gap-1">
+                {% for point in top_row %}
+                    <div
+                        {% if point.clickable %}data-source="{{ point.index }}"{% endif %}
+                        class="flex h-20 flex-col items-center justify-start rounded-sm border border-border p-1 {% if point.clickable %}cursor-pointer hover:bg-border/60{% endif %}"
+                    >
+                        {% if point.count > 0 %}
+                            <span class="flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold {% if point.is_yours %}bg-accent text-accent-fg{% else %}bg-fg text-surface{% endif %}">{{ point.count }}</span>
+                        {% endif %}
+                    </div>
+                {% endfor %}
+            </div>
+            <div class="grid grid-cols-12 gap-1">
+                {% for point in bottom_row %}
+                    <div
+                        {% if point.clickable %}data-source="{{ point.index }}"{% endif %}
+                        class="flex h-20 flex-col items-center justify-end rounded-sm border border-border p-1 {% if point.clickable %}cursor-pointer hover:bg-border/60{% endif %}"
+                    >
+                        {% if point.count > 0 %}
+                            <span class="flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold {% if point.is_yours %}bg-accent text-accent-fg{% else %}bg-fg text-surface{% endif %}">{{ point.count }}</span>
+                        {% endif %}
+                    </div>
+                {% endfor %}
+            </div>
+            {% if must_enter_from_bar %}
+                <div class="flex justify-center pt-1">
+                    <span data-source="bar" class="cursor-pointer rounded-full border-2 border-accent bg-accent/20 px-4 py-1.5 text-sm font-medium text-fg hover:bg-accent/40">Enter from bar ({{ your_bar }})</span>
+                </div>
+            {% endif %}
+        </div>
+
+        {% if is_your_turn %}
+            <div id="dice" class="mt-4 flex justify-center gap-2">
+                {% for die in dice %}
+                    <span data-die="{{ die }}" class="flex h-10 w-10 cursor-pointer items-center justify-center rounded-lg border border-border bg-surface text-lg font-bold transition-colors hover:bg-border/60">{{ die }}</span>
+                {% endfor %}
+            </div>
+
+            <form id="move-form" method="post" action="{% url 'backgammon-move' match.pk %}">
+                {% csrf_token %}
+                <input type="hidden" id="source" name="source">
+                <input type="hidden" id="die_value" name="die_value">
+            </form>
+            <script src="{% static 'games/js/backgammon.js' %}"></script>
+        {% endif %}
+    </div>
+    {% include "games/_match_poll.html" %}
+{% endblock %}
