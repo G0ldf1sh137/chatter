@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load user_extras %}
 
 {% block title %}Leaderboard — Chatter{% endblock %}
 
@@ -9,7 +10,7 @@
     <ol class="divide-y divide-border rounded-2xl border border-border bg-surface">
         {% for entry in ttt_leaders %}
             <li class="flex items-center justify-between px-4 py-2 text-sm">
-                <span>{{ forloop.counter }}. {{ entry.winner__username }}</span>
+                <span>{{ forloop.counter }}. {{ entry.winner__username|at_username }}</span>
                 <span class="font-semibold text-fg">{{ entry.wins }}</span>
             </li>
         {% empty %}
@@ -21,7 +22,7 @@
     <ol class="divide-y divide-border rounded-2xl border border-border bg-surface">
         {% for entry in rps_leaders %}
             <li class="flex items-center justify-between px-4 py-2 text-sm">
-                <span>{{ forloop.counter }}. {{ entry.winner__username }}</span>
+                <span>{{ forloop.counter }}. {{ entry.winner__username|at_username }}</span>
                 <span class="font-semibold text-fg">{{ entry.wins }}</span>
             </li>
         {% empty %}
@@ -33,7 +34,7 @@
     <ol class="divide-y divide-border rounded-2xl border border-border bg-surface">
         {% for entry in connect4_leaders %}
             <li class="flex items-center justify-between px-4 py-2 text-sm">
-                <span>{{ forloop.counter }}. {{ entry.winner__username }}</span>
+                <span>{{ forloop.counter }}. {{ entry.winner__username|at_username }}</span>
                 <span class="font-semibold text-fg">{{ entry.wins }}</span>
             </li>
         {% empty %}
@@ -45,7 +46,7 @@
     <ol class="divide-y divide-border rounded-2xl border border-border bg-surface">
         {% for entry in checkers_leaders %}
             <li class="flex items-center justify-between px-4 py-2 text-sm">
-                <span>{{ forloop.counter }}. {{ entry.winner__username }}</span>
+                <span>{{ forloop.counter }}. {{ entry.winner__username|at_username }}</span>
                 <span class="font-semibold text-fg">{{ entry.wins }}</span>
             </li>
         {% empty %}
@@ -57,7 +58,7 @@
     <ol class="divide-y divide-border rounded-2xl border border-border bg-surface">
         {% for entry in othello_leaders %}
             <li class="flex items-center justify-between px-4 py-2 text-sm">
-                <span>{{ forloop.counter }}. {{ entry.winner__username }}</span>
+                <span>{{ forloop.counter }}. {{ entry.winner__username|at_username }}</span>
                 <span class="font-semibold text-fg">{{ entry.wins }}</span>
             </li>
         {% empty %}
@@ -69,7 +70,7 @@
     <ol class="divide-y divide-border rounded-2xl border border-border bg-surface">
         {% for entry in nim_leaders %}
             <li class="flex items-center justify-between px-4 py-2 text-sm">
-                <span>{{ forloop.counter }}. {{ entry.winner__username }}</span>
+                <span>{{ forloop.counter }}. {{ entry.winner__username|at_username }}</span>
                 <span class="font-semibold text-fg">{{ entry.wins }}</span>
             </li>
         {% empty %}
@@ -81,7 +82,7 @@
     <ol class="divide-y divide-border rounded-2xl border border-border bg-surface">
         {% for entry in battleship_leaders %}
             <li class="flex items-center justify-between px-4 py-2 text-sm">
-                <span>{{ forloop.counter }}. {{ entry.winner__username }}</span>
+                <span>{{ forloop.counter }}. {{ entry.winner__username|at_username }}</span>
                 <span class="font-semibold text-fg">{{ entry.wins }}</span>
             </li>
         {% empty %}
@@ -93,7 +94,7 @@
     <ol class="divide-y divide-border rounded-2xl border border-border bg-surface">
         {% for entry in stratego_leaders %}
             <li class="flex items-center justify-between px-4 py-2 text-sm">
-                <span>{{ forloop.counter }}. {{ entry.winner__username }}</span>
+                <span>{{ forloop.counter }}. {{ entry.winner__username|at_username }}</span>
                 <span class="font-semibold text-fg">{{ entry.wins }}</span>
             </li>
         {% empty %}
@@ -105,7 +106,7 @@
     <ol class="divide-y divide-border rounded-2xl border border-border bg-surface">
         {% for entry in morris_leaders %}
             <li class="flex items-center justify-between px-4 py-2 text-sm">
-                <span>{{ forloop.counter }}. {{ entry.winner__username }}</span>
+                <span>{{ forloop.counter }}. {{ entry.winner__username|at_username }}</span>
                 <span class="font-semibold text-fg">{{ entry.wins }}</span>
             </li>
         {% empty %}
@@ -117,7 +118,7 @@
     <ol class="divide-y divide-border rounded-2xl border border-border bg-surface">
         {% for entry in backgammon_leaders %}
             <li class="flex items-center justify-between px-4 py-2 text-sm">
-                <span>{{ forloop.counter }}. {{ entry.winner__username }}</span>
+                <span>{{ forloop.counter }}. {{ entry.winner__username|at_username }}</span>
                 <span class="font-semibold text-fg">{{ entry.wins }}</span>
             </li>
         {% empty %}
@@ -129,7 +130,7 @@
     <ol class="divide-y divide-border rounded-2xl border border-border bg-surface">
         {% for entry in hangman_leaders %}
             <li class="flex items-center justify-between px-4 py-2 text-sm">
-                <span>{{ forloop.counter }}. {{ entry.player__username }}</span>
+                <span>{{ forloop.counter }}. {{ entry.player__username|at_username }}</span>
                 <span class="font-semibold text-fg">{{ entry.wins }}</span>
             </li>
         {% empty %}
@@ -141,7 +142,7 @@
     <ol class="divide-y divide-border rounded-2xl border border-border bg-surface">
         {% for entry in game2048_leaders %}
             <li class="flex items-center justify-between px-4 py-2 text-sm">
-                <span>{{ forloop.counter }}. {{ entry.player__username }}</span>
+                <span>{{ forloop.counter }}. {{ entry.player__username|at_username }}</span>
                 <span class="font-semibold text-fg">{{ entry.high_score }}</span>
             </li>
         {% empty %}
@@ -153,7 +154,7 @@
     <ol class="divide-y divide-border rounded-2xl border border-border bg-surface">
         {% for entry in snake_leaders %}
             <li class="flex items-center justify-between px-4 py-2 text-sm">
-                <span>{{ forloop.counter }}. {{ entry.player__username }}</span>
+                <span>{{ forloop.counter }}. {{ entry.player__username|at_username }}</span>
                 <span class="font-semibold text-fg">{{ entry.high_score }}</span>
             </li>
         {% empty %}
@@ -165,7 +166,7 @@
     <ol class="divide-y divide-border rounded-2xl border border-border bg-surface">
         {% for entry in doodle_leaders %}
             <li class="flex items-center justify-between px-4 py-2 text-sm">
-                <span>{{ forloop.counter }}. {{ entry.player__username }}</span>
+                <span>{{ forloop.counter }}. {{ entry.player__username|at_username }}</span>
                 <span class="font-semibold text-fg">{{ entry.high_score }}</span>
             </li>
         {% empty %}
@@ -177,7 +178,7 @@
     <ol class="divide-y divide-border rounded-2xl border border-border bg-surface">
         {% for entry in wordle_leaders %}
             <li class="flex items-center justify-between px-4 py-2 text-sm">
-                <span>{{ forloop.counter }}. {{ entry.player__username }}</span>
+                <span>{{ forloop.counter }}. {{ entry.player__username|at_username }}</span>
                 <span class="font-semibold text-fg">{{ entry.high_score }}</span>
             </li>
         {% empty %}
@@ -189,7 +190,7 @@
     <ol class="divide-y divide-border rounded-2xl border border-border bg-surface">
         {% for entry in mastermind_leaders %}
             <li class="flex items-center justify-between px-4 py-2 text-sm">
-                <span>{{ forloop.counter }}. {{ entry.player__username }}</span>
+                <span>{{ forloop.counter }}. {{ entry.player__username|at_username }}</span>
                 <span class="font-semibold text-fg">{{ entry.high_score }}</span>
             </li>
         {% empty %}
@@ -201,7 +202,7 @@
     <ol class="divide-y divide-border rounded-2xl border border-border bg-surface">
         {% for entry in flappy_leaders %}
             <li class="flex items-center justify-between px-4 py-2 text-sm">
-                <span>{{ forloop.counter }}. {{ entry.player__username }}</span>
+                <span>{{ forloop.counter }}. {{ entry.player__username|at_username }}</span>
                 <span class="font-semibold text-fg">{{ entry.high_score }}</span>
             </li>
         {% empty %}
@@ -213,7 +214,7 @@
     <ol class="divide-y divide-border rounded-2xl border border-border bg-surface">
         {% for entry in tetris_leaders %}
             <li class="flex items-center justify-between px-4 py-2 text-sm">
-                <span>{{ forloop.counter }}. {{ entry.player__username }}</span>
+                <span>{{ forloop.counter }}. {{ entry.player__username|at_username }}</span>
                 <span class="font-semibold text-fg">{{ entry.high_score }}</span>
             </li>
         {% empty %}

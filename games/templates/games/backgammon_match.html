@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% load static %}
+{% load static user_extras %}
 
 {% block title %}Backgammon — Chatter{% endblock %}
 
@@ -8,28 +8,28 @@
         <div class="mb-4 flex items-center justify-between">
             <div class="flex items-center gap-2">
                 {% include "_avatar.html" with avatar_user=match.player1 %}
-                <span class="text-sm font-medium">{{ match.player1.username }}</span>
+                <span class="text-sm font-medium">{{ match.player1.username|at_username }}</span>
             </div>
             <span class="text-sm text-muted">vs</span>
             <div class="flex items-center gap-2">
-                <span class="text-sm font-medium">{{ match.player2.username }}</span>
+                <span class="text-sm font-medium">{{ match.player2.username|at_username }}</span>
                 {% include "_avatar.html" with avatar_user=match.player2 %}
             </div>
         </div>
 
         {% if match.status == "finished" %}
-            <p class="mb-4 text-center font-semibold text-accent">{{ match.winner.username }} bore off all their checkers and won!</p>
+            <p class="mb-4 text-center font-semibold text-accent">{{ match.winner.username|at_username }} bore off all their checkers and won!</p>
         {% elif must_enter_from_bar %}
             <p class="mb-4 text-center font-semibold text-accent">Your turn &mdash; you must re-enter from the bar before anything else</p>
         {% elif is_your_turn %}
             <p class="mb-4 text-center font-semibold text-accent">Your turn &mdash; click a checker, then click a die to move it</p>
         {% else %}
-            <p class="mb-4 text-center text-muted">Waiting on {{ opponent.username }}</p>
+            <p class="mb-4 text-center text-muted">Waiting on {{ opponent.username|at_username }}</p>
         {% endif %}
 
         <p class="mb-3 text-center text-xs text-muted">
-            Bar &mdash; you: {{ your_bar }}, {{ opponent.username }}: {{ opponent_bar }}
-            &middot; Borne off &mdash; you: {{ your_borne_off }}, {{ opponent.username }}: {{ opponent_borne_off }}
+            Bar &mdash; you: {{ your_bar }}, {{ opponent.username|at_username }}: {{ opponent_bar }}
+            &middot; Borne off &mdash; you: {{ your_borne_off }}, {{ opponent.username|at_username }}: {{ opponent_borne_off }}
         </p>
 
         <div id="board" class="space-y-1 rounded-lg bg-surface-hover p-2">

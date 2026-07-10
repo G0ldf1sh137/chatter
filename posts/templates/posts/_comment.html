@@ -1,8 +1,8 @@
-{% load post_extras %}
+{% load post_extras user_extras %}
 <div class="p-4 sm:p-5" id="comment-{{ comment.pk }}">
     <div class="mb-1.5 flex flex-wrap items-center gap-1.5 text-sm text-muted">
         {% include "_avatar.html" with avatar_user=comment.author %}
-        <a href="{% url 'profile' comment.author.username %}" class="font-medium text-fg no-underline hover:text-accent">{{ comment.author.username }}</a>
+        <a href="{% url 'profile' comment.author.username %}" class="font-medium text-fg no-underline hover:text-accent">{{ comment.author.username|at_username }}</a>
         <span>&middot; {{ comment.created_at }}</span>
         {% if comment.edited %}<span class="italic">&middot; edited</span>{% endif %}
         {% include "_comment_vote.html" %}

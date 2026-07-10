@@ -17,6 +17,7 @@ urlpatterns = [
     path("resend-verification/", views.ResendVerificationView.as_view(), name="resend-verification"),
     path("settings/profile/", views.ProfileEditView.as_view(), name="profile-edit"),
     path("settings/password/", views.PasswordChangeView.as_view(), name="password-change"),
+    path("users/search/", views.UserSearchView.as_view(), name="user-search"),
     path("users/<str:username>/", views.ProfileView.as_view(), name="profile"),
     path("users/<str:username>/follow/", views.FollowView.as_view(), name="follow"),
     path("users/<str:username>/unfollow/", views.UnfollowView.as_view(), name="unfollow"),

@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load user_extras %}
 
 {% block title %}Othello — Chatter{% endblock %}
 
@@ -7,30 +8,30 @@
         <div class="mb-4 flex items-center justify-between">
             <div class="flex items-center gap-2">
                 {% include "_avatar.html" with avatar_user=match.player1 %}
-                <span class="text-sm font-medium">{{ match.player1.username }} (Black)</span>
+                <span class="text-sm font-medium">{{ match.player1.username|at_username }} (Black)</span>
             </div>
             <span class="text-sm text-muted">vs</span>
             <div class="flex items-center gap-2">
-                <span class="text-sm font-medium">{{ match.player2.username }} (White)</span>
+                <span class="text-sm font-medium">{{ match.player2.username|at_username }} (White)</span>
                 {% include "_avatar.html" with avatar_user=match.player2 %}
             </div>
         </div>
 
         {% if match.status == "finished" %}
             {% if match.winner %}
-                <p class="mb-1 text-center font-semibold text-accent">{{ match.winner.username }} won!</p>
+                <p class="mb-1 text-center font-semibold text-accent">{{ match.winner.username|at_username }} won!</p>
             {% else %}
                 <p class="mb-1 text-center font-semibold text-muted">It's a tie.</p>
             {% endif %}
             <p class="mb-4 text-center text-sm text-muted">{{ black_count }}&ndash;{{ white_count }}</p>
         {% elif is_your_turn %}
             {% if just_passed %}
-                <p class="mb-4 text-center font-semibold text-accent">{{ opponent.username }} had no legal move and passed &mdash; go again!</p>
+                <p class="mb-4 text-center font-semibold text-accent">{{ opponent.username|at_username }} had no legal move and passed &mdash; go again!</p>
             {% else %}
                 <p class="mb-4 text-center font-semibold text-accent">Your turn</p>
             {% endif %}
         {% else %}
-            <p class="mb-4 text-center text-muted">Waiting on {{ opponent.username }}</p>
+            <p class="mb-4 text-center text-muted">Waiting on {{ opponent.username|at_username }}</p>
         {% endif %}
 
         <div class="mx-auto grid w-full max-w-[320px] grid-cols-8 gap-0.5 rounded-lg bg-surface-hover p-1">

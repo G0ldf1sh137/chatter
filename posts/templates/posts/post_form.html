@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load static %}
 
 {% block title %}{% if object %}Edit post{% else %}New post{% endif %} — Chatter{% endblock %}
 
@@ -11,4 +12,5 @@
             <button type="submit">{% if object %}Save{% else %}Post{% endif %}</button>
         </form>
     </div>
+    <script src="{% static 'posts/js/mention_autocomplete.js' %}"></script>
 {% endblock %}

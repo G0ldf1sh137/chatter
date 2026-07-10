@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% load static %}
+{% load static user_extras %}
 
 {% block title %}Checkers — Chatter{% endblock %}
 
@@ -8,25 +8,25 @@
         <div class="mb-4 flex items-center justify-between">
             <div class="flex items-center gap-2">
                 {% include "_avatar.html" with avatar_user=match.player1 %}
-                <span class="text-sm font-medium">{{ match.player1.username }} (Red)</span>
+                <span class="text-sm font-medium">{{ match.player1.username|at_username }} (Red)</span>
             </div>
             <span class="text-sm text-muted">vs</span>
             <div class="flex items-center gap-2">
-                <span class="text-sm font-medium">{{ match.player2.username }} (Black)</span>
+                <span class="text-sm font-medium">{{ match.player2.username|at_username }} (Black)</span>
                 {% include "_avatar.html" with avatar_user=match.player2 %}
             </div>
         </div>
 
         {% if match.status == "finished" %}
             {% if match.winner %}
-                <p class="mb-4 text-center font-semibold text-accent">{{ match.winner.username }} won!</p>
+                <p class="mb-4 text-center font-semibold text-accent">{{ match.winner.username|at_username }} won!</p>
             {% else %}
                 <p class="mb-4 text-center font-semibold text-muted">Game over.</p>
             {% endif %}
         {% elif is_your_turn %}
             <p class="mb-4 text-center font-semibold text-accent">Your turn — click a piece, then click where to move it</p>
         {% else %}
-            <p class="mb-4 text-center text-muted">Waiting on {{ opponent.username }}</p>
+            <p class="mb-4 text-center text-muted">Waiting on {{ opponent.username|at_username }}</p>
         {% endif %}
 
         <div id="board" class="mx-auto grid w-full max-w-[320px] grid-cols-8 gap-0 overflow-hidden rounded-lg border border-border">

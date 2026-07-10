@@ -1,11 +1,11 @@
-{% load post_extras %}
+{% load post_extras user_extras %}
 <article class="rounded-2xl border border-border bg-surface p-4 shadow-sm transition-shadow hover:shadow-md sm:p-5" style="view-transition-name: post-{{ post.pk }}">
     <div class="flex gap-3">
         {% include "_post_vote.html" %}
         <div class="min-w-0 flex-1">
             <div class="mb-1.5 flex items-center gap-1.5 text-sm text-muted">
                 {% include "_avatar.html" with avatar_user=post.author %}
-                <a href="{% url 'profile' post.author.username %}" class="font-medium text-fg no-underline hover:text-accent">{{ post.author.username }}</a>
+                <a href="{% url 'profile' post.author.username %}" class="font-medium text-fg no-underline hover:text-accent">{{ post.author.username|at_username }}</a>
                 <span>&middot; {{ post.created_at }}</span>
             </div>
             <a href="{% url 'post-detail' post.pk %}" class="block text-fg no-underline hover:text-accent">

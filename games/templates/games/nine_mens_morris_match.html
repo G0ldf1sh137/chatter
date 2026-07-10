@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% load static %}
+{% load static user_extras %}
 
 {% block title %}Nine Men's Morris — Chatter{% endblock %}
 
@@ -8,25 +8,25 @@
         <div class="mb-4 flex items-center justify-between">
             <div class="flex items-center gap-2">
                 {% include "_avatar.html" with avatar_user=match.player1 %}
-                <span class="text-sm font-medium">{{ match.player1.username }}</span>
+                <span class="text-sm font-medium">{{ match.player1.username|at_username }}</span>
             </div>
             <span class="text-sm text-muted">vs</span>
             <div class="flex items-center gap-2">
-                <span class="text-sm font-medium">{{ match.player2.username }}</span>
+                <span class="text-sm font-medium">{{ match.player2.username|at_username }}</span>
                 {% include "_avatar.html" with avatar_user=match.player2 %}
             </div>
         </div>
 
         {% if match.status == "finished" %}
-            <p class="mb-4 text-center font-semibold text-accent">{{ match.winner.username }} won!</p>
+            <p class="mb-4 text-center font-semibold text-accent">{{ match.winner.username|at_username }} won!</p>
         {% elif mode == "removal" %}
-            <p class="mb-4 text-center font-semibold text-accent">You formed a mill! Remove one of {{ opponent.username }}'s pieces.</p>
+            <p class="mb-4 text-center font-semibold text-accent">You formed a mill! Remove one of {{ opponent.username|at_username }}'s pieces.</p>
         {% elif mode == "placement" %}
             <p class="mb-4 text-center font-semibold text-accent">Your turn &mdash; place a piece ({{ your_to_place }} left)</p>
         {% elif mode == "movement" %}
             <p class="mb-4 text-center font-semibold text-accent">Your turn &mdash; click a piece, then click where to move it</p>
         {% else %}
-            <p class="mb-4 text-center text-muted">Waiting on {{ opponent.username }}</p>
+            <p class="mb-4 text-center text-muted">Waiting on {{ opponent.username|at_username }}</p>
         {% endif %}
 
         <div id="board" class="relative mx-auto" style="width: {{ board_size }}px; height: {{ board_size }}px;">
@@ -82,7 +82,7 @@
             <script src="{% static 'games/js/nine_mens_morris.js' %}"></script>
         {% endif %}
 
-        <p class="mt-3 text-center text-xs text-muted">Pieces left to place &mdash; you: {{ your_to_place }}, {{ opponent.username }}: {{ opponent_to_place }}</p>
+        <p class="mt-3 text-center text-xs text-muted">Pieces left to place &mdash; you: {{ your_to_place }}, {{ opponent.username|at_username }}: {{ opponent_to_place }}</p>
     </div>
     {% include "games/_match_poll.html" %}
 {% endblock %}

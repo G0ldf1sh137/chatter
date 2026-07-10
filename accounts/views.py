@@ -5,6 +5,7 @@ from django.contrib.auth.forms import PasswordChangeForm, SetPasswordForm
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.auth.models import User
 from django.db.models import Sum
+from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse, reverse_lazy
 from django.views import View
@@ -21,6 +22,7 @@ from .models import Follow, Profile
 from .tokens import TokenExpired, TokenInvalid, verify_token
 
 PROFILE_ITEM_LIMIT = 20
+USER_SEARCH_LIMIT = 8
 
 
 class RegisterView(CreateView):
@@ -214,3 +216,19 @@ class UnfollowView(LoginRequiredMixin, View):
         target = get_object_or_404(User, username=username)
         Follow.objects.filter(follower=request.user, followed=target).delete()
         return redirect("profile", username=username)
+
+
+class UserSearchView(LoginRequiredMixin, View):
+    # Powers the @mention autocomplete in post/comment textareas
+    # (posts/static/posts/js/mention_autocomplete.js) - a plain prefix match
+    # is enough for a typeahead, no need for full-text search here.
+    def get(self, request):
+        query = request.GET.get("q", "").strip()
+        if not query:
+            return JsonResponse({"usernames": []})
+        usernames = list(
+            User.objects.filter(username__istartswith=query)
+            .order_by("username")
+            .values_list("username", flat=True)[:USER_SEARCH_LIMIT]
+        )
+        return JsonResponse({"usernames": usernames})

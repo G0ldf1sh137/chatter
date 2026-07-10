@@ -18,6 +18,7 @@ from posts.models import Comment, CommentVote, Post, PostVote
 from .adapter import SocialAccountAdapter
 from .models import Follow, Profile
 from .signals import mark_social_signup_verified
+from .templatetags.user_extras import at_username
 from .tokens import generate_verification_token
 
 # Smallest valid GIF, used to exercise ImageField validation without a real file.
@@ -301,6 +302,40 @@ class ProfileViewTests(TestCase):
         # post: +1 self-upvote, +1 voter1, +1 voter2 = 3. comment: +1 self-upvote, -1 voter1 = 0.
         self.assertContains(response, "3 karma")
         self.assertEqual(response.context["karma"], 3)
+
+
+class AtUsernameFilterTests(TestCase):
+    def test_prefixes_a_username_with_at_sign(self):
+        self.assertEqual(at_username("carol"), "@carol")
+
+    def test_empty_value_passes_through_unchanged(self):
+        self.assertEqual(at_username(""), "")
+
+
+class UsernameDisplayTests(TestCase):
+    def test_profile_heading_shows_at_prefixed_username(self):
+        User.objects.create_user(username="carol", password="correct-horse-battery-staple")
+
+        response = self.client.get(reverse("profile", args=["carol"]))
+
+        self.assertContains(response, "@carol")
+        self.assertNotContains(response, ">carol<")
+
+    def test_feed_post_card_shows_at_prefixed_author(self):
+        author = User.objects.create_user(username="carol", password="correct-horse-battery-staple")
+        Post.objects.create(author=author, body="Hello from carol")
+
+        response = self.client.get(reverse("feed"))
+
+        self.assertContains(response, "@carol")
+
+    def test_header_nav_shows_at_prefixed_logged_in_username(self):
+        user = User.objects.create_user(username="carol", password="correct-horse-battery-staple")
+        self.client.force_login(user)
+
+        response = self.client.get(reverse("feed"))
+
+        self.assertContains(response, "@carol")
 
 
 class ProfileGamesIntegrationTests(TestCase):
@@ -605,6 +640,50 @@ class PasswordChangeTests(TestCase):
         self.assertRedirects(response, reverse("profile-edit"))
         social_user.refresh_from_db()
         self.assertTrue(social_user.check_password("brand-new-password-123"))
+
+
+class UserSearchViewTests(TestCase):
+    def setUp(self):
+        self.viewer = User.objects.create_user(username="dave", password="correct-horse-battery-staple")
+        User.objects.create_user(username="carol", password="correct-horse-battery-staple")
+        User.objects.create_user(username="caroline", password="correct-horse-battery-staple")
+        User.objects.create_user(username="bob", password="correct-horse-battery-staple")
+
+    def test_anonymous_user_cannot_search(self):
+        response = self.client.get(reverse("user-search"), {"q": "car"})
+        self.assertEqual(response.status_code, 302)
+        self.assertIn(reverse("login"), response.url)
+
+    def test_prefix_match_is_case_insensitive(self):
+        self.client.force_login(self.viewer)
+
+        response = self.client.get(reverse("user-search"), {"q": "CAR"})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {"usernames": ["carol", "caroline"]})
+
+    def test_non_matching_query_returns_empty_list(self):
+        self.client.force_login(self.viewer)
+
+        response = self.client.get(reverse("user-search"), {"q": "zzz"})
+
+        self.assertEqual(response.json(), {"usernames": []})
+
+    def test_blank_query_returns_empty_list_without_matching_everyone(self):
+        self.client.force_login(self.viewer)
+
+        response = self.client.get(reverse("user-search"), {"q": ""})
+
+        self.assertEqual(response.json(), {"usernames": []})
+
+    def test_results_are_capped(self):
+        self.client.force_login(self.viewer)
+        for i in range(10):
+            User.objects.create_user(username=f"carfan{i}", password="correct-horse-battery-staple")
+
+        response = self.client.get(reverse("user-search"), {"q": "car"})
+
+        self.assertEqual(len(response.json()["usernames"]), 8)
 
 
 class FollowTests(TestCase):

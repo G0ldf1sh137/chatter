@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load user_extras %}
 
 {% block title %}Battleship — Chatter{% endblock %}
 
@@ -7,27 +8,27 @@
         <div class="mb-4 flex items-center justify-between">
             <div class="flex items-center gap-2">
                 {% include "_avatar.html" with avatar_user=match.player1 %}
-                <span class="text-sm font-medium">{{ match.player1.username }}</span>
+                <span class="text-sm font-medium">{{ match.player1.username|at_username }}</span>
             </div>
             <span class="text-sm text-muted">vs</span>
             <div class="flex items-center gap-2">
-                <span class="text-sm font-medium">{{ match.player2.username }}</span>
+                <span class="text-sm font-medium">{{ match.player2.username|at_username }}</span>
                 {% include "_avatar.html" with avatar_user=match.player2 %}
             </div>
         </div>
 
         {% if match.status == "finished" %}
-            <p class="mb-4 text-center font-semibold text-accent">{{ match.winner.username }} sank the whole fleet and won!</p>
+            <p class="mb-4 text-center font-semibold text-accent">{{ match.winner.username|at_username }} sank the whole fleet and won!</p>
         {% elif phase == "placement" %}
             {% if fully_placed %}
-                <p class="mb-4 text-center text-muted">Fleet placed &mdash; waiting on {{ opponent.username }} to place theirs.</p>
+                <p class="mb-4 text-center text-muted">Fleet placed &mdash; waiting on {{ opponent.username|at_username }} to place theirs.</p>
             {% else %}
                 <p class="mb-4 text-center font-semibold text-accent">Place your next ship &mdash; {{ next_ship_length }} cells long</p>
             {% endif %}
         {% elif is_your_turn %}
             <p class="mb-4 text-center font-semibold text-accent">Your turn &mdash; fire!</p>
         {% else %}
-            <p class="mb-4 text-center text-muted">Waiting on {{ opponent.username }}</p>
+            <p class="mb-4 text-center text-muted">Waiting on {{ opponent.username|at_username }}</p>
         {% endif %}
 
         {% if phase == "placement" %}

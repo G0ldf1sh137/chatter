@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load user_extras %}
 
 {% block title %}Rock-Paper-Scissors — Chatter{% endblock %}
 
@@ -7,11 +8,11 @@
         <div class="mb-4 flex items-center justify-between">
             <div class="flex items-center gap-2">
                 {% include "_avatar.html" with avatar_user=match.player1 %}
-                <span class="text-sm font-medium">{{ match.player1.username }}</span>
+                <span class="text-sm font-medium">{{ match.player1.username|at_username }}</span>
             </div>
             <span class="text-sm text-muted">vs</span>
             <div class="flex items-center gap-2">
-                <span class="text-sm font-medium">{{ match.player2.username }}</span>
+                <span class="text-sm font-medium">{{ match.player2.username|at_username }}</span>
                 {% include "_avatar.html" with avatar_user=match.player2 %}
             </div>
         </div>
@@ -23,12 +24,12 @@
                 <span class="rounded-lg bg-surface-hover px-4 py-2 text-sm font-semibold capitalize">{{ player2_choice|default:"—" }}</span>
             </div>
             {% if match.winner %}
-                <p class="text-center font-semibold text-accent">{{ match.winner.username }} won!</p>
+                <p class="text-center font-semibold text-accent">{{ match.winner.username|at_username }} won!</p>
             {% else %}
                 <p class="text-center font-semibold text-muted">It's a draw.</p>
             {% endif %}
         {% elif your_choice %}
-            <p class="text-center text-muted">You picked <span class="font-semibold capitalize text-fg">{{ your_choice }}</span>. Waiting on {{ opponent.username }}...</p>
+            <p class="text-center text-muted">You picked <span class="font-semibold capitalize text-fg">{{ your_choice }}</span>. Waiting on {{ opponent.username|at_username }}...</p>
         {% else %}
             <p class="mb-4 text-center font-semibold text-accent">Make your choice</p>
             <form method="post" action="{% url 'rps-move' match.pk %}" class="flex justify-center gap-3">

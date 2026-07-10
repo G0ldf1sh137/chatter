@@ -1,4 +1,4 @@
-{% load static %}
+{% load static user_extras %}
 <header class="sticky top-0 z-10 border-b border-border bg-surface/80 backdrop-blur">
     <div class="mx-auto flex max-w-[700px] items-center justify-between px-4 py-3">
         <a href="{% url 'feed' %}" class="flex items-center gap-2 text-lg font-extrabold tracking-tight text-fg no-underline">
@@ -25,7 +25,7 @@
                         class="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-accent px-1 text-[10px] font-bold text-accent-fg {% if not unread_message_count %}hidden{% endif %}"
                     >{{ unread_message_count }}</span>
                 </a>
-                <a href="{% url 'profile' user.username %}" class="rounded-full px-3 py-1.5 text-fg no-underline transition-colors hover:bg-surface-hover">{{ user.username }}</a>
+                <a href="{% url 'profile' user.username %}" class="rounded-full px-3 py-1.5 text-fg no-underline transition-colors hover:bg-surface-hover">{{ user.username|at_username }}</a>
                 <form action="{% url 'logout' %}" method="post" class="inline">
                     {% csrf_token %}
                     <button type="submit" class="mt-0 rounded-full border-none bg-transparent px-3 py-1.5 font-medium text-muted transition-colors hover:bg-surface-hover hover:text-fg">Log out</button>

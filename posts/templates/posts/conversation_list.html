@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load user_extras %}
 
 {% block title %}Messages — Chatter{% endblock %}
 
@@ -10,7 +11,7 @@
                 <div class="flex items-center gap-3">
                     {% include "_avatar.html" with avatar_user=conversation.other %}
                     <div>
-                        <p class="font-medium text-fg">{{ conversation.other.username }}</p>
+                        <p class="font-medium text-fg">{{ conversation.other.username|at_username }}</p>
                         {% if conversation.last_message_at %}
                             <p class="text-xs text-muted">{{ conversation.last_message_at }}</p>
                         {% endif %}

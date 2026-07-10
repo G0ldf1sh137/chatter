@@ -1,7 +1,7 @@
 {% extends "base.html" %}
-{% load post_extras %}
+{% load post_extras user_extras %}
 
-{% block title %}{{ profile_user.username }} — Chatter{% endblock %}
+{% block title %}{{ profile_user.username|at_username }} — Chatter{% endblock %}
 
 {% block content %}
     <div class="rounded-2xl border border-border bg-surface p-5 shadow-sm sm:p-6">
@@ -9,7 +9,7 @@
             <div class="flex items-center gap-4">
                 {% include "_avatar.html" with avatar_user=profile_user size="lg" %}
                 <div>
-                    <h1 class="text-2xl font-extrabold tracking-tight">{{ profile_user.username }}</h1>
+                    <h1 class="text-2xl font-extrabold tracking-tight">{{ profile_user.username|at_username }}</h1>
                     <p class="text-sm text-muted">Joined {{ profile_user.date_joined|date:"F Y" }}</p>
                 </div>
             </div>

@@ -1,13 +1,13 @@
 {% extends "base.html" %}
-{% load post_extras %}
+{% load post_extras user_extras %}
 
-{% block title %}{{ other.username }} — Messages — Chatter{% endblock %}
+{% block title %}{{ other.username|at_username }} — Messages — Chatter{% endblock %}
 
 {% block content %}
     <div class="mb-4 flex items-center gap-3">
         {% include "_avatar.html" with avatar_user=other %}
         <h1 class="text-xl font-extrabold tracking-tight">
-            <a href="{% url 'profile' other.username %}" class="text-fg no-underline hover:text-accent">{{ other.username }}</a>
+            <a href="{% url 'profile' other.username %}" class="text-fg no-underline hover:text-accent">{{ other.username|at_username }}</a>
         </h1>
     </div>
 
