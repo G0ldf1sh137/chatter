@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}{{ simulation.title }} — Chatter{% endblock %}
+
+{% block content %}
+    <a href="{% url 'simulations-hub' %}" class="text-sm font-medium text-accent no-underline hover:underline">&larr; All simulations</a>
+    <h1 class="mb-2 mt-2 text-2xl font-extrabold tracking-tight">{{ simulation.title }}</h1>
+    <p class="mb-4 text-sm text-muted">{{ simulation.description }}</p>
+    <div id="sketch-container" class="mx-auto w-fit overflow-hidden rounded-2xl border border-border bg-surface shadow-sm"></div>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.4/p5.min.js"></script>
+    <script src="{% static simulation.js_file %}"></script>
+{% endblock %}

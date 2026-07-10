@@ -50,6 +50,7 @@ INSTALLED_APPS = [
     "accounts",
     "posts",
     "games",
+    "simulations",
 ]
 
 MIDDLEWARE = [

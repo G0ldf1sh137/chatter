@@ -9,6 +9,7 @@ urlpatterns = [
     path("", include("posts.urls")),
     path("", include("accounts.urls")),
     path("games/", include("games.urls")),
+    path("simulations/", include("simulations.urls")),
 ]
 
 if settings.DEBUG:

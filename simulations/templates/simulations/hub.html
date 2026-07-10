@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+
+{% block title %}Simulations — Chatter{% endblock %}
+
+{% block content %}
+    <h1 class="mb-2 text-2xl font-extrabold tracking-tight">Simulations</h1>
+    <p class="mb-6 text-sm text-muted">Interactive p5.js sketches, rendered live in the browser.</p>
+    <div class="grid gap-4 sm:grid-cols-2">
+        {% for simulation in simulations %}
+            <a href="{% url 'simulation-detail' simulation.slug %}" class="block rounded-2xl border border-border bg-surface p-4 no-underline shadow-sm transition-shadow hover:shadow-md">
+                <p class="font-semibold text-fg">{{ simulation.title }}</p>
+                <p class="mt-1 text-sm text-muted">{{ simulation.description }}</p>
+            </a>
+        {% endfor %}
+    </div>
+{% endblock %}
