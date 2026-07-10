@@ -44,6 +44,30 @@ SIMULATIONS = [
         "description": "A continuous zoom into the Mandelbrot set, recomputed pixel-by-pixel every frame around a fixed point.",
         "js_file": "simulations/js/mandelbrot_zoom.js",
     },
+    {
+        "slug": "langtons-ant",
+        "title": "Langton Ant",
+        "description": "A single ant flips cells and turns based on one simple rule, eventually building a repeating diagonal highway.",
+        "js_file": "simulations/js/langtons_ant.js",
+    },
+    {
+        "slug": "cloth",
+        "title": "Cloth Simulation",
+        "description": "A pinned grid of points connected by constraints sways under gravity and wind, solved with Verlet integration.",
+        "js_file": "simulations/js/cloth.js",
+    },
+    {
+        "slug": "reaction-diffusion",
+        "title": "Reaction-Diffusion",
+        "description": "Two virtual chemicals diffuse and react across a grid, forming organic, coral-like Turing patterns.",
+        "js_file": "simulations/js/reaction_diffusion.js",
+    },
+    {
+        "slug": "fireworks",
+        "title": "Fireworks",
+        "description": "Rockets launch, arc under gravity, and burst into fading, colorful particle showers.",
+        "js_file": "simulations/js/fireworks.js",
+    },
 ]
 
 
