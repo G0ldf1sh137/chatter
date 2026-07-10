@@ -14,6 +14,12 @@ SIMULATIONS = [
         "description": "A planet orbits a fixed sun under simulated Newtonian gravity, tracing out its elliptical path.",
         "js_file": "simulations/js/orbital_gravity.js",
     },
+    {
+        "slug": "boids",
+        "title": "Boids",
+        "description": "A flock of simple agents follows separation, alignment, and cohesion rules to produce emergent flocking behavior.",
+        "js_file": "simulations/js/boids.js",
+    },
 ]
 
 
