@@ -593,7 +593,6 @@ class BattleshipMatchView(LoginRequiredMixin, UserPassesTestMixin, DetailView):
         size_range = range(battleship.BOARD_SIZE)
         context["opponent"] = opponent
         context["phase"] = match.state["phase"]
-        context["board_size_range"] = size_range
 
         if match.state["phase"] == "placement":
             my_ships = battleship.ships_for(match.state, my_id)
@@ -603,7 +602,7 @@ class BattleshipMatchView(LoginRequiredMixin, UserPassesTestMixin, DetailView):
                 context["next_ship_length"] = battleship.FLEET[len(my_ships)]
             my_ship_cells = {(r, c) for ship in my_ships for r, c in ship}
             context["my_board_cells"] = [
-                [{"ship": (r, c) in my_ship_cells} for c in size_range] for r in size_range
+                [{"ship": (r, c) in my_ship_cells, "r": r, "c": c} for c in size_range] for r in size_range
             ]
         else:
             viewer = battleship.viewer_state(match.state, my_id, opponent_id)
@@ -643,7 +642,7 @@ class BattleshipMatchView(LoginRequiredMixin, UserPassesTestMixin, DetailView):
 class BattleshipPlaceView(LoginRequiredMixin, View):
     def post(self, request, pk):
         try:
-            row, col = int(request.POST.get("row")), int(request.POST.get("col"))
+            row, col = (int(n) for n in request.POST.get("cell", "").split(","))
         except (TypeError, ValueError):
             return redirect("battleship-match", pk=pk)
         orientation = request.POST.get("orientation")
@@ -657,7 +656,8 @@ class BattleshipPlaceView(LoginRequiredMixin, View):
 
             try:
                 match.state = battleship.apply_placement(match.state, str(request.user.id), row, col, orientation)
-            except InvalidMove:
+            except InvalidMove as e:
+                messages.error(request, str(e))
                 return redirect("battleship-match", pk=pk)
 
             p1_id, p2_id = str(match.player1_id), str(match.player2_id)

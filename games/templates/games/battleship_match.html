@@ -32,38 +32,51 @@
 
         {% if phase == "placement" %}
             {% if not fully_placed %}
-                <form method="post" action="{% url 'battleship-place' match.pk %}" class="mb-4 flex flex-wrap items-center justify-center gap-2">
+                <form method="post" action="{% url 'battleship-place' match.pk %}">
                     {% csrf_token %}
-                    <select name="row" required>
-                        {% for n in board_size_range %}
-                            <option value="{{ n }}">Row {{ n }}</option>
+                    <div class="mb-3 flex items-center justify-center gap-4 text-sm">
+                        <label class="inline-flex items-center gap-1.5">
+                            <input type="radio" name="orientation" value="h" checked>
+                            Horizontal (right)
+                        </label>
+                        <label class="inline-flex items-center gap-1.5">
+                            <input type="radio" name="orientation" value="v">
+                            Vertical (down)
+                        </label>
+                    </div>
+                    <p class="mb-2 text-center text-sm text-muted">Click a cell to start your ship there</p>
+                    <div class="mx-auto grid w-full max-w-[320px] grid-cols-8 gap-0.5 rounded-lg bg-surface-hover p-1">
+                        {% for row in my_board_cells %}
+                            {% for cell in row %}
+                                {% if cell.ship %}
+                                    <div class="aspect-square rounded-sm bg-accent"></div>
+                                {% else %}
+                                    <button
+                                        type="submit"
+                                        name="cell"
+                                        value="{{ cell.r }},{{ cell.c }}"
+                                        aria-label="Place ship starting at row {{ cell.r }}, column {{ cell.c }}"
+                                        class="mt-0 aspect-square rounded-sm border-none bg-surface p-0 transition-colors hover:bg-border/60"
+                                    ></button>
+                                {% endif %}
+                            {% endfor %}
                         {% endfor %}
-                    </select>
-                    <select name="col" required>
-                        {% for n in board_size_range %}
-                            <option value="{{ n }}">Col {{ n }}</option>
-                        {% endfor %}
-                    </select>
-                    <select name="orientation" required>
-                        <option value="h">Horizontal (right)</option>
-                        <option value="v">Vertical (down)</option>
-                    </select>
-                    <button type="submit">Place ship</button>
+                    </div>
                 </form>
-            {% endif %}
-
-            <p class="mb-2 text-center text-sm text-muted">Your fleet so far</p>
-            <div class="mx-auto grid w-full max-w-[320px] grid-cols-8 gap-0.5 rounded-lg bg-surface-hover p-1">
-                {% for row in my_board_cells %}
-                    {% for cell in row %}
-                        {% if cell.ship %}
-                            <div class="aspect-square rounded-sm bg-accent"></div>
-                        {% else %}
-                            <div class="aspect-square rounded-sm bg-surface"></div>
-                        {% endif %}
+            {% else %}
+                <p class="mb-2 text-center text-sm text-muted">Your fleet so far</p>
+                <div class="mx-auto grid w-full max-w-[320px] grid-cols-8 gap-0.5 rounded-lg bg-surface-hover p-1">
+                    {% for row in my_board_cells %}
+                        {% for cell in row %}
+                            {% if cell.ship %}
+                                <div class="aspect-square rounded-sm bg-accent"></div>
+                            {% else %}
+                                <div class="aspect-square rounded-sm bg-surface"></div>
+                            {% endif %}
+                        {% endfor %}
                     {% endfor %}
-                {% endfor %}
-            </div>
+                </div>
+            {% endif %}
         {% else %}
             <div class="flex flex-col gap-6 sm:flex-row sm:justify-center">
                 <div>

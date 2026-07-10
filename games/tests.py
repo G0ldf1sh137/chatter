@@ -1663,7 +1663,7 @@ class BattleshipMatchTests(TestCase):
             self.client.force_login(user)
             self.client.post(
                 reverse("battleship-place", args=[self.match.pk]),
-                {"row": row_offset + i * 2, "col": 0, "orientation": "h"},
+                {"cell": f"{row_offset + i * 2},0", "orientation": "h"},
             )
 
     def test_challenge_creates_active_match_in_placement_phase(self):
@@ -1698,22 +1698,23 @@ class BattleshipMatchTests(TestCase):
         )
         self.client.force_login(self.alice)
         self.client.post(
-            reverse("battleship-place", args=[self.match.pk]), {"row": 0, "col": 0, "orientation": "h"}
+            reverse("battleship-place", args=[self.match.pk]), {"cell": "0,0", "orientation": "h"}
         )
         self.match.refresh_from_db()
         self.assertEqual(len(self.match.state["boards"][str(self.alice.id)]["ships"]), 1)
 
-    def test_invalid_placement_is_ignored(self):
+    def test_invalid_placement_is_ignored_and_shows_an_error(self):
         self.match = Match.objects.create(
             game=Match.Game.BATTLESHIP, player1=self.alice, player2=self.bob,
             state=battleship.initial_state(), turn=None,
         )
         self.client.force_login(self.alice)
-        self.client.post(
-            reverse("battleship-place", args=[self.match.pk]), {"row": 0, "col": 6, "orientation": "h"}
+        response = self.client.post(
+            reverse("battleship-place", args=[self.match.pk]), {"cell": "0,6", "orientation": "h"}, follow=True
         )
         self.match.refresh_from_db()
         self.assertEqual(self.match.state["boards"], {})
+        self.assertContains(response, "fit on the board")
 
     def test_cannot_fire_before_both_players_have_placed(self):
         self.match = Match.objects.create(
