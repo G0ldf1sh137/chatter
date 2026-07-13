@@ -3,6 +3,7 @@ from collections import defaultdict
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 from django.contrib.auth.models import User
+from django.core.paginator import Paginator
 from django.db.models import Count, Max, OuterRef, Q, Subquery, Sum
 from django.db.models.functions import Coalesce
 from django.http import Http404, JsonResponse
@@ -96,9 +97,27 @@ SORT_CHOICES = {SORT_DEFAULT, SORT_TOP, SORT_NEW}
 POSTS_PAGE_SIZE = 6
 COMMENTS_PAGE_SIZE = 6
 
+# How many of each type show in the combined "all" search view before
+# pointing to the fully paginated single-type list instead.
+SEARCH_PREVIEW_LIMIT = 10
+SEARCH_TYPE_ALL = "all"
+SEARCH_TYPE_POSTS = "posts"
+SEARCH_TYPE_COMMENTS = "comments"
+SEARCH_TYPES = {SEARCH_TYPE_ALL, SEARCH_TYPE_POSTS, SEARCH_TYPE_COMMENTS}
+
 
 def is_ajax(request):
     return request.headers.get("X-Requested-With") == "XMLHttpRequest"
+
+
+def hidden_author_ids(user):
+    # Authors a viewer has muted or blocked - excluded from both the feed
+    # and search results, so neither is a loophole around the other.
+    if not user.is_authenticated:
+        return []
+    ids = list(Mute.objects.filter(muter=user).values_list("muted", flat=True))
+    ids += list(Block.objects.filter(blocker=user).values_list("blocked", flat=True))
+    return ids
 
 
 class FeedView(ListView):
@@ -114,13 +133,9 @@ class FeedView(ListView):
 
     def get_base_queryset(self):
         queryset = Post.objects.select_related("author", "author__profile")
-        if self.request.user.is_authenticated:
-            hidden_author_ids = list(Mute.objects.filter(muter=self.request.user).values_list("muted", flat=True))
-            hidden_author_ids += list(
-                Block.objects.filter(blocker=self.request.user).values_list("blocked", flat=True)
-            )
-            if hidden_author_ids:
-                queryset = queryset.exclude(author_id__in=hidden_author_ids)
+        hidden = hidden_author_ids(self.request.user)
+        if hidden:
+            queryset = queryset.exclude(author_id__in=hidden)
         return annotate_votes(queryset, PostVote, "post", self.request.user)
 
     def get_queryset(self):
@@ -155,6 +170,50 @@ class FollowingFeedView(LoginRequiredMixin, FeedView):
 
     def get_base_queryset(self):
         return super().get_base_queryset().filter(author__followers__follower=self.request.user)
+
+
+class SearchView(TemplateView):
+    template_name = "posts/search.html"
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        query = self.request.GET.get("q", "").strip()
+        search_type = self.request.GET.get("type", SEARCH_TYPE_ALL)
+        if search_type not in SEARCH_TYPES:
+            search_type = SEARCH_TYPE_ALL
+        context["query"] = query
+        context["search_type"] = search_type
+        if not query:
+            return context
+
+        hidden = hidden_author_ids(self.request.user)
+
+        posts = Post.objects.filter(body__icontains=query, deleted=False).select_related(
+            "author", "author__profile"
+        )
+        comments = Comment.objects.filter(body__icontains=query, deleted=False).select_related(
+            "author", "author__profile", "post"
+        )
+        if hidden:
+            posts = posts.exclude(author_id__in=hidden)
+            comments = comments.exclude(author_id__in=hidden)
+        posts = annotate_votes(posts.order_by("-created_at"), PostVote, "post", self.request.user)
+        comments = annotate_votes(comments.order_by("-created_at"), CommentVote, "comment", self.request.user)
+
+        if search_type == SEARCH_TYPE_POSTS:
+            context["posts_page"] = Paginator(posts, POSTS_PAGE_SIZE).get_page(self.request.GET.get("page"))
+        elif search_type == SEARCH_TYPE_COMMENTS:
+            context["comments_page"] = Paginator(comments, COMMENTS_PAGE_SIZE).get_page(self.request.GET.get("page"))
+        else:
+            posts_total = posts.count()
+            comments_total = comments.count()
+            context["posts_preview"] = posts[:SEARCH_PREVIEW_LIMIT]
+            context["posts_total"] = posts_total
+            context["posts_has_more"] = posts_total > SEARCH_PREVIEW_LIMIT
+            context["comments_preview"] = comments[:SEARCH_PREVIEW_LIMIT]
+            context["comments_total"] = comments_total
+            context["comments_has_more"] = comments_total > SEARCH_PREVIEW_LIMIT
+        return context
 
 
 class PostCreateView(LoginRequiredMixin, CreateView):

@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% load post_extras user_extras %}
+
+{% block title %}Search — Chatter{% endblock %}
+
+{% block content %}
+    <h1 class="mb-4 text-2xl font-extrabold tracking-tight">Search</h1>
+
+    <form method="get" action="{% url 'search' %}" class="mb-5 flex gap-2">
+        <input type="text" name="q" value="{{ query }}" placeholder="Search posts and comments" class="flex-1">
+        <button type="submit">Search</button>
+    </form>
+
+    {% if query %}
+        <div class="mb-5 inline-flex rounded-full bg-surface-hover p-1">
+            <a href="?q={{ query|urlencode }}&type=all" class="rounded-full px-4 py-1.5 text-sm font-medium no-underline transition-colors {% if search_type == 'all' %}bg-surface text-fg shadow-sm{% else %}text-muted hover:text-fg{% endif %}">All</a>
+            <a href="?q={{ query|urlencode }}&type=posts" class="rounded-full px-4 py-1.5 text-sm font-medium no-underline transition-colors {% if search_type == 'posts' %}bg-surface text-fg shadow-sm{% else %}text-muted hover:text-fg{% endif %}">Posts</a>
+            <a href="?q={{ query|urlencode }}&type=comments" class="rounded-full px-4 py-1.5 text-sm font-medium no-underline transition-colors {% if search_type == 'comments' %}bg-surface text-fg shadow-sm{% else %}text-muted hover:text-fg{% endif %}">Comments</a>
+        </div>
+
+        {% if search_type == 'posts' %}
+            <div class="space-y-4">
+                {% for post in posts_page %}
+                    {% include "posts/_post_card.html" %}
+                {% empty %}
+                    <p class="text-muted">No posts match &ldquo;{{ query }}&rdquo;.</p>
+                {% endfor %}
+            </div>
+            {% if posts_page.has_previous or posts_page.has_next %}
+                <div class="mt-4 flex justify-center gap-3 text-sm">
+                    {% if posts_page.has_previous %}<a href="?q={{ query|urlencode }}&type=posts&page={{ posts_page.previous_page_number }}" class="text-accent no-underline hover:underline">Previous</a>{% endif %}
+                    {% if posts_page.has_next %}<a href="?q={{ query|urlencode }}&type=posts&page={{ posts_page.next_page_number }}" class="text-accent no-underline hover:underline">Next</a>{% endif %}
+                </div>
+            {% endif %}
+        {% elif search_type == 'comments' %}
+            <div class="space-y-2">
+                {% for comment in comments_page %}
+                    {% include "posts/_comment_search_result.html" %}
+                {% empty %}
+                    <p class="text-muted">No comments match &ldquo;{{ query }}&rdquo;.</p>
+                {% endfor %}
+            </div>
+            {% if comments_page.has_previous or comments_page.has_next %}
+                <div class="mt-4 flex justify-center gap-3 text-sm">
+                    {% if comments_page.has_previous %}<a href="?q={{ query|urlencode }}&type=comments&page={{ comments_page.previous_page_number }}" class="text-accent no-underline hover:underline">Previous</a>{% endif %}
+                    {% if comments_page.has_next %}<a href="?q={{ query|urlencode }}&type=comments&page={{ comments_page.next_page_number }}" class="text-accent no-underline hover:underline">Next</a>{% endif %}
+                </div>
+            {% endif %}
+        {% else %}
+            <h2 class="mb-3 mt-6 text-lg font-bold">Posts</h2>
+            <div class="space-y-4">
+                {% for post in posts_preview %}
+                    {% include "posts/_post_card.html" %}
+                {% empty %}
+                    <p class="text-muted">No posts match &ldquo;{{ query }}&rdquo;.</p>
+                {% endfor %}
+            </div>
+            {% if posts_has_more %}
+                <a href="?q={{ query|urlencode }}&type=posts" class="mt-2 inline-block text-sm font-medium text-accent no-underline hover:underline">See all {{ posts_total }} posts &rarr;</a>
+            {% endif %}
+
+            <h2 class="mb-3 mt-6 text-lg font-bold">Comments</h2>
+            <div class="space-y-2">
+                {% for comment in comments_preview %}
+                    {% include "posts/_comment_search_result.html" %}
+                {% empty %}
+                    <p class="text-muted">No comments match &ldquo;{{ query }}&rdquo;.</p>
+                {% endfor %}
+            </div>
+            {% if comments_has_more %}
+                <a href="?q={{ query|urlencode }}&type=comments" class="mt-2 inline-block text-sm font-medium text-accent no-underline hover:underline">See all {{ comments_total }} comments &rarr;</a>
+            {% endif %}
+        {% endif %}
+    {% endif %}
+{% endblock %}

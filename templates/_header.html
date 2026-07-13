@@ -10,6 +10,7 @@
 
         <nav class="hidden flex-col items-stretch gap-1 text-sm font-medium peer-checked/nav:absolute peer-checked/nav:right-0 peer-checked/nav:top-full peer-checked/nav:z-10 peer-checked/nav:flex peer-checked/nav:w-56 peer-checked/nav:rounded-2xl peer-checked/nav:border peer-checked/nav:border-border peer-checked/nav:bg-surface peer-checked/nav:p-2 peer-checked/nav:shadow-lg sm:static sm:flex sm:w-auto sm:flex-row sm:items-center sm:border-none sm:bg-transparent sm:p-0 sm:shadow-none">
             <a href="{% url 'simulations-hub' %}" class="rounded-full px-3 py-1.5 text-fg no-underline transition-colors hover:bg-surface-hover">Simulations</a>
+            <a href="{% url 'search' %}" class="rounded-full px-3 py-1.5 text-fg no-underline transition-colors hover:bg-surface-hover">Search</a>
             {% if user.is_authenticated %}
             <a href="{% url 'games-hub' %}" class="relative rounded-full px-3 py-1.5 text-fg no-underline transition-colors hover:bg-surface-hover">
                 Games

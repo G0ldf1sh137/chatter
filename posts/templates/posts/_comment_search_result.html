@@ -1,0 +1,12 @@
+{% load post_extras user_extras %}
+<article class="rounded-2xl border border-border bg-surface p-4 shadow-sm transition-shadow hover:shadow-md sm:p-5">
+    <div class="mb-1.5 flex items-center gap-1.5 text-sm text-muted">
+        {% include "_avatar.html" with avatar_user=comment.author %}
+        <a href="{% url 'profile' comment.author.username %}" class="font-medium text-fg no-underline hover:text-accent">{{ comment.author.username|at_username }}</a>
+        <span>&middot; {{ comment.created_at }}</span>
+        {% include "_comment_vote.html" %}
+    </div>
+    <a href="{% url 'post-detail' comment.post_id %}#comment-{{ comment.pk }}" class="block text-fg no-underline hover:text-accent">
+        <div class="prose prose-sm max-w-none dark:prose-invert">{{ comment.body|markdown }}</div>
+    </a>
+</article>

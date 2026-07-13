@@ -1399,3 +1399,95 @@ class MuteBlockNotificationSuppressionTests(TestCase):
         self.client.post(reverse("post-upvote", args=[self.post.pk]))
 
         self.assertTrue(Notification.objects.filter(kind=Notification.Kind.UPVOTE).exists())
+
+
+class SearchViewTests(TestCase):
+    def setUp(self):
+        self.alice = make_user("alice")
+        self.bob = make_user("bob")
+        self.matching_post = Post.objects.create(author=self.alice, body="a post about pelicans")
+        self.other_post = Post.objects.create(author=self.alice, body="a post about seagulls")
+        self.matching_comment = Comment.objects.create(
+            author=self.bob, post=self.other_post, body="I saw a pelican yesterday"
+        )
+        self.other_comment = Comment.objects.create(author=self.bob, post=self.other_post, body="nice photo")
+
+    def test_empty_query_shows_no_results(self):
+        response = self.client.get(reverse("search"))
+        self.assertNotIn("posts_preview", response.context)
+        self.assertEqual(response.context["query"], "")
+
+    def test_all_type_shows_matching_posts_and_comments(self):
+        response = self.client.get(reverse("search"), {"q": "pelican"})
+        self.assertEqual(list(response.context["posts_preview"]), [self.matching_post])
+        self.assertEqual(list(response.context["comments_preview"]), [self.matching_comment])
+
+    def test_search_is_case_insensitive(self):
+        response = self.client.get(reverse("search"), {"q": "PELICAN"})
+        self.assertEqual(list(response.context["posts_preview"]), [self.matching_post])
+
+    def test_posts_only_type_excludes_comments(self):
+        response = self.client.get(reverse("search"), {"q": "pelican", "type": "posts"})
+        self.assertIn(self.matching_post, response.context["posts_page"])
+        self.assertNotIn("comments_page", response.context)
+        self.assertNotIn("comments_preview", response.context)
+
+    def test_comments_only_type_excludes_posts(self):
+        response = self.client.get(reverse("search"), {"q": "pelican", "type": "comments"})
+        self.assertIn(self.matching_comment, response.context["comments_page"])
+        self.assertNotIn("posts_page", response.context)
+        self.assertNotIn("posts_preview", response.context)
+
+    def test_invalid_type_falls_back_to_all(self):
+        response = self.client.get(reverse("search"), {"q": "pelican", "type": "bogus"})
+        self.assertEqual(response.context["search_type"], "all")
+
+    def test_see_all_link_only_shown_past_the_preview_cap(self):
+        for i in range(15):
+            Post.objects.create(author=self.alice, body=f"pelican sighting {i}")
+
+        response = self.client.get(reverse("search"), {"q": "pelican"})
+
+        self.assertTrue(response.context["posts_has_more"])
+        self.assertEqual(response.context["posts_total"], 16)
+        self.assertEqual(len(response.context["posts_preview"]), 10)
+
+    def test_muted_authors_content_excluded_for_the_searcher(self):
+        Mute.objects.create(muter=self.alice, muted=self.bob)
+        self.client.force_login(self.alice)
+
+        response = self.client.get(reverse("search"), {"q": "pelican"})
+
+        self.assertNotIn(self.matching_comment, response.context["comments_preview"])
+
+    def test_muted_authors_content_still_shows_for_everyone_else(self):
+        Mute.objects.create(muter=self.alice, muted=self.bob)
+        carol = make_user("carol")
+        self.client.force_login(carol)
+
+        response = self.client.get(reverse("search"), {"q": "pelican"})
+
+        self.assertIn(self.matching_comment, response.context["comments_preview"])
+
+    def test_deleted_post_never_matches(self):
+        self.matching_post.deleted = True
+        self.matching_post.body = ""
+        self.matching_post.save(update_fields=["deleted", "body"])
+
+        response = self.client.get(reverse("search"), {"q": "pelican"})
+
+        self.assertNotIn(self.matching_post, response.context["posts_preview"])
+
+    def test_pagination_beyond_the_page_size(self):
+        for i in range(10):
+            Post.objects.create(author=self.alice, body=f"pelican sighting {i}")
+
+        first_page = self.client.get(reverse("search"), {"q": "pelican", "type": "posts"})
+        second_page = self.client.get(reverse("search"), {"q": "pelican", "type": "posts", "page": 2})
+
+        self.assertTrue(first_page.context["posts_page"].has_next())
+        self.assertEqual(len(second_page.context["posts_page"]), 5)
+
+    def test_anonymous_can_search(self):
+        response = self.client.get(reverse("search"), {"q": "pelican"})
+        self.assertEqual(response.status_code, 200)
