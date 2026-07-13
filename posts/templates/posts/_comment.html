@@ -7,13 +7,21 @@
         {% if comment.edited %}<span class="italic">&middot; edited</span>{% endif %}
         {% include "_comment_vote.html" %}
     </div>
-    <div class="prose prose-sm max-w-none dark:prose-invert">{{ comment.body|markdown }}</div>
+    {% if comment.deleted %}
+        <p class="italic text-muted">[deleted]</p>
+    {% else %}
+        <div class="prose prose-sm max-w-none dark:prose-invert">{{ comment.body|markdown }}</div>
+    {% endif %}
     {% if user.is_authenticated %}
         <input type="checkbox" id="reply-toggle-{{ comment.pk }}" class="peer/reply hidden">
         <label for="reply-toggle-{{ comment.pk }}" class="mt-1.5 inline-block cursor-pointer text-sm font-medium text-accent hover:underline">Reply</label>
-        {% if user == comment.author %}
+        {% if user == comment.author and not comment.deleted %}
             <input type="checkbox" id="edit-toggle-{{ comment.pk }}" class="peer/edit hidden">
             <label for="edit-toggle-{{ comment.pk }}" class="mt-1.5 ml-2 inline-block cursor-pointer text-sm font-medium text-accent hover:underline">Edit</label>
+            <form method="post" action="{% url 'comment-delete' comment.pk %}" class="ml-2 inline">
+                {% csrf_token %}
+                <button type="submit" class="mt-0 border-none bg-transparent p-0 text-sm font-medium text-downvote no-underline hover:underline">Delete</button>
+            </form>
         {% endif %}
         <form method="post" action="{% url 'comment-create' comment.post_id %}" class="mt-2 hidden peer-checked/reply:block">
             {% csrf_token %}
@@ -21,7 +29,7 @@
             <textarea name="body" rows="2" placeholder="Markdown supported" class="min-h-12"></textarea>
             <button type="submit">Reply</button>
         </form>
-        {% if user == comment.author %}
+        {% if user == comment.author and not comment.deleted %}
             <form method="post" action="{% url 'comment-edit' comment.pk %}" class="mt-2 hidden peer-checked/edit:block">
                 {% csrf_token %}
                 <textarea name="body" rows="2" class="min-h-12">{{ comment.body }}</textarea>

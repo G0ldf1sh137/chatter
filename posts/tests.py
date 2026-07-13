@@ -261,6 +261,75 @@ class PostTests(TestCase):
         self.assertFalse(post.edited)
 
 
+class PostDeleteTests(TestCase):
+    def setUp(self):
+        self.author = make_user("alice")
+        self.post = Post.objects.create(author=self.author, body="original")
+
+    def test_author_can_delete_own_post(self):
+        self.client.force_login(self.author)
+
+        response = self.client.post(reverse("post-delete", args=[self.post.pk]))
+
+        self.assertRedirects(response, reverse("post-detail", args=[self.post.pk]))
+        self.post.refresh_from_db()
+        self.assertTrue(self.post.deleted)
+        self.assertEqual(self.post.body, "")
+
+    def test_non_author_cannot_delete_post(self):
+        other = make_user("mallory")
+        self.client.force_login(other)
+
+        response = self.client.post(reverse("post-delete", args=[self.post.pk]))
+
+        self.assertEqual(response.status_code, 403)
+        self.post.refresh_from_db()
+        self.assertFalse(self.post.deleted)
+        self.assertEqual(self.post.body, "original")
+
+    def test_anonymous_redirected_to_login(self):
+        response = self.client.post(reverse("post-delete", args=[self.post.pk]))
+        self.assertEqual(response.status_code, 302)
+        self.assertIn(reverse("login"), response.url)
+        self.post.refresh_from_db()
+        self.assertFalse(self.post.deleted)
+
+    def test_deleted_post_shows_placeholder_instead_of_body(self):
+        self.client.force_login(self.author)
+        self.client.post(reverse("post-delete", args=[self.post.pk]))
+
+        response = self.client.get(reverse("post-detail", args=[self.post.pk]))
+
+        self.assertContains(response, "[deleted]")
+        self.assertNotContains(response, "original")
+
+    def test_deleted_post_card_shows_placeholder_on_the_feed(self):
+        self.client.force_login(self.author)
+        self.client.post(reverse("post-delete", args=[self.post.pk]))
+
+        response = self.client.get(reverse("feed"))
+
+        self.assertContains(response, "[deleted]")
+
+    def test_cannot_edit_an_already_deleted_post(self):
+        self.client.force_login(self.author)
+        self.client.post(reverse("post-delete", args=[self.post.pk]))
+
+        response = self.client.post(reverse("post-edit", args=[self.post.pk]), {"body": "resurrected"})
+
+        self.assertEqual(response.status_code, 403)
+        self.post.refresh_from_db()
+        self.assertEqual(self.post.body, "")
+
+    def test_deleting_a_post_does_not_cascade_to_its_comments(self):
+        comment = Comment.objects.create(author=self.author, post=self.post, body="a comment")
+        self.client.force_login(self.author)
+
+        self.client.post(reverse("post-delete", args=[self.post.pk]))
+
+        self.assertTrue(Comment.objects.filter(pk=comment.pk).exists())
+
+
 class FeedPaginationTests(TestCase):
     def setUp(self):
         self.author = make_user("alice")
@@ -380,6 +449,74 @@ class CommentEditTests(TestCase):
         )
         self.assertEqual(self.comment.body, "original")
         self.assertFalse(self.comment.edited)
+
+
+class CommentDeleteTests(TestCase):
+    def setUp(self):
+        self.author = make_user("alice")
+        self.post = Post.objects.create(author=self.author, body="a post")
+        self.comment = Comment.objects.create(author=self.author, post=self.post, body="original")
+
+    def test_author_can_delete_own_comment(self):
+        self.client.force_login(self.author)
+
+        response = self.client.post(reverse("comment-delete", args=[self.comment.pk]))
+
+        self.assertRedirects(
+            response, f"{reverse('post-detail', args=[self.post.pk])}#comment-{self.comment.pk}"
+        )
+        self.comment.refresh_from_db()
+        self.assertTrue(self.comment.deleted)
+        self.assertEqual(self.comment.body, "")
+
+    def test_non_author_cannot_delete_comment(self):
+        other = make_user("mallory")
+        self.client.force_login(other)
+
+        response = self.client.post(reverse("comment-delete", args=[self.comment.pk]))
+
+        self.assertEqual(response.status_code, 404)
+        self.comment.refresh_from_db()
+        self.assertFalse(self.comment.deleted)
+        self.assertEqual(self.comment.body, "original")
+
+    def test_anonymous_redirected_to_login(self):
+        response = self.client.post(reverse("comment-delete", args=[self.comment.pk]))
+        self.assertEqual(response.status_code, 302)
+        self.assertIn(reverse("login"), response.url)
+        self.comment.refresh_from_db()
+        self.assertFalse(self.comment.deleted)
+
+    def test_deleted_comment_shows_placeholder_instead_of_body(self):
+        self.client.force_login(self.author)
+        self.client.post(reverse("comment-delete", args=[self.comment.pk]))
+
+        response = self.client.get(reverse("post-detail", args=[self.post.pk]))
+
+        self.assertContains(response, "[deleted]")
+        self.assertNotContains(response, "original")
+
+    def test_cannot_edit_an_already_deleted_comment(self):
+        self.client.force_login(self.author)
+        self.client.post(reverse("comment-delete", args=[self.comment.pk]))
+
+        response = self.client.post(reverse("comment-edit", args=[self.comment.pk]), {"body": "resurrected"})
+
+        self.assertEqual(response.status_code, 404)
+        self.comment.refresh_from_db()
+        self.assertEqual(self.comment.body, "")
+
+    def test_replies_to_a_deleted_comment_stay_intact_and_visible(self):
+        reply = Comment.objects.create(
+            author=make_user("bob"), post=self.post, parent=self.comment, body="a reply"
+        )
+        self.client.force_login(self.author)
+
+        self.client.post(reverse("comment-delete", args=[self.comment.pk]))
+        response = self.client.get(reverse("post-detail", args=[self.post.pk]))
+
+        self.assertTrue(Comment.objects.filter(pk=reply.pk).exists())
+        self.assertContains(response, "a reply")
 
 
 class CommentPaginationTests(TestCase):

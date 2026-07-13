@@ -13,11 +13,19 @@
                     <a href="{% url 'profile' post.author.username %}" class="font-medium text-fg no-underline hover:text-accent">{{ post.author.username|at_username }}</a>
                     <span>&middot; {{ post.created_at }}</span>
                     {% if post.edited %}<span class="italic">&middot; edited</span>{% endif %}
-                    {% if user == post.author %}
+                    {% if user == post.author and not post.deleted %}
                         <a href="{% url 'post-edit' post.pk %}" class="ml-auto font-medium text-accent no-underline hover:underline">Edit</a>
+                        <form method="post" action="{% url 'post-delete' post.pk %}" class="inline">
+                            {% csrf_token %}
+                            <button type="submit" class="mt-0 border-none bg-transparent p-0 text-sm font-medium text-downvote no-underline hover:underline">Delete</button>
+                        </form>
                     {% endif %}
                 </div>
-                <div class="prose prose-sm max-w-none dark:prose-invert">{{ post.body|markdown }}</div>
+                {% if post.deleted %}
+                    <p class="italic text-muted">[deleted]</p>
+                {% else %}
+                    <div class="prose prose-sm max-w-none dark:prose-invert">{{ post.body|markdown }}</div>
+                {% endif %}
             </div>
         </div>
     </article>

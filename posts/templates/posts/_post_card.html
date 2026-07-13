@@ -9,7 +9,11 @@
                 <span>&middot; {{ post.created_at }}</span>
             </div>
             <a href="{% url 'post-detail' post.pk %}" class="block text-fg no-underline hover:text-accent">
-                <div class="prose prose-sm max-w-none dark:prose-invert">{{ post.first_line|markdown }}</div>
+                {% if post.deleted %}
+                    <p class="italic text-muted">[deleted]</p>
+                {% else %}
+                    <div class="prose prose-sm max-w-none dark:prose-invert">{{ post.first_line|markdown }}</div>
+                {% endif %}
             </a>
         </div>
     </div>

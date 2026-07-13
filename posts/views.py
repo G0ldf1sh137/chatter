@@ -213,12 +213,28 @@ class PostEditView(LoginRequiredMixin, UserPassesTestMixin, UpdateView):
     template_name = "posts/post_form.html"
 
     def test_func(self):
-        return self.get_object().author_id == self.request.user.id
+        post = self.get_object()
+        return post.author_id == self.request.user.id and not post.deleted
 
     def form_valid(self, form):
         if form.has_changed():
             form.instance.edited = True
         return super().form_valid(form)
+
+
+class PostDeleteView(LoginRequiredMixin, UserPassesTestMixin, View):
+    def get_object(self):
+        return get_object_or_404(Post, pk=self.kwargs["pk"])
+
+    def test_func(self):
+        return self.get_object().author_id == self.request.user.id
+
+    def post(self, request, pk):
+        post = self.get_object()
+        post.body = ""
+        post.deleted = True
+        post.save(update_fields=["body", "deleted"])
+        return redirect(post.get_absolute_url())
 
 
 class CommentCreateView(LoginRequiredMixin, View):
@@ -245,7 +261,7 @@ class CommentCreateView(LoginRequiredMixin, View):
 class CommentEditView(LoginRequiredMixin, View):
     def post(self, request, pk):
         comment = get_object_or_404(Comment, pk=pk)
-        if comment.author_id != request.user.id:
+        if comment.author_id != request.user.id or comment.deleted:
             raise Http404
 
         form = CommentEditForm(request.POST, instance=comment)
@@ -253,6 +269,17 @@ class CommentEditView(LoginRequiredMixin, View):
             if form.has_changed():
                 form.instance.edited = True
             form.save()
+        return redirect(f"{comment.post.get_absolute_url()}#comment-{comment.pk}")
+
+
+class CommentDeleteView(LoginRequiredMixin, View):
+    def post(self, request, pk):
+        comment = get_object_or_404(Comment, pk=pk)
+        if comment.author_id != request.user.id:
+            raise Http404
+        comment.body = ""
+        comment.deleted = True
+        comment.save(update_fields=["body", "deleted"])
         return redirect(f"{comment.post.get_absolute_url()}#comment-{comment.pk}")
 
 

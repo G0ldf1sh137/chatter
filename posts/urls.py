@@ -9,8 +9,10 @@ urlpatterns = [
     path("posts/new/", views.PostCreateView.as_view(), name="post-create"),
     path("posts/<uuid:pk>/", views.PostDetailView.as_view(), name="post-detail"),
     path("posts/<uuid:pk>/edit/", views.PostEditView.as_view(), name="post-edit"),
+    path("posts/<uuid:pk>/delete/", views.PostDeleteView.as_view(), name="post-delete"),
     path("posts/<uuid:pk>/comment/", views.CommentCreateView.as_view(), name="comment-create"),
     path("comments/<uuid:pk>/edit/", views.CommentEditView.as_view(), name="comment-edit"),
+    path("comments/<uuid:pk>/delete/", views.CommentDeleteView.as_view(), name="comment-delete"),
     path(
         "posts/<uuid:pk>/upvote/",
         views.PostVoteView.as_view(value=PostVote.UP),
