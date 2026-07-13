@@ -411,7 +411,16 @@ class ProfileEditTests(TestCase):
         avatar = SimpleUploadedFile("avatar.gif", TINY_GIF, content_type="image/gif")
 
         response = self.client.post(
-            reverse("profile-edit"), {"username": "dave", "bio": "Hello!", "avatar": avatar, "timezone": "UTC"}
+            reverse("profile-edit"),
+            {
+                "username": "dave",
+                "bio": "Hello!",
+                "avatar": avatar,
+                "timezone": "UTC",
+                "notify_on_mentions": "on",
+                "notify_on_replies": "on",
+                "notify_on_upvotes": "on",
+            },
         )
 
         self.assertRedirects(response, reverse("profile", args=["dave"]))
@@ -425,7 +434,16 @@ class ProfileEditTests(TestCase):
         avatar = SimpleUploadedFile("avatar.gif", TINY_GIF, content_type="image/gif")
 
         response = self.client.post(
-            reverse("profile-edit"), {"username": "dave", "bio": "", "avatar": avatar, "timezone": "UTC"}
+            reverse("profile-edit"),
+            {
+                "username": "dave",
+                "bio": "",
+                "avatar": avatar,
+                "timezone": "UTC",
+                "notify_on_mentions": "on",
+                "notify_on_replies": "on",
+                "notify_on_upvotes": "on",
+            },
         )
 
         self.assertEqual(response.status_code, 200)
@@ -437,7 +455,16 @@ class ProfileEditTests(TestCase):
 
         response = self.client.post(
             reverse("profile-edit"),
-            {"username": "davethegreat", "first_name": "Dave", "last_name": "Grohl", "bio": "", "timezone": "UTC"},
+            {
+                "username": "davethegreat",
+                "first_name": "Dave",
+                "last_name": "Grohl",
+                "bio": "",
+                "timezone": "UTC",
+                "notify_on_mentions": "on",
+                "notify_on_replies": "on",
+                "notify_on_upvotes": "on",
+            },
         )
 
         self.assertRedirects(response, reverse("profile", args=["davethegreat"]))
@@ -450,7 +477,17 @@ class ProfileEditTests(TestCase):
         User.objects.create_user(username="erin", password="correct-horse-battery-staple")
         self.client.force_login(self.user)
 
-        response = self.client.post(reverse("profile-edit"), {"username": "erin", "bio": "", "timezone": "UTC"})
+        response = self.client.post(
+            reverse("profile-edit"),
+            {
+                "username": "erin",
+                "bio": "",
+                "timezone": "UTC",
+                "notify_on_mentions": "on",
+                "notify_on_replies": "on",
+                "notify_on_upvotes": "on",
+            },
+        )
 
         self.assertEqual(response.status_code, 200)
         self.assertFormError(
@@ -468,7 +505,17 @@ class ProfileEditTests(TestCase):
     def test_blank_username_rejected(self):
         self.client.force_login(self.user)
 
-        response = self.client.post(reverse("profile-edit"), {"username": "", "bio": "", "timezone": "UTC"})
+        response = self.client.post(
+            reverse("profile-edit"),
+            {
+                "username": "",
+                "bio": "",
+                "timezone": "UTC",
+                "notify_on_mentions": "on",
+                "notify_on_replies": "on",
+                "notify_on_upvotes": "on",
+            },
+        )
 
         self.assertEqual(response.status_code, 200)
         self.assertFormError(response.context["user_form"], "username", "This field is required.")
@@ -479,7 +526,15 @@ class ProfileEditTests(TestCase):
         self.client.force_login(self.user)
 
         response = self.client.post(
-            reverse("profile-edit"), {"username": "dave@example", "bio": "", "timezone": "UTC"}
+            reverse("profile-edit"),
+            {
+                "username": "dave@example",
+                "bio": "",
+                "timezone": "UTC",
+                "notify_on_mentions": "on",
+                "notify_on_replies": "on",
+                "notify_on_upvotes": "on",
+            },
         )
 
         self.assertEqual(response.status_code, 200)
@@ -506,7 +561,15 @@ class UserTimezoneTests(TestCase):
         self.client.force_login(self.user)
 
         response = self.client.post(
-            reverse("profile-edit"), {"username": "dave", "bio": "", "timezone": "America/New_York"}
+            reverse("profile-edit"),
+            {
+                "username": "dave",
+                "bio": "",
+                "timezone": "America/New_York",
+                "notify_on_mentions": "on",
+                "notify_on_replies": "on",
+                "notify_on_upvotes": "on",
+            },
         )
 
         self.assertRedirects(response, reverse("profile", args=["dave"]))
@@ -516,7 +579,15 @@ class UserTimezoneTests(TestCase):
         self.client.force_login(self.user)
 
         response = self.client.post(
-            reverse("profile-edit"), {"username": "dave", "bio": "", "timezone": "Not/A_Zone"}
+            reverse("profile-edit"),
+            {
+                "username": "dave",
+                "bio": "",
+                "timezone": "Not/A_Zone",
+                "notify_on_mentions": "on",
+                "notify_on_replies": "on",
+                "notify_on_upvotes": "on",
+            },
         )
 
         self.assertEqual(response.status_code, 200)

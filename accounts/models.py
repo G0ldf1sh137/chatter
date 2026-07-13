@@ -14,6 +14,9 @@ class Profile(models.Model):
     avatar = models.ImageField(upload_to="avatars/", blank=True)
     email_verified = models.BooleanField(default=False)
     timezone = models.CharField(max_length=64, choices=TIMEZONE_CHOICES, default="UTC")
+    notify_on_mentions = models.BooleanField(default=True, verbose_name="Notify me when I'm mentioned")
+    notify_on_replies = models.BooleanField(default=True, verbose_name="Notify me on replies")
+    notify_on_upvotes = models.BooleanField(default=True, verbose_name="Notify me on upvotes")
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):

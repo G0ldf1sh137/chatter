@@ -21,10 +21,23 @@ from .models import Comment, CommentVote, Conversation, Message, Notification, P
 from .ranking import rank_posts
 
 
+NOTIFICATION_PREFERENCE_FIELDS = {
+    Notification.Kind.MENTION: "notify_on_mentions",
+    Notification.Kind.REPLY: "notify_on_replies",
+    Notification.Kind.UPVOTE: "notify_on_upvotes",
+}
+
+
+def notifications_enabled(recipient, kind):
+    return getattr(recipient.profile, NOTIFICATION_PREFERENCE_FIELDS[kind])
+
+
 def create_notification(kind, recipient, actor, post, comment=None):
     if recipient.pk == actor.pk:
         return
     if is_muted_or_blocked(recipient, actor):
+        return
+    if not notifications_enabled(recipient, kind):
         return
     Notification.objects.create(kind=kind, recipient=recipient, actor=actor, post=post, comment=comment)
 
@@ -33,7 +46,7 @@ def notify_mentioned_users(body, author, post, comment=None):
     Notification.objects.bulk_create(
         Notification(kind=Notification.Kind.MENTION, recipient=user, actor=author, post=post, comment=comment)
         for user in extract_mentioned_users(body, exclude=author)
-        if not is_muted_or_blocked(user, author)
+        if not is_muted_or_blocked(user, author) and notifications_enabled(user, Notification.Kind.MENTION)
     )
 
 

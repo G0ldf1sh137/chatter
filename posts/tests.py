@@ -1401,6 +1401,88 @@ class MuteBlockNotificationSuppressionTests(TestCase):
         self.assertTrue(Notification.objects.filter(kind=Notification.Kind.UPVOTE).exists())
 
 
+class NotificationPreferenceTests(TestCase):
+    def setUp(self):
+        self.alice = make_user("alice")
+        self.bob = make_user("bob")
+        self.post = Post.objects.create(author=self.alice, body="a post")
+
+    def test_disabling_upvote_notifications_suppresses_them(self):
+        self.alice.profile.notify_on_upvotes = False
+        self.alice.profile.save(update_fields=["notify_on_upvotes"])
+        self.client.force_login(self.bob)
+
+        self.client.post(reverse("post-upvote", args=[self.post.pk]))
+
+        self.assertFalse(Notification.objects.filter(kind=Notification.Kind.UPVOTE).exists())
+
+    def test_disabling_upvotes_does_not_suppress_replies(self):
+        self.alice.profile.notify_on_upvotes = False
+        self.alice.profile.save(update_fields=["notify_on_upvotes"])
+        self.client.force_login(self.bob)
+
+        self.client.post(reverse("comment-create", args=[self.post.pk]), {"body": "a comment"})
+
+        self.assertTrue(Notification.objects.filter(kind=Notification.Kind.REPLY).exists())
+
+    def test_disabling_reply_notifications_suppresses_a_top_level_comment(self):
+        self.alice.profile.notify_on_replies = False
+        self.alice.profile.save(update_fields=["notify_on_replies"])
+        self.client.force_login(self.bob)
+
+        self.client.post(reverse("comment-create", args=[self.post.pk]), {"body": "a comment"})
+
+        self.assertFalse(Notification.objects.filter(kind=Notification.Kind.REPLY).exists())
+
+    def test_disabling_reply_notifications_suppresses_a_nested_reply(self):
+        comment = Comment.objects.create(author=self.alice, post=self.post, body="original")
+        self.alice.profile.notify_on_replies = False
+        self.alice.profile.save(update_fields=["notify_on_replies"])
+        self.client.force_login(self.bob)
+
+        self.client.post(
+            reverse("comment-create", args=[self.post.pk]), {"body": "a reply", "parent": comment.pk}
+        )
+
+        self.assertFalse(Notification.objects.filter(kind=Notification.Kind.REPLY).exists())
+
+    def test_disabling_mention_notifications_suppresses_a_mention_in_a_post(self):
+        self.alice.profile.notify_on_mentions = False
+        self.alice.profile.save(update_fields=["notify_on_mentions"])
+        self.client.force_login(self.bob)
+
+        self.client.post(reverse("post-create"), {"body": f"hi @{self.alice.username}"})
+
+        self.assertFalse(Notification.objects.filter(kind=Notification.Kind.MENTION).exists())
+
+    def test_disabling_mention_notifications_suppresses_a_mention_in_a_comment(self):
+        self.alice.profile.notify_on_mentions = False
+        self.alice.profile.save(update_fields=["notify_on_mentions"])
+        self.client.force_login(self.bob)
+
+        self.client.post(reverse("comment-create", args=[self.post.pk]), {"body": f"hi @{self.alice.username}"})
+
+        self.assertFalse(Notification.objects.filter(kind=Notification.Kind.MENTION).exists())
+
+    def test_preference_is_per_recipient(self):
+        self.alice.profile.notify_on_upvotes = False
+        self.alice.profile.save(update_fields=["notify_on_upvotes"])
+        bobs_post = Post.objects.create(author=self.bob, body="bob's post")
+        self.client.force_login(self.alice)
+
+        self.client.post(reverse("post-upvote", args=[bobs_post.pk]))
+
+        self.assertTrue(Notification.objects.filter(kind=Notification.Kind.UPVOTE, recipient=self.bob).exists())
+
+    def test_muting_the_actor_still_suppresses_even_with_the_kind_enabled(self):
+        Mute.objects.create(muter=self.alice, muted=self.bob)
+        self.client.force_login(self.bob)
+
+        self.client.post(reverse("post-upvote", args=[self.post.pk]))
+
+        self.assertFalse(Notification.objects.filter(kind=Notification.Kind.UPVOTE).exists())
+
+
 class SearchViewTests(TestCase):
     def setUp(self):
         self.alice = make_user("alice")

@@ -54,7 +54,14 @@ class UserProfileForm(NoAtSignInUsernameMixin, forms.ModelForm):
 class ProfileForm(forms.ModelForm):
     class Meta:
         model = Profile
-        fields = ["bio", "avatar", "timezone"]
+        fields = [
+            "bio",
+            "avatar",
+            "timezone",
+            "notify_on_mentions",
+            "notify_on_replies",
+            "notify_on_upvotes",
+        ]
         widgets = {
             "bio": forms.Textarea(attrs={"rows": 4}),
         }
