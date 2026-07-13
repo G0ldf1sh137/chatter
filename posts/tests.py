@@ -6,7 +6,7 @@ from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
-from accounts.models import Follow
+from accounts.models import Block, Follow, Mute
 
 from .markdown import render_markdown
 from .mentions import extract_mentioned_users
@@ -259,6 +259,42 @@ class PostTests(TestCase):
         self.client.post(reverse("post-edit", args=[post.pk]), {"body": "original"})
         post.refresh_from_db()
         self.assertFalse(post.edited)
+
+
+class MuteBlockFeedTests(TestCase):
+    def setUp(self):
+        self.alice = make_user("alice")
+        self.bob = make_user("bob")
+        self.bobs_post = Post.objects.create(author=self.bob, body="hello from bob")
+
+    def test_muting_hides_their_posts_from_your_feed(self):
+        Mute.objects.create(muter=self.alice, muted=self.bob)
+        self.client.force_login(self.alice)
+
+        response = self.client.get(reverse("feed"))
+
+        self.assertNotIn(self.bobs_post, response.context["posts"])
+
+    def test_blocking_hides_their_posts_from_your_feed(self):
+        Block.objects.create(blocker=self.alice, blocked=self.bob)
+        self.client.force_login(self.alice)
+
+        response = self.client.get(reverse("feed"))
+
+        self.assertNotIn(self.bobs_post, response.context["posts"])
+
+    def test_a_muted_users_posts_still_show_up_for_everyone_else(self):
+        Mute.objects.create(muter=self.alice, muted=self.bob)
+        carol = make_user("carol")
+        self.client.force_login(carol)
+
+        response = self.client.get(reverse("feed"))
+
+        self.assertIn(self.bobs_post, response.context["posts"])
+
+    def test_anonymous_visitor_sees_everything(self):
+        response = self.client.get(reverse("feed"))
+        self.assertIn(self.bobs_post, response.context["posts"])
 
 
 class PostDeleteTests(TestCase):
@@ -737,6 +773,23 @@ class StartConversationViewTests(TestCase):
         self.assertIn(reverse("login"), response.url)
         self.assertEqual(Conversation.objects.count(), 0)
 
+    def test_cannot_message_a_user_you_blocked(self):
+        Block.objects.create(blocker=self.alice, blocked=self.bob)
+        self.client.force_login(self.alice)
+
+        response = self.client.post(reverse("conversation-start", args=["bob"]))
+
+        self.assertEqual(Conversation.objects.count(), 0)
+        self.assertRedirects(response, reverse("profile", args=["bob"]))
+
+    def test_cannot_message_a_user_who_blocked_you(self):
+        Block.objects.create(blocker=self.bob, blocked=self.alice)
+        self.client.force_login(self.alice)
+
+        response = self.client.post(reverse("conversation-start", args=["bob"]))
+
+        self.assertEqual(Conversation.objects.count(), 0)
+
 
 class ConversationPrivacyTests(TestCase):
     def setUp(self):
@@ -791,6 +844,14 @@ class MessageSendViewTests(TestCase):
     def test_blank_message_is_not_created(self):
         self.client.force_login(self.alice)
         self.client.post(reverse("message-send", args=[self.conversation.pk]), {"body": ""})
+        self.assertEqual(Message.objects.count(), 0)
+
+    def test_cannot_send_in_a_conversation_after_being_blocked(self):
+        Block.objects.create(blocker=self.bob, blocked=self.alice)
+        self.client.force_login(self.alice)
+
+        self.client.post(reverse("message-send", args=[self.conversation.pk]), {"body": "hello?"})
+
         self.assertEqual(Message.objects.count(), 0)
 
     def test_anonymous_redirected_to_login(self):
@@ -1290,3 +1351,51 @@ class UpvoteNotificationTests(TestCase):
         self.client.post(reverse("post-upvote", args=[self.post.pk]))
 
         self.assertFalse(Notification.objects.filter(kind=Notification.Kind.UPVOTE).exists())
+
+
+class MuteBlockNotificationSuppressionTests(TestCase):
+    def setUp(self):
+        self.alice = make_user("alice")
+        self.bob = make_user("bob")
+        self.post = Post.objects.create(author=self.alice, body="a post")
+
+    def test_muting_suppresses_an_upvote_notification(self):
+        Mute.objects.create(muter=self.alice, muted=self.bob)
+        self.client.force_login(self.bob)
+
+        self.client.post(reverse("post-upvote", args=[self.post.pk]))
+
+        self.assertFalse(Notification.objects.filter(kind=Notification.Kind.UPVOTE).exists())
+
+    def test_blocking_suppresses_an_upvote_notification(self):
+        Block.objects.create(blocker=self.alice, blocked=self.bob)
+        self.client.force_login(self.bob)
+
+        self.client.post(reverse("post-upvote", args=[self.post.pk]))
+
+        self.assertFalse(Notification.objects.filter(kind=Notification.Kind.UPVOTE).exists())
+
+    def test_muting_suppresses_a_reply_notification(self):
+        Mute.objects.create(muter=self.alice, muted=self.bob)
+        self.client.force_login(self.bob)
+
+        self.client.post(reverse("comment-create", args=[self.post.pk]), {"body": "a comment"})
+
+        self.assertFalse(Notification.objects.filter(kind=Notification.Kind.REPLY).exists())
+
+    def test_muting_suppresses_a_mention_notification(self):
+        Mute.objects.create(muter=self.alice, muted=self.bob)
+        self.client.force_login(self.bob)
+
+        self.client.post(reverse("post-create"), {"body": f"hi @{self.alice.username}"})
+
+        self.assertFalse(Notification.objects.filter(kind=Notification.Kind.MENTION).exists())
+
+    def test_unrelated_users_notifications_are_unaffected(self):
+        Mute.objects.create(muter=self.alice, muted=self.bob)
+        carol = make_user("carol")
+        self.client.force_login(carol)
+
+        self.client.post(reverse("post-upvote", args=[self.post.pk]))
+
+        self.assertTrue(Notification.objects.filter(kind=Notification.Kind.UPVOTE).exists())

@@ -12,6 +12,8 @@ from django.utils.http import url_has_allowed_host_and_scheme
 from django.views import View
 from django.views.generic import CreateView, DetailView, ListView, TemplateView, UpdateView
 
+from accounts.models import Block, Mute, is_blocked_either_way, is_muted_or_blocked
+
 from .forms import CommentEditForm, CommentForm, MessageForm, PostForm
 from .mentions import extract_mentioned_users
 from .models import Comment, CommentVote, Conversation, Message, Notification, Post, PostVote
@@ -21,6 +23,8 @@ from .ranking import rank_posts
 def create_notification(kind, recipient, actor, post, comment=None):
     if recipient.pk == actor.pk:
         return
+    if is_muted_or_blocked(recipient, actor):
+        return
     Notification.objects.create(kind=kind, recipient=recipient, actor=actor, post=post, comment=comment)
 
 
@@ -28,6 +32,7 @@ def notify_mentioned_users(body, author, post, comment=None):
     Notification.objects.bulk_create(
         Notification(kind=Notification.Kind.MENTION, recipient=user, actor=author, post=post, comment=comment)
         for user in extract_mentioned_users(body, exclude=author)
+        if not is_muted_or_blocked(user, author)
     )
 
 
@@ -109,6 +114,13 @@ class FeedView(ListView):
 
     def get_base_queryset(self):
         queryset = Post.objects.select_related("author", "author__profile")
+        if self.request.user.is_authenticated:
+            hidden_author_ids = list(Mute.objects.filter(muter=self.request.user).values_list("muted", flat=True))
+            hidden_author_ids += list(
+                Block.objects.filter(blocker=self.request.user).values_list("blocked", flat=True)
+            )
+            if hidden_author_ids:
+                queryset = queryset.exclude(author_id__in=hidden_author_ids)
         return annotate_votes(queryset, PostVote, "post", self.request.user)
 
     def get_queryset(self):
@@ -329,6 +341,9 @@ class StartConversationView(LoginRequiredMixin, View):
         if other == request.user:
             messages.error(request, "You can't message yourself.")
             return redirect("profile", username=username)
+        if is_blocked_either_way(request.user, other):
+            messages.error(request, "You can't message this user.")
+            return redirect("profile", username=username)
         conversation = get_or_create_conversation(request.user, other)
         return redirect("conversation-detail", pk=conversation.pk)
 
@@ -387,6 +402,11 @@ class MessageSendView(LoginRequiredMixin, View):
         conversation = get_object_or_404(Conversation, pk=pk)
         if request.user.id not in (conversation.user1_id, conversation.user2_id):
             raise Http404
+
+        other = conversation.other_participant(request.user)
+        if is_blocked_either_way(request.user, other):
+            messages.error(request, "You can't message this user.")
+            return redirect("conversation-detail", pk=conversation.pk)
 
         form = MessageForm(request.POST)
         if form.is_valid():

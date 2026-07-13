@@ -34,3 +34,51 @@ class Follow(models.Model):
 
     def __str__(self):
         return f"{self.follower} follows {self.followed}"
+
+
+class Mute(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    muter = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="muting")
+    muted = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="muted_by")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["muter", "muted"], name="unique_mute"),
+            models.CheckConstraint(check=~models.Q(muter=models.F("muted")), name="no_self_mute"),
+        ]
+
+    def __str__(self):
+        return f"{self.muter} muted {self.muted}"
+
+
+class Block(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    blocker = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="blocking")
+    blocked = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="blocked_by")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["blocker", "blocked"], name="unique_block"),
+            models.CheckConstraint(check=~models.Q(blocker=models.F("blocked")), name="no_self_block"),
+        ]
+
+    def __str__(self):
+        return f"{self.blocker} blocked {self.blocked}"
+
+
+def is_muted_or_blocked(viewer, other):
+    # Shared by feed filtering and notification suppression - Mute and Block
+    # have identical effects for both of those, so this is the one place
+    # that checks both tables rather than duplicating it at each call site.
+    return (
+        Mute.objects.filter(muter=viewer, muted=other).exists()
+        or Block.objects.filter(blocker=viewer, blocked=other).exists()
+    )
+
+
+def is_blocked_either_way(user_a, user_b):
+    return Block.objects.filter(
+        models.Q(blocker=user_a, blocked=user_b) | models.Q(blocker=user_b, blocked=user_a)
+    ).exists()

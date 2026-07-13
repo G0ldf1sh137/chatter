@@ -28,50 +28,74 @@
                             <button type="submit" class="mt-0 rounded-full px-4 py-1.5 text-sm">Follow</button>
                         </form>
                     {% endif %}
-                    <form method="post" action="{% url 'conversation-start' profile_user.username %}" class="inline">
-                        {% csrf_token %}
-                        <button type="submit" class="mt-0 rounded-full border border-border bg-transparent px-4 py-1.5 text-sm text-fg transition-colors hover:bg-surface-hover">Message</button>
-                    </form>
-                    <form method="post" action="{% url 'ttt-challenge' profile_user.username %}" class="inline">
-                        {% csrf_token %}
-                        <button type="submit" class="mt-0 rounded-full border border-border bg-transparent px-4 py-1.5 text-sm text-fg transition-colors hover:bg-surface-hover">Challenge to Tic-Tac-Toe</button>
-                    </form>
-                    <form method="post" action="{% url 'rps-challenge' profile_user.username %}" class="inline">
-                        {% csrf_token %}
-                        <button type="submit" class="mt-0 rounded-full border border-border bg-transparent px-4 py-1.5 text-sm text-fg transition-colors hover:bg-surface-hover">Challenge to Rock-Paper-Scissors</button>
-                    </form>
-                    <form method="post" action="{% url 'connect4-challenge' profile_user.username %}" class="inline">
-                        {% csrf_token %}
-                        <button type="submit" class="mt-0 rounded-full border border-border bg-transparent px-4 py-1.5 text-sm text-fg transition-colors hover:bg-surface-hover">Challenge to Connect Four</button>
-                    </form>
-                    <form method="post" action="{% url 'checkers-challenge' profile_user.username %}" class="inline">
-                        {% csrf_token %}
-                        <button type="submit" class="mt-0 rounded-full border border-border bg-transparent px-4 py-1.5 text-sm text-fg transition-colors hover:bg-surface-hover">Challenge to Checkers</button>
-                    </form>
-                    <form method="post" action="{% url 'othello-challenge' profile_user.username %}" class="inline">
-                        {% csrf_token %}
-                        <button type="submit" class="mt-0 rounded-full border border-border bg-transparent px-4 py-1.5 text-sm text-fg transition-colors hover:bg-surface-hover">Challenge to Othello</button>
-                    </form>
-                    <form method="post" action="{% url 'nim-challenge' profile_user.username %}" class="inline">
-                        {% csrf_token %}
-                        <button type="submit" class="mt-0 rounded-full border border-border bg-transparent px-4 py-1.5 text-sm text-fg transition-colors hover:bg-surface-hover">Challenge to Nim</button>
-                    </form>
-                    <form method="post" action="{% url 'battleship-challenge' profile_user.username %}" class="inline">
-                        {% csrf_token %}
-                        <button type="submit" class="mt-0 rounded-full border border-border bg-transparent px-4 py-1.5 text-sm text-fg transition-colors hover:bg-surface-hover">Challenge to Battleship</button>
-                    </form>
-                    <form method="post" action="{% url 'stratego-challenge' profile_user.username %}" class="inline">
-                        {% csrf_token %}
-                        <button type="submit" class="mt-0 rounded-full border border-border bg-transparent px-4 py-1.5 text-sm text-fg transition-colors hover:bg-surface-hover">Challenge to Stratego</button>
-                    </form>
-                    <form method="post" action="{% url 'morris-challenge' profile_user.username %}" class="inline">
-                        {% csrf_token %}
-                        <button type="submit" class="mt-0 rounded-full border border-border bg-transparent px-4 py-1.5 text-sm text-fg transition-colors hover:bg-surface-hover">Challenge to Nine Men's Morris</button>
-                    </form>
-                    <form method="post" action="{% url 'backgammon-challenge' profile_user.username %}" class="inline">
-                        {% csrf_token %}
-                        <button type="submit" class="mt-0 rounded-full border border-border bg-transparent px-4 py-1.5 text-sm text-fg transition-colors hover:bg-surface-hover">Challenge to Backgammon</button>
-                    </form>
+                    {% if not is_blocked_either_way %}
+                        <form method="post" action="{% url 'conversation-start' profile_user.username %}" class="inline">
+                            {% csrf_token %}
+                            <button type="submit" class="mt-0 rounded-full border border-border bg-transparent px-4 py-1.5 text-sm text-fg transition-colors hover:bg-surface-hover">Message</button>
+                        </form>
+                        <form method="post" action="{% url 'ttt-challenge' profile_user.username %}" class="inline">
+                            {% csrf_token %}
+                            <button type="submit" class="mt-0 rounded-full border border-border bg-transparent px-4 py-1.5 text-sm text-fg transition-colors hover:bg-surface-hover">Challenge to Tic-Tac-Toe</button>
+                        </form>
+                        <form method="post" action="{% url 'rps-challenge' profile_user.username %}" class="inline">
+                            {% csrf_token %}
+                            <button type="submit" class="mt-0 rounded-full border border-border bg-transparent px-4 py-1.5 text-sm text-fg transition-colors hover:bg-surface-hover">Challenge to Rock-Paper-Scissors</button>
+                        </form>
+                        <form method="post" action="{% url 'connect4-challenge' profile_user.username %}" class="inline">
+                            {% csrf_token %}
+                            <button type="submit" class="mt-0 rounded-full border border-border bg-transparent px-4 py-1.5 text-sm text-fg transition-colors hover:bg-surface-hover">Challenge to Connect Four</button>
+                        </form>
+                        <form method="post" action="{% url 'checkers-challenge' profile_user.username %}" class="inline">
+                            {% csrf_token %}
+                            <button type="submit" class="mt-0 rounded-full border border-border bg-transparent px-4 py-1.5 text-sm text-fg transition-colors hover:bg-surface-hover">Challenge to Checkers</button>
+                        </form>
+                        <form method="post" action="{% url 'othello-challenge' profile_user.username %}" class="inline">
+                            {% csrf_token %}
+                            <button type="submit" class="mt-0 rounded-full border border-border bg-transparent px-4 py-1.5 text-sm text-fg transition-colors hover:bg-surface-hover">Challenge to Othello</button>
+                        </form>
+                        <form method="post" action="{% url 'nim-challenge' profile_user.username %}" class="inline">
+                            {% csrf_token %}
+                            <button type="submit" class="mt-0 rounded-full border border-border bg-transparent px-4 py-1.5 text-sm text-fg transition-colors hover:bg-surface-hover">Challenge to Nim</button>
+                        </form>
+                        <form method="post" action="{% url 'battleship-challenge' profile_user.username %}" class="inline">
+                            {% csrf_token %}
+                            <button type="submit" class="mt-0 rounded-full border border-border bg-transparent px-4 py-1.5 text-sm text-fg transition-colors hover:bg-surface-hover">Challenge to Battleship</button>
+                        </form>
+                        <form method="post" action="{% url 'stratego-challenge' profile_user.username %}" class="inline">
+                            {% csrf_token %}
+                            <button type="submit" class="mt-0 rounded-full border border-border bg-transparent px-4 py-1.5 text-sm text-fg transition-colors hover:bg-surface-hover">Challenge to Stratego</button>
+                        </form>
+                        <form method="post" action="{% url 'morris-challenge' profile_user.username %}" class="inline">
+                            {% csrf_token %}
+                            <button type="submit" class="mt-0 rounded-full border border-border bg-transparent px-4 py-1.5 text-sm text-fg transition-colors hover:bg-surface-hover">Challenge to Nine Men's Morris</button>
+                        </form>
+                        <form method="post" action="{% url 'backgammon-challenge' profile_user.username %}" class="inline">
+                            {% csrf_token %}
+                            <button type="submit" class="mt-0 rounded-full border border-border bg-transparent px-4 py-1.5 text-sm text-fg transition-colors hover:bg-surface-hover">Challenge to Backgammon</button>
+                        </form>
+                    {% endif %}
+                    {% if is_muted %}
+                        <form method="post" action="{% url 'unmute' profile_user.username %}" class="inline">
+                            {% csrf_token %}
+                            <button type="submit" class="mt-0 rounded-full border border-border bg-transparent px-4 py-1.5 text-sm text-fg transition-colors hover:bg-surface-hover">Unmute</button>
+                        </form>
+                    {% else %}
+                        <form method="post" action="{% url 'mute' profile_user.username %}" class="inline">
+                            {% csrf_token %}
+                            <button type="submit" class="mt-0 rounded-full border border-border bg-transparent px-4 py-1.5 text-sm text-fg transition-colors hover:bg-surface-hover">Mute</button>
+                        </form>
+                    {% endif %}
+                    {% if is_blocked %}
+                        <form method="post" action="{% url 'unblock' profile_user.username %}" class="inline">
+                            {% csrf_token %}
+                            <button type="submit" class="mt-0 rounded-full border border-border bg-transparent px-4 py-1.5 text-sm text-fg transition-colors hover:bg-surface-hover">Unblock</button>
+                        </form>
+                    {% else %}
+                        <form method="post" action="{% url 'block' profile_user.username %}" class="inline">
+                            {% csrf_token %}
+                            <button type="submit" class="mt-0 rounded-full border border-border bg-transparent px-4 py-1.5 text-sm text-downvote transition-colors hover:bg-surface-hover">Block</button>
+                        </form>
+                    {% endif %}
                 </div>
             {% endif %}
         </div>

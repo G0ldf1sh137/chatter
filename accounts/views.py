@@ -18,7 +18,7 @@ from posts.views import annotate_votes
 
 from .emails import send_verification_email
 from .forms import ProfileForm, RegistrationForm, ResendVerificationForm, UserProfileForm
-from .models import Follow, Profile
+from .models import Block, Follow, Mute, Profile, is_blocked_either_way
 from .tokens import TokenExpired, TokenInvalid, verify_token
 
 PROFILE_ITEM_LIMIT = 20
@@ -110,6 +110,9 @@ class ProfileView(DetailView):
             context["is_following"] = Follow.objects.filter(
                 follower=self.request.user, followed=profile_user
             ).exists()
+            context["is_muted"] = Mute.objects.filter(muter=self.request.user, muted=profile_user).exists()
+            context["is_blocked"] = Block.objects.filter(blocker=self.request.user, blocked=profile_user).exists()
+            context["is_blocked_either_way"] = is_blocked_either_way(self.request.user, profile_user)
 
         ttt_wins, ttt_losses, ttt_draws = game_stats.match_record(profile_user, Match.Game.TIC_TAC_TOE)
         context["ttt_record"] = {"wins": ttt_wins, "losses": ttt_losses, "draws": ttt_draws}
@@ -215,6 +218,36 @@ class UnfollowView(LoginRequiredMixin, View):
     def post(self, request, username):
         target = get_object_or_404(User, username=username)
         Follow.objects.filter(follower=request.user, followed=target).delete()
+        return redirect("profile", username=username)
+
+
+class MuteView(LoginRequiredMixin, View):
+    def post(self, request, username):
+        target = get_object_or_404(User, username=username)
+        if target != request.user:
+            Mute.objects.get_or_create(muter=request.user, muted=target)
+        return redirect("profile", username=username)
+
+
+class UnmuteView(LoginRequiredMixin, View):
+    def post(self, request, username):
+        target = get_object_or_404(User, username=username)
+        Mute.objects.filter(muter=request.user, muted=target).delete()
+        return redirect("profile", username=username)
+
+
+class BlockView(LoginRequiredMixin, View):
+    def post(self, request, username):
+        target = get_object_or_404(User, username=username)
+        if target != request.user:
+            Block.objects.get_or_create(blocker=request.user, blocked=target)
+        return redirect("profile", username=username)
+
+
+class UnblockView(LoginRequiredMixin, View):
+    def post(self, request, username):
+        target = get_object_or_404(User, username=username)
+        Block.objects.filter(blocker=request.user, blocked=target).delete()
         return redirect("profile", username=username)
 
 

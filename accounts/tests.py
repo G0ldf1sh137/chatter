@@ -16,7 +16,7 @@ from games.models import Match, SinglePlayerResult
 from posts.models import Comment, CommentVote, Conversation, Post, PostVote
 
 from .adapter import SocialAccountAdapter
-from .models import Follow, Profile
+from .models import Block, Follow, Mute, Profile, is_blocked_either_way, is_muted_or_blocked
 from .signals import mark_social_signup_verified
 from .templatetags.user_extras import at_username
 from .tokens import generate_verification_token
@@ -762,3 +762,126 @@ class FollowTests(TestCase):
         self.client.force_login(self.alice)
         self.client.post(reverse("follow", args=["alice"]))
         self.assertFalse(Follow.objects.filter(follower=self.alice, followed=self.alice).exists())
+
+
+class MuteTests(TestCase):
+    def setUp(self):
+        self.alice = User.objects.create_user(username="alice", password="correct-horse-battery-staple")
+        self.bob = User.objects.create_user(username="bob", password="correct-horse-battery-staple")
+
+    def test_anonymous_cannot_mute(self):
+        response = self.client.post(reverse("mute", args=["bob"]))
+        self.assertEqual(response.status_code, 302)
+        self.assertFalse(Mute.objects.filter(muter=self.alice, muted=self.bob).exists())
+
+    def test_mute_and_unmute(self):
+        self.client.force_login(self.alice)
+
+        self.client.post(reverse("mute", args=["bob"]))
+        self.assertTrue(Mute.objects.filter(muter=self.alice, muted=self.bob).exists())
+
+        self.client.post(reverse("unmute", args=["bob"]))
+        self.assertFalse(Mute.objects.filter(muter=self.alice, muted=self.bob).exists())
+
+    def test_mute_is_idempotent(self):
+        self.client.force_login(self.alice)
+        self.client.post(reverse("mute", args=["bob"]))
+        self.client.post(reverse("mute", args=["bob"]))
+        self.assertEqual(Mute.objects.filter(muter=self.alice, muted=self.bob).count(), 1)
+
+    def test_cannot_mute_self(self):
+        self.client.force_login(self.alice)
+        self.client.post(reverse("mute", args=["alice"]))
+        self.assertFalse(Mute.objects.filter(muter=self.alice, muted=self.alice).exists())
+
+    def test_is_muted_or_blocked_true_for_a_mute(self):
+        Mute.objects.create(muter=self.alice, muted=self.bob)
+        self.assertTrue(is_muted_or_blocked(self.alice, self.bob))
+        self.assertFalse(is_muted_or_blocked(self.bob, self.alice))
+
+
+class BlockTests(TestCase):
+    def setUp(self):
+        self.alice = User.objects.create_user(username="alice", password="correct-horse-battery-staple")
+        self.bob = User.objects.create_user(username="bob", password="correct-horse-battery-staple")
+
+    def test_anonymous_cannot_block(self):
+        response = self.client.post(reverse("block", args=["bob"]))
+        self.assertEqual(response.status_code, 302)
+        self.assertFalse(Block.objects.filter(blocker=self.alice, blocked=self.bob).exists())
+
+    def test_block_and_unblock(self):
+        self.client.force_login(self.alice)
+
+        self.client.post(reverse("block", args=["bob"]))
+        self.assertTrue(Block.objects.filter(blocker=self.alice, blocked=self.bob).exists())
+
+        self.client.post(reverse("unblock", args=["bob"]))
+        self.assertFalse(Block.objects.filter(blocker=self.alice, blocked=self.bob).exists())
+
+    def test_block_is_idempotent(self):
+        self.client.force_login(self.alice)
+        self.client.post(reverse("block", args=["bob"]))
+        self.client.post(reverse("block", args=["bob"]))
+        self.assertEqual(Block.objects.filter(blocker=self.alice, blocked=self.bob).count(), 1)
+
+    def test_cannot_block_self(self):
+        self.client.force_login(self.alice)
+        self.client.post(reverse("block", args=["alice"]))
+        self.assertFalse(Block.objects.filter(blocker=self.alice, blocked=self.alice).exists())
+
+    def test_is_muted_or_blocked_true_for_a_block(self):
+        Block.objects.create(blocker=self.alice, blocked=self.bob)
+        self.assertTrue(is_muted_or_blocked(self.alice, self.bob))
+
+    def test_is_blocked_either_way_regardless_of_direction(self):
+        Block.objects.create(blocker=self.alice, blocked=self.bob)
+        self.assertTrue(is_blocked_either_way(self.alice, self.bob))
+        self.assertTrue(is_blocked_either_way(self.bob, self.alice))
+
+    def test_is_blocked_either_way_false_with_no_block(self):
+        self.assertFalse(is_blocked_either_way(self.alice, self.bob))
+
+
+class MuteBlockProfilePageTests(TestCase):
+    def setUp(self):
+        self.alice = User.objects.create_user(username="alice", password="correct-horse-battery-staple")
+        self.bob = User.objects.create_user(username="bob", password="correct-horse-battery-staple")
+
+    def test_shows_mute_and_block_buttons_by_default(self):
+        self.client.force_login(self.alice)
+        response = self.client.get(reverse("profile", args=["bob"]))
+        self.assertContains(response, "Mute")
+        self.assertContains(response, "Block")
+        self.assertContains(response, reverse("conversation-start", args=["bob"]))
+
+    def test_shows_unmute_when_already_muted(self):
+        Mute.objects.create(muter=self.alice, muted=self.bob)
+        self.client.force_login(self.alice)
+        response = self.client.get(reverse("profile", args=["bob"]))
+        self.assertContains(response, "Unmute")
+
+    def test_shows_unblock_when_already_blocked(self):
+        Block.objects.create(blocker=self.alice, blocked=self.bob)
+        self.client.force_login(self.alice)
+        response = self.client.get(reverse("profile", args=["bob"]))
+        self.assertContains(response, "Unblock")
+
+    def test_hides_message_and_challenge_buttons_when_blocked(self):
+        Block.objects.create(blocker=self.alice, blocked=self.bob)
+        self.client.force_login(self.alice)
+        response = self.client.get(reverse("profile", args=["bob"]))
+        self.assertNotContains(response, reverse("conversation-start", args=["bob"]))
+        self.assertNotContains(response, "Challenge to Tic-Tac-Toe")
+
+    def test_hides_message_button_when_blocked_by_the_other_user(self):
+        Block.objects.create(blocker=self.bob, blocked=self.alice)
+        self.client.force_login(self.alice)
+        response = self.client.get(reverse("profile", args=["bob"]))
+        self.assertNotContains(response, reverse("conversation-start", args=["bob"]))
+
+    def test_mute_does_not_hide_message_button(self):
+        Mute.objects.create(muter=self.alice, muted=self.bob)
+        self.client.force_login(self.alice)
+        response = self.client.get(reverse("profile", args=["bob"]))
+        self.assertContains(response, reverse("conversation-start", args=["bob"]))
