@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% load user_extras %}
+
+{% block title %}{{ profile_user.username|at_username }}'s {% if kind == "followers" %}followers{% else %}following{% endif %} — Chatter{% endblock %}
+
+{% block content %}
+    <h1 class="mb-4 text-2xl font-extrabold tracking-tight">
+        {% if kind == "followers" %}Followers of {% else %}Following for {% endif %}{{ profile_user.username|at_username }}
+    </h1>
+
+    <div class="space-y-2">
+        {% for other_user in users %}
+            <div class="flex items-center gap-3 rounded-2xl border border-border bg-surface p-3">
+                {% include "_avatar.html" with avatar_user=other_user %}
+                <a href="{% url 'profile' other_user.username %}" class="flex-1 font-medium text-fg no-underline hover:text-accent">{{ other_user.username|at_username }}</a>
+                {% if user.is_authenticated and user != other_user %}
+                    {% if other_user.id in following_ids %}
+                        <form method="post" action="{% url 'unfollow' other_user.username %}" class="inline">
+                            {% csrf_token %}
+                            <button type="submit" class="mt-0 rounded-full border border-border bg-transparent px-4 py-1.5 text-sm text-fg transition-colors hover:bg-surface-hover">Unfollow</button>
+                        </form>
+                    {% else %}
+                        <form method="post" action="{% url 'follow' other_user.username %}" class="inline">
+                            {% csrf_token %}
+                            <button type="submit" class="mt-0 rounded-full px-4 py-1.5 text-sm">Follow</button>
+                        </form>
+                    {% endif %}
+                {% endif %}
+            </div>
+        {% empty %}
+            <p class="text-muted">
+                {% if kind == "followers" %}No followers yet.{% else %}Not following anyone yet.{% endif %}
+            </p>
+        {% endfor %}
+    </div>
+
+    {% if page_obj.has_previous or page_obj.has_next %}
+        <div class="mt-4 flex justify-center gap-3 text-sm">
+            {% if page_obj.has_previous %}<a href="?page={{ page_obj.previous_page_number }}" class="text-accent no-underline hover:underline">Previous</a>{% endif %}
+            {% if page_obj.has_next %}<a href="?page={{ page_obj.next_page_number }}" class="text-accent no-underline hover:underline">Next</a>{% endif %}
+        </div>
+    {% endif %}
+{% endblock %}

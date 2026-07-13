@@ -835,6 +835,61 @@ class FollowTests(TestCase):
         self.assertFalse(Follow.objects.filter(follower=self.alice, followed=self.alice).exists())
 
 
+class UserListViewTests(TestCase):
+    def setUp(self):
+        self.alice = User.objects.create_user(username="alice", password="correct-horse-battery-staple")
+        self.bob = User.objects.create_user(username="bob", password="correct-horse-battery-staple")
+        self.carol = User.objects.create_user(username="carol", password="correct-horse-battery-staple")
+        Follow.objects.create(follower=self.bob, followed=self.alice)
+        Follow.objects.create(follower=self.carol, followed=self.alice)
+        Follow.objects.create(follower=self.alice, followed=self.bob)
+
+    def test_followers_list_shows_only_those_following_the_profile_user(self):
+        response = self.client.get(reverse("followers-list", args=["alice"]))
+        self.assertEqual(set(response.context["users"]), {self.bob, self.carol})
+
+    def test_following_list_shows_only_those_the_profile_user_follows(self):
+        response = self.client.get(reverse("following-list", args=["alice"]))
+        self.assertEqual(set(response.context["users"]), {self.bob})
+
+    def test_authenticated_viewer_sees_follow_button_for_someone_not_yet_followed(self):
+        self.client.force_login(self.alice)
+        response = self.client.get(reverse("followers-list", args=["alice"]))
+        self.assertContains(response, reverse("follow", args=["carol"]))
+        self.assertNotContains(response, reverse("unfollow", args=["carol"]))
+
+    def test_authenticated_viewer_sees_unfollow_button_for_someone_already_followed(self):
+        self.client.force_login(self.carol)
+        Follow.objects.create(follower=self.carol, followed=self.bob)
+        response = self.client.get(reverse("followers-list", args=["alice"]))
+        self.assertContains(response, reverse("unfollow", args=["bob"]))
+
+    def test_no_follow_button_for_own_row(self):
+        self.client.force_login(self.bob)
+        response = self.client.get(reverse("followers-list", args=["alice"]))
+        self.assertNotContains(response, reverse("follow", args=["bob"]))
+        self.assertNotContains(response, reverse("unfollow", args=["bob"]))
+
+    def test_anonymous_visitor_sees_the_list_with_no_follow_buttons(self):
+        response = self.client.get(reverse("followers-list", args=["alice"]))
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, reverse("follow", args=["bob"]))
+
+    def test_muted_or_blocked_user_still_appears_in_the_list(self):
+        Mute.objects.create(muter=self.alice, muted=self.bob)
+        Block.objects.create(blocker=self.alice, blocked=self.carol)
+        response = self.client.get(reverse("followers-list", args=["alice"]))
+        self.assertEqual(set(response.context["users"]), {self.bob, self.carol})
+
+    def test_pagination_spans_a_second_page(self):
+        for i in range(25):
+            follower = User.objects.create_user(username=f"follower{i}", password="correct-horse-battery-staple")
+            Follow.objects.create(follower=follower, followed=self.alice)
+
+        response = self.client.get(reverse("followers-list", args=["alice"]))
+        self.assertTrue(response.context["page_obj"].has_next())
+
+
 class MuteTests(TestCase):
     def setUp(self):
         self.alice = User.objects.create_user(username="alice", password="correct-horse-battery-staple")

@@ -19,6 +19,8 @@ urlpatterns = [
     path("settings/password/", views.PasswordChangeView.as_view(), name="password-change"),
     path("users/search/", views.UserSearchView.as_view(), name="user-search"),
     path("users/<str:username>/", views.ProfileView.as_view(), name="profile"),
+    path("users/<str:username>/followers/", views.UserListView.as_view(kind="followers"), name="followers-list"),
+    path("users/<str:username>/following/", views.UserListView.as_view(kind="following"), name="following-list"),
     path("users/<str:username>/follow/", views.FollowView.as_view(), name="follow"),
     path("users/<str:username>/unfollow/", views.UnfollowView.as_view(), name="unfollow"),
     path("users/<str:username>/mute/", views.MuteView.as_view(), name="mute"),

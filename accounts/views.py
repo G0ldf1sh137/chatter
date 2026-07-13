@@ -9,7 +9,7 @@ from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse, reverse_lazy
 from django.views import View
-from django.views.generic import CreateView, DetailView, FormView, TemplateView, UpdateView
+from django.views.generic import CreateView, DetailView, FormView, ListView, TemplateView, UpdateView
 
 from games import stats as game_stats
 from games.models import Match
@@ -23,6 +23,7 @@ from .tokens import TokenExpired, TokenInvalid, verify_token
 
 PROFILE_ITEM_LIMIT = 20
 USER_SEARCH_LIMIT = 8
+USER_LIST_PAGE_SIZE = 20
 
 
 class RegisterView(CreateView):
@@ -143,6 +144,35 @@ class ProfileView(DetailView):
         context["mastermind_high_score"] = game_stats.mastermind_high_score(profile_user)
         context["flappy_high_score"] = game_stats.flappy_high_score(profile_user)
         context["tetris_high_score"] = game_stats.tetris_high_score(profile_user)
+        return context
+
+
+class UserListView(ListView):
+    model = User
+    template_name = "accounts/user_list.html"
+    context_object_name = "users"
+    paginate_by = USER_LIST_PAGE_SIZE
+    kind = None  # "followers" or "following", set via as_view()
+
+    def get(self, request, *args, **kwargs):
+        self.profile_user = get_object_or_404(User, username=kwargs["username"])
+        return super().get(request, *args, **kwargs)
+
+    def get_queryset(self):
+        if self.kind == "followers":
+            queryset = User.objects.filter(following__followed=self.profile_user)
+        else:
+            queryset = User.objects.filter(followers__follower=self.profile_user)
+        return queryset.select_related("profile").order_by("username")
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["profile_user"] = self.profile_user
+        context["kind"] = self.kind
+        if self.request.user.is_authenticated:
+            context["following_ids"] = set(
+                Follow.objects.filter(follower=self.request.user).values_list("followed_id", flat=True)
+            )
         return context
 
 

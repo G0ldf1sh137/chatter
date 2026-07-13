@@ -107,8 +107,8 @@
         <div class="mt-4 flex flex-wrap gap-2">
             <span class="rounded-full bg-surface-hover px-3 py-1 text-xs font-medium text-muted">{{ post_count }} post{{ post_count|pluralize }}</span>
             <span class="rounded-full bg-surface-hover px-3 py-1 text-xs font-medium text-muted">{{ comment_count }} comment{{ comment_count|pluralize }}</span>
-            <span class="rounded-full bg-surface-hover px-3 py-1 text-xs font-medium text-muted">{{ followers_count }} follower{{ followers_count|pluralize }}</span>
-            <span class="rounded-full bg-surface-hover px-3 py-1 text-xs font-medium text-muted">{{ following_count }} following</span>
+            <a href="{% url 'followers-list' profile_user.username %}" class="rounded-full bg-surface-hover px-3 py-1 text-xs font-medium text-muted no-underline transition-colors hover:text-fg">{{ followers_count }} follower{{ followers_count|pluralize }}</a>
+            <a href="{% url 'following-list' profile_user.username %}" class="rounded-full bg-surface-hover px-3 py-1 text-xs font-medium text-muted no-underline transition-colors hover:text-fg">{{ following_count }} following</a>
             <span class="flex items-center gap-1 rounded-full bg-surface-hover px-3 py-1 text-xs font-semibold text-karma">
                 <svg viewBox="0 0 20 20" fill="currentColor" class="h-3.5 w-3.5"><path d="M10 2c1.5 2 4 4.5 4 8a4 4 0 11-8 0c0-1 .3-1.8.8-2.6.2.9.8 1.4 1.4 1.4.7 0 1-.6.7-1.3C8.3 6.6 8 5.6 8 4.5 8 3.6 8.6 2.7 10 2z"/></svg>
                 {{ karma }} karma
