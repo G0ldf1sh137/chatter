@@ -11,7 +11,13 @@ from accounts.models import Follow
 from .markdown import render_markdown
 from .mentions import extract_mentioned_users
 from .models import Comment, CommentVote, Conversation, Message, Notification, Post, PostVote
-from .views import build_comment_tree, get_or_create_conversation, unread_message_count, unread_notification_count
+from .views import (
+    build_comment_tree,
+    get_or_create_conversation,
+    toggle_vote,
+    unread_message_count,
+    unread_notification_count,
+)
 
 
 def make_user(username):
@@ -807,6 +813,7 @@ class MentionNotificationTests(TestCase):
         self.client.post(reverse("post-create"), {"body": f"hi @{self.bob.username}"})
 
         notification = Notification.objects.get()
+        self.assertEqual(notification.kind, Notification.Kind.MENTION)
         self.assertEqual(notification.recipient, self.bob)
         self.assertEqual(notification.actor, self.alice)
         self.assertIsNone(notification.comment)
@@ -817,10 +824,10 @@ class MentionNotificationTests(TestCase):
 
         self.client.post(reverse("comment-create", args=[post.pk]), {"body": f"hi @{self.bob.username}"})
 
-        notification = Notification.objects.get()
-        self.assertEqual(notification.recipient, self.bob)
-        self.assertEqual(notification.post, post)
-        self.assertEqual(notification.comment, Comment.objects.get())
+        mention = Notification.objects.get(kind=Notification.Kind.MENTION)
+        self.assertEqual(mention.recipient, self.bob)
+        self.assertEqual(mention.post, post)
+        self.assertEqual(mention.comment, Comment.objects.get())
 
     def test_mentioning_yourself_creates_no_notification(self):
         self.client.force_login(self.alice)
@@ -869,6 +876,144 @@ class NotificationListViewTests(TestCase):
         self.assertIn(reverse("login"), response.url)
 
 
+class NotificationListRenderingTests(TestCase):
+    # Regression coverage for a real bug: an early draft of the template used
+    # a `{# ... #}` single-line comment spanning multiple lines, which Django
+    # doesn't strip - it rendered as literal text on the page. Caught via a
+    # live browser check, not by a test, since assertContains on the expected
+    # phrase alone still passed (the comment text just appeared *before* it).
+    def setUp(self):
+        self.alice = make_user("alice")
+        self.bob = make_user("bob")
+        self.post = Post.objects.create(author=self.alice, body="a post")
+        self.comment = Comment.objects.create(author=self.alice, post=self.post, body="a comment")
+        self.reply = Comment.objects.create(author=self.bob, post=self.post, parent=self.comment, body="a reply")
+        self.client.force_login(self.alice)
+
+    def render(self, **kwargs):
+        Notification.objects.create(recipient=self.alice, actor=self.bob, post=self.post, **kwargs)
+        return self.client.get(reverse("notification-list"))
+
+    def test_no_stray_template_comment_text_leaks_into_the_page(self):
+        response = self.render(kind=Notification.Kind.REPLY, comment=self.reply)
+        self.assertNotContains(response, "matters for the wording")
+
+    def test_mention_in_a_post_wording(self):
+        response = self.render(kind=Notification.Kind.MENTION)
+        self.assertContains(response, "mentioned you in a post")
+
+    def test_mention_in_a_comment_wording(self):
+        response = self.render(kind=Notification.Kind.MENTION, comment=self.comment)
+        self.assertContains(response, "mentioned you in a comment")
+
+    def test_top_level_reply_wording_says_post(self):
+        top_level_reply = Comment.objects.create(author=self.bob, post=self.post, body="top level")
+        response = self.render(kind=Notification.Kind.REPLY, comment=top_level_reply)
+        self.assertContains(response, "replied to your post")
+
+    def test_nested_reply_wording_says_comment(self):
+        response = self.render(kind=Notification.Kind.REPLY, comment=self.reply)
+        self.assertContains(response, "replied to your comment")
+
+    def test_upvote_on_a_post_wording(self):
+        response = self.render(kind=Notification.Kind.UPVOTE)
+        self.assertContains(response, "upvoted your post")
+
+    def test_upvote_on_a_comment_wording(self):
+        response = self.render(kind=Notification.Kind.UPVOTE, comment=self.comment)
+        self.assertContains(response, "upvoted your comment")
+
+
+class NotificationDismissViewTests(TestCase):
+    def setUp(self):
+        self.alice = make_user("alice")
+        self.bob = make_user("bob")
+        self.post = Post.objects.create(author=self.alice, body="a post")
+        self.notification = Notification.objects.create(recipient=self.alice, actor=self.bob, post=self.post)
+
+    def test_dismissing_hides_it_from_the_list(self):
+        self.client.force_login(self.alice)
+
+        response = self.client.post(reverse("notification-dismiss", args=[self.notification.pk]))
+
+        self.assertRedirects(response, reverse("notification-list"))
+        self.notification.refresh_from_db()
+        self.assertTrue(self.notification.dismissed)
+        list_response = self.client.get(reverse("notification-list"))
+        self.assertNotIn(self.notification, list_response.context["notifications"])
+
+    def test_cannot_dismiss_someone_elses_notification(self):
+        carol = make_user("carol")
+        self.client.force_login(carol)
+
+        response = self.client.post(reverse("notification-dismiss", args=[self.notification.pk]))
+
+        self.assertEqual(response.status_code, 404)
+        self.notification.refresh_from_db()
+        self.assertFalse(self.notification.dismissed)
+
+    def test_anonymous_redirected_to_login(self):
+        response = self.client.post(reverse("notification-dismiss", args=[self.notification.pk]))
+        self.assertEqual(response.status_code, 302)
+        self.assertIn(reverse("login"), response.url)
+
+    def test_dismissing_marks_it_read_too_since_viewing_the_list_already_did(self):
+        # Dismiss is only ever reachable from the notification list page,
+        # which marks everything read before rendering - so by the time a
+        # notification can be dismissed, it's already read by construction.
+        self.client.force_login(self.alice)
+        self.client.get(reverse("notification-list"))
+
+        self.client.post(reverse("notification-dismiss", args=[self.notification.pk]))
+
+        self.notification.refresh_from_db()
+        self.assertTrue(self.notification.read)
+        self.assertTrue(self.notification.dismissed)
+
+
+class NotificationDismissAllViewTests(TestCase):
+    def setUp(self):
+        self.alice = make_user("alice")
+        self.bob = make_user("bob")
+        self.post = Post.objects.create(author=self.alice, body="a post")
+        self.first = Notification.objects.create(recipient=self.alice, actor=self.bob, post=self.post)
+        self.second = Notification.objects.create(recipient=self.alice, actor=self.bob, post=self.post)
+
+    def test_dismisses_every_notification_for_the_current_user(self):
+        self.client.force_login(self.alice)
+
+        response = self.client.post(reverse("notification-dismiss-all"))
+
+        self.assertRedirects(response, reverse("notification-list"))
+        self.first.refresh_from_db()
+        self.second.refresh_from_db()
+        self.assertTrue(self.first.dismissed)
+        self.assertTrue(self.second.dismissed)
+
+    def test_does_not_affect_another_users_notifications(self):
+        other_post = Post.objects.create(author=self.bob, body="unrelated")
+        others = Notification.objects.create(recipient=self.bob, actor=self.alice, post=other_post)
+        self.client.force_login(self.alice)
+
+        self.client.post(reverse("notification-dismiss-all"))
+
+        others.refresh_from_db()
+        self.assertFalse(others.dismissed)
+
+    def test_anonymous_redirected_to_login(self):
+        response = self.client.post(reverse("notification-dismiss-all"))
+        self.assertEqual(response.status_code, 302)
+        self.assertIn(reverse("login"), response.url)
+
+    def test_dismiss_all_button_hidden_when_there_are_no_notifications(self):
+        carol = make_user("carol")
+        self.client.force_login(carol)
+
+        response = self.client.get(reverse("notification-list"))
+
+        self.assertNotContains(response, "Dismiss all")
+
+
 class UnreadNotificationCountViewTests(TestCase):
     def setUp(self):
         self.alice = make_user("alice")
@@ -884,3 +1029,127 @@ class UnreadNotificationCountViewTests(TestCase):
     def test_anonymous_cannot_access_unread_count_endpoint(self):
         response = self.client.get(reverse("unread-notification-count"))
         self.assertEqual(response.status_code, 302)
+
+
+class ToggleVoteReturnValueTests(TestCase):
+    def setUp(self):
+        self.author = make_user("alice")
+        self.voter = make_user("bob")
+        self.post = Post.objects.create(author=self.author, body="hello")
+
+    def test_new_vote_returns_created(self):
+        self.assertEqual(toggle_vote(PostVote, {"post": self.post}, self.voter, PostVote.UP), "created")
+
+    def test_repeating_the_same_vote_returns_removed(self):
+        toggle_vote(PostVote, {"post": self.post}, self.voter, PostVote.UP)
+        self.assertEqual(toggle_vote(PostVote, {"post": self.post}, self.voter, PostVote.UP), "removed")
+
+    def test_opposite_vote_returns_flipped(self):
+        toggle_vote(PostVote, {"post": self.post}, self.voter, PostVote.DOWN)
+        self.assertEqual(toggle_vote(PostVote, {"post": self.post}, self.voter, PostVote.UP), "flipped")
+
+
+class ReplyNotificationTests(TestCase):
+    def setUp(self):
+        self.alice = make_user("alice")
+        self.bob = make_user("bob")
+        self.post = Post.objects.create(author=self.alice, body="a post")
+
+    def test_top_level_comment_notifies_the_post_author(self):
+        self.client.force_login(self.bob)
+
+        self.client.post(reverse("comment-create", args=[self.post.pk]), {"body": "nice post"})
+
+        notification = Notification.objects.get(kind=Notification.Kind.REPLY)
+        self.assertEqual(notification.recipient, self.alice)
+        self.assertEqual(notification.actor, self.bob)
+        self.assertEqual(notification.comment, Comment.objects.get())
+
+    def test_reply_to_a_comment_notifies_the_comments_author_not_the_post_author(self):
+        carol = make_user("carol")
+        top_level = Comment.objects.create(author=self.bob, post=self.post, body="first")
+        self.client.force_login(carol)
+
+        self.client.post(
+            reverse("comment-create", args=[self.post.pk]),
+            {"body": "replying to you", "parent": top_level.pk},
+        )
+
+        notification = Notification.objects.get(kind=Notification.Kind.REPLY)
+        self.assertEqual(notification.recipient, self.bob)
+
+    def test_replying_to_your_own_post_does_not_notify(self):
+        self.client.force_login(self.alice)
+
+        self.client.post(reverse("comment-create", args=[self.post.pk]), {"body": "talking to myself"})
+
+        self.assertFalse(Notification.objects.filter(kind=Notification.Kind.REPLY).exists())
+
+    def test_replying_to_your_own_comment_does_not_notify(self):
+        top_level = Comment.objects.create(author=self.alice, post=self.post, body="first")
+        self.client.force_login(self.alice)
+
+        self.client.post(
+            reverse("comment-create", args=[self.post.pk]),
+            {"body": "replying to myself", "parent": top_level.pk},
+        )
+
+        self.assertFalse(Notification.objects.filter(kind=Notification.Kind.REPLY).exists())
+
+
+class UpvoteNotificationTests(TestCase):
+    def setUp(self):
+        self.alice = make_user("alice")
+        self.bob = make_user("bob")
+        self.post = Post.objects.create(author=self.alice, body="hello")
+        self.comment = Comment.objects.create(author=self.alice, post=self.post, body="a comment")
+
+    def test_upvoting_a_post_notifies_its_author(self):
+        self.client.force_login(self.bob)
+
+        self.client.post(reverse("post-upvote", args=[self.post.pk]))
+
+        notification = Notification.objects.get(kind=Notification.Kind.UPVOTE)
+        self.assertEqual(notification.recipient, self.alice)
+        self.assertEqual(notification.actor, self.bob)
+        self.assertIsNone(notification.comment)
+
+    def test_upvoting_a_comment_notifies_its_author(self):
+        self.client.force_login(self.bob)
+
+        self.client.post(reverse("comment-upvote", args=[self.comment.pk]))
+
+        notification = Notification.objects.get(kind=Notification.Kind.UPVOTE)
+        self.assertEqual(notification.recipient, self.alice)
+        self.assertEqual(notification.comment, self.comment)
+
+    def test_downvoting_never_notifies(self):
+        self.client.force_login(self.bob)
+
+        self.client.post(reverse("post-downvote", args=[self.post.pk]))
+
+        self.assertFalse(Notification.objects.filter(kind=Notification.Kind.UPVOTE).exists())
+
+    def test_removing_an_upvote_does_not_notify_again(self):
+        self.client.force_login(self.bob)
+        self.client.post(reverse("post-upvote", args=[self.post.pk]))
+        Notification.objects.filter(kind=Notification.Kind.UPVOTE).delete()
+
+        self.client.post(reverse("post-upvote", args=[self.post.pk]))
+
+        self.assertFalse(Notification.objects.filter(kind=Notification.Kind.UPVOTE).exists())
+
+    def test_flipping_a_downvote_to_an_upvote_notifies(self):
+        self.client.force_login(self.bob)
+        self.client.post(reverse("post-downvote", args=[self.post.pk]))
+
+        self.client.post(reverse("post-upvote", args=[self.post.pk]))
+
+        self.assertTrue(Notification.objects.filter(kind=Notification.Kind.UPVOTE).exists())
+
+    def test_upvoting_your_own_post_does_not_notify(self):
+        self.client.force_login(self.alice)
+
+        self.client.post(reverse("post-upvote", args=[self.post.pk]))
+
+        self.assertFalse(Notification.objects.filter(kind=Notification.Kind.UPVOTE).exists())

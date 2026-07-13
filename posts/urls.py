@@ -42,4 +42,14 @@ urlpatterns = [
         views.UnreadNotificationCountView.as_view(),
         name="unread-notification-count",
     ),
+    path(
+        "notifications/dismiss-all/",
+        views.NotificationDismissAllView.as_view(),
+        name="notification-dismiss-all",
+    ),
+    path(
+        "notifications/<uuid:pk>/dismiss/",
+        views.NotificationDismissView.as_view(),
+        name="notification-dismiss",
+    ),
 ]

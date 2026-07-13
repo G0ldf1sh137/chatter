@@ -125,15 +125,22 @@ class Message(models.Model):
 
 
 class Notification(models.Model):
+    class Kind(models.TextChoices):
+        MENTION = "mention", "Mention"
+        REPLY = "reply", "Reply"
+        UPVOTE = "upvote", "Upvote"
+
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    kind = models.CharField(max_length=10, choices=Kind.choices, default=Kind.MENTION)
     recipient = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="notifications")
     actor = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="+")
     post = models.ForeignKey(Post, on_delete=models.CASCADE)
-    # Set only when the mention happened in a comment rather than the post
-    # body itself - `post` is always set either way, since it's the natural
-    # landing page for both cases.
+    # Set only when the notification is about a comment (a mention or reply
+    # inside one, or an upvote on one) rather than the post itself - `post`
+    # is always set either way, since it's the natural landing page for both.
     comment = models.ForeignKey(Comment, on_delete=models.CASCADE, null=True, blank=True)
     read = models.BooleanField(default=False)
+    dismissed = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -141,4 +148,4 @@ class Notification(models.Model):
         indexes = [models.Index(fields=["recipient", "read"])]
 
     def __str__(self):
-        return f"Notification({self.pk}): {self.actor} mentioned {self.recipient}"
+        return f"Notification({self.pk}): {self.actor} -> {self.recipient} ({self.kind})"

@@ -4,22 +4,47 @@
 {% block title %}Notifications — Chatter{% endblock %}
 
 {% block content %}
-    <h1 class="mb-4 text-2xl font-extrabold tracking-tight">Notifications</h1>
+    <div class="mb-4 flex items-center justify-between">
+        <h1 class="text-2xl font-extrabold tracking-tight">Notifications</h1>
+        {% if notifications %}
+            <form method="post" action="{% url 'notification-dismiss-all' %}" class="inline">
+                {% csrf_token %}
+                <button type="submit" class="mt-0 rounded-full border border-border bg-transparent px-3 py-1.5 text-sm text-fg transition-colors hover:bg-surface-hover">Dismiss all</button>
+            </form>
+        {% endif %}
+    </div>
     <div class="space-y-2">
         {% for notification in notifications %}
-            <a
-                href="{% url 'post-detail' notification.post_id %}{% if notification.comment_id %}#comment-{{ notification.comment_id }}{% endif %}"
-                class="flex items-center gap-3 rounded-2xl border border-border bg-surface p-4 shadow-sm no-underline transition-shadow hover:shadow-md"
-            >
-                {% include "_avatar.html" with avatar_user=notification.actor %}
-                <div>
-                    <p class="text-fg">
-                        <span class="font-medium">{{ notification.actor.username|at_username }}</span>
-                        {% if notification.comment_id %}mentioned you in a comment{% else %}mentioned you in a post{% endif %}
-                    </p>
-                    <p class="text-xs text-muted">{{ notification.created_at }}</p>
-                </div>
-            </a>
+            <div class="flex items-center gap-3 rounded-2xl border border-border bg-surface p-4 shadow-sm transition-shadow hover:shadow-md">
+                <a
+                    href="{% url 'post-detail' notification.post_id %}{% if notification.comment_id %}#comment-{{ notification.comment_id }}{% endif %}"
+                    class="flex min-w-0 flex-1 items-center gap-3 no-underline"
+                >
+                    {% include "_avatar.html" with avatar_user=notification.actor %}
+                    <div>
+                        <p class="text-fg">
+                            <span class="font-medium">{{ notification.actor.username|at_username }}</span>
+                            {% if notification.kind == "mention" %}
+                                mentioned you in a {% if notification.comment_id %}comment{% else %}post{% endif %}
+                            {% elif notification.kind == "reply" %}
+                                {% comment %}
+                                    The reply itself is always a comment (comment_id is always set) - what
+                                    matters for the wording is whether *it* replied to another comment or
+                                    was a top-level comment directly on the post.
+                                {% endcomment %}
+                                replied to your {% if notification.comment.parent_id %}comment{% else %}post{% endif %}
+                            {% elif notification.kind == "upvote" %}
+                                upvoted your {% if notification.comment_id %}comment{% else %}post{% endif %}
+                            {% endif %}
+                        </p>
+                        <p class="text-xs text-muted">{{ notification.created_at }}</p>
+                    </div>
+                </a>
+                <form method="post" action="{% url 'notification-dismiss' notification.pk %}" class="inline">
+                    {% csrf_token %}
+                    <button type="submit" class="mt-0 rounded-full border border-border bg-transparent px-3 py-1.5 text-xs text-muted transition-colors hover:bg-surface-hover hover:text-fg">Dismiss</button>
+                </form>
+            </div>
         {% empty %}
             <p class="text-muted">No notifications yet.</p>
         {% endfor %}

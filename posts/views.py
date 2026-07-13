@@ -18,9 +18,15 @@ from .models import Comment, CommentVote, Conversation, Message, Notification, P
 from .ranking import rank_posts
 
 
+def create_notification(kind, recipient, actor, post, comment=None):
+    if recipient.pk == actor.pk:
+        return
+    Notification.objects.create(kind=kind, recipient=recipient, actor=actor, post=post, comment=comment)
+
+
 def notify_mentioned_users(body, author, post, comment=None):
     Notification.objects.bulk_create(
-        Notification(recipient=user, actor=author, post=post, comment=comment)
+        Notification(kind=Notification.Kind.MENTION, recipient=user, actor=author, post=post, comment=comment)
         for user in extract_mentioned_users(body, exclude=author)
     )
 
@@ -57,11 +63,14 @@ def toggle_vote(vote_model, lookup, user, value):
     existing = vote_model.objects.filter(user=user, **lookup).first()
     if existing is None:
         vote_model.objects.create(user=user, value=value, **lookup)
+        return "created"
     elif existing.value == value:
         existing.delete()
+        return "removed"
     else:
         existing.value = value
         existing.save(update_fields=["value"])
+        return "flipped"
 
 
 def redirect_back(request, fallback):
@@ -227,6 +236,8 @@ class CommentCreateView(LoginRequiredMixin, View):
                 parent=parent,
                 body=form.cleaned_data["body"],
             )
+            reply_recipient = parent.author if parent else post.author
+            create_notification(Notification.Kind.REPLY, reply_recipient, comment.author, post, comment=comment)
             notify_mentioned_users(comment.body, comment.author, post, comment=comment)
         return redirect("post-detail", pk=post.pk)
 
@@ -250,7 +261,9 @@ class PostVoteView(LoginRequiredMixin, View):
 
     def post(self, request, pk):
         post = get_object_or_404(Post, pk=pk)
-        toggle_vote(PostVote, {"post": post}, request.user, self.value)
+        action = toggle_vote(PostVote, {"post": post}, request.user, self.value)
+        if self.value == PostVote.UP and action in ("created", "flipped"):
+            create_notification(Notification.Kind.UPVOTE, post.author, request.user, post)
         return redirect_back(request, post.get_absolute_url())
 
 
@@ -259,7 +272,9 @@ class CommentVoteView(LoginRequiredMixin, View):
 
     def post(self, request, pk):
         comment = get_object_or_404(Comment, pk=pk)
-        toggle_vote(CommentVote, {"comment": comment}, request.user, self.value)
+        action = toggle_vote(CommentVote, {"comment": comment}, request.user, self.value)
+        if self.value == CommentVote.UP and action in ("created", "flipped"):
+            create_notification(Notification.Kind.UPVOTE, comment.author, request.user, comment.post, comment=comment)
         return redirect_back(request, comment.post.get_absolute_url())
 
 
@@ -373,10 +388,24 @@ class NotificationListView(LoginRequiredMixin, TemplateView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context["notifications"] = Notification.objects.filter(recipient=self.request.user).select_related(
-            "actor", "post", "comment"
-        )
+        context["notifications"] = Notification.objects.filter(
+            recipient=self.request.user, dismissed=False
+        ).select_related("actor", "post", "comment")
         return context
+
+
+class NotificationDismissView(LoginRequiredMixin, View):
+    def post(self, request, pk):
+        notification = get_object_or_404(Notification, pk=pk, recipient=request.user)
+        notification.dismissed = True
+        notification.save(update_fields=["dismissed"])
+        return redirect("notification-list")
+
+
+class NotificationDismissAllView(LoginRequiredMixin, View):
+    def post(self, request):
+        Notification.objects.filter(recipient=request.user, dismissed=False).update(dismissed=True)
+        return redirect("notification-list")
 
 
 class UnreadNotificationCountView(LoginRequiredMixin, View):
