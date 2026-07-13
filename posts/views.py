@@ -327,7 +327,9 @@ class PostDeleteView(LoginRequiredMixin, UserPassesTestMixin, View):
         post = self.get_object()
         post.body = ""
         post.deleted = True
-        post.save(update_fields=["body", "deleted"])
+        if post.image:
+            post.image.delete(save=False)
+        post.save(update_fields=["body", "deleted", "image"])
         return redirect(post.get_absolute_url())
 
 

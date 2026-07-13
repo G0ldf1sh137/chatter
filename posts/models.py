@@ -9,6 +9,7 @@ class Post(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     author = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="posts")
     body = models.TextField(max_length=5000)
+    image = models.ImageField(upload_to="post_images/", blank=True)
     edited = models.BooleanField(default=False)
     deleted = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)

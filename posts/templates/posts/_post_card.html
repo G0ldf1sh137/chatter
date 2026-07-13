@@ -14,6 +14,9 @@
                     <p class="italic text-muted">[deleted]</p>
                 {% else %}
                     <div class="prose prose-sm max-w-none dark:prose-invert">{{ post.first_line|markdown }}</div>
+                    {% if post.image %}
+                        <img src="{{ post.image.url }}" alt="" class="mt-2 max-h-64 w-full rounded-xl object-cover">
+                    {% endif %}
                 {% endif %}
             </a>
         </div>

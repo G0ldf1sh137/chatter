@@ -1,4 +1,5 @@
 from django import forms
+from django.conf import settings
 
 from .models import Comment, Message, Post
 
@@ -6,10 +7,17 @@ from .models import Comment, Message, Post
 class PostForm(forms.ModelForm):
     class Meta:
         model = Post
-        fields = ["body"]
+        fields = ["body", "image"]
         widgets = {
             "body": forms.Textarea(attrs={"rows": 6, "placeholder": "Markdown supported"}),
         }
+
+    def clean_image(self):
+        image = self.cleaned_data.get("image")
+        if image and hasattr(image, "size") and image.size > settings.MAX_POST_IMAGE_UPLOAD_SIZE:
+            max_mb = settings.MAX_POST_IMAGE_UPLOAD_SIZE // (1024 * 1024)
+            raise forms.ValidationError(f"Image must be smaller than {max_mb}MB.")
+        return image
 
 
 class CommentForm(forms.ModelForm):

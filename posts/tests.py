@@ -1,8 +1,11 @@
+import shutil
+import tempfile
 from datetime import timedelta
 
 from django.contrib.auth.models import User
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.db import IntegrityError
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
@@ -17,6 +20,12 @@ from .views import (
     toggle_vote,
     unread_message_count,
     unread_notification_count,
+)
+
+# Smallest valid GIF, used to exercise ImageField validation without a real file.
+TINY_GIF = (
+    b"GIF87a\x01\x00\x01\x00\x80\x01\x00\x00\x00\x00ccc,"
+    b"\x00\x00\x00\x00\x01\x00\x01\x00\x00\x02\x02D\x01\x00;"
 )
 
 
@@ -541,6 +550,83 @@ class ReportTests(TestCase):
         response = self.client.post(reverse("comment-report", args=[self.comment.pk]), {"reason": "rude"})
         self.assertIn(reverse("login"), response.url)
         self.assertFalse(Report.objects.exists())
+
+
+class PostImageTests(TestCase):
+    def setUp(self):
+        self.author = make_user("alice")
+        media_root = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, media_root, ignore_errors=True)
+        override = override_settings(MEDIA_ROOT=media_root)
+        override.enable()
+        self.addCleanup(override.disable)
+
+    def test_creating_a_post_with_an_image_stores_it(self):
+        self.client.force_login(self.author)
+        image = SimpleUploadedFile("photo.gif", TINY_GIF, content_type="image/gif")
+
+        self.client.post(reverse("post-create"), {"body": "look at this", "image": image})
+
+        post = Post.objects.get(body="look at this")
+        self.assertTrue(post.image)
+        self.assertIn("photo", post.image.name)
+
+    def test_creating_a_post_without_an_image_still_works(self):
+        self.client.force_login(self.author)
+
+        response = self.client.post(reverse("post-create"), {"body": "no image here"})
+
+        post = Post.objects.get(body="no image here")
+        self.assertEqual(response.status_code, 302)
+        self.assertFalse(post.image)
+
+    @override_settings(MAX_POST_IMAGE_UPLOAD_SIZE=10)
+    def test_oversized_image_rejected(self):
+        self.client.force_login(self.author)
+        image = SimpleUploadedFile("photo.gif", TINY_GIF, content_type="image/gif")
+
+        response = self.client.post(reverse("post-create"), {"body": "too big", "image": image})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(Post.objects.filter(body="too big").exists())
+
+    def test_editing_a_post_can_replace_its_image(self):
+        post = Post.objects.create(author=self.author, body="original")
+        self.client.force_login(self.author)
+        image = SimpleUploadedFile("new.gif", TINY_GIF, content_type="image/gif")
+
+        self.client.post(reverse("post-edit", args=[post.pk]), {"body": "original", "image": image})
+
+        post.refresh_from_db()
+        self.assertIn("new", post.image.name)
+
+    def test_deleting_a_post_clears_the_image_field(self):
+        post = Post.objects.create(author=self.author, body="original")
+        image = SimpleUploadedFile("photo.gif", TINY_GIF, content_type="image/gif")
+        post.image = image
+        post.save()
+        self.client.force_login(self.author)
+
+        self.client.post(reverse("post-delete", args=[post.pk]))
+
+        post.refresh_from_db()
+        self.assertFalse(post.image)
+
+    def test_feed_renders_image_tag_when_post_has_an_image(self):
+        post = Post.objects.create(author=self.author, body="with image")
+        post.image = SimpleUploadedFile("photo.gif", TINY_GIF, content_type="image/gif")
+        post.save()
+
+        response = self.client.get(reverse("feed"))
+
+        self.assertContains(response, "<img")
+
+    def test_feed_does_not_render_image_tag_for_a_post_without_one(self):
+        Post.objects.create(author=self.author, body="no image")
+
+        response = self.client.get(reverse("feed"))
+
+        self.assertNotContains(response, "<img")
 
 
 class FeedPaginationTests(TestCase):
