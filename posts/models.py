@@ -164,3 +164,25 @@ class Notification(models.Model):
 
     def __str__(self):
         return f"Notification({self.pk}): {self.actor} -> {self.recipient} ({self.kind})"
+
+
+class Report(models.Model):
+    class Status(models.TextChoices):
+        OPEN = "open", "Open"
+        RESOLVED = "resolved", "Resolved"
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    reporter = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="reports_filed")
+    post = models.ForeignKey(Post, on_delete=models.CASCADE, related_name="reports")
+    # Set only when the report is about a comment rather than the post itself -
+    # `post` is always set either way, the same convention Notification.comment uses.
+    comment = models.ForeignKey(Comment, on_delete=models.CASCADE, null=True, blank=True, related_name="reports")
+    reason = models.TextField(blank=True)
+    status = models.CharField(max_length=10, choices=Status.choices, default=Status.OPEN)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"Report({self.pk}) by {self.reporter} on Post({self.post_id})"

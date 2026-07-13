@@ -23,6 +23,10 @@
                 <button type="submit" class="mt-0 border-none bg-transparent p-0 text-sm font-medium text-downvote no-underline hover:underline">Delete</button>
             </form>
         {% endif %}
+        {% if user != comment.author %}
+            <input type="checkbox" id="report-toggle-{{ comment.pk }}" class="peer/report hidden">
+            <label for="report-toggle-{{ comment.pk }}" class="mt-1.5 ml-2 inline-block cursor-pointer text-sm font-medium text-accent hover:underline">Report</label>
+        {% endif %}
         <form method="post" action="{% url 'comment-create' comment.post_id %}" class="mt-2 hidden peer-checked/reply:block">
             {% csrf_token %}
             <input type="hidden" name="parent" value="{{ comment.pk }}">
@@ -34,6 +38,13 @@
                 {% csrf_token %}
                 <textarea name="body" rows="2" class="min-h-12">{{ comment.body }}</textarea>
                 <button type="submit">Save</button>
+            </form>
+        {% endif %}
+        {% if user != comment.author %}
+            <form method="post" action="{% url 'comment-report' comment.pk %}" class="mt-2 hidden peer-checked/report:block">
+                {% csrf_token %}
+                <textarea name="reason" rows="2" placeholder="Why are you reporting this? (optional)" class="min-h-12"></textarea>
+                <button type="submit">Report</button>
             </form>
         {% endif %}
     {% endif %}

@@ -10,7 +10,7 @@ from accounts.models import Block, Follow, Mute
 
 from .markdown import render_markdown
 from .mentions import extract_mentioned_users
-from .models import Comment, CommentVote, Conversation, Message, Notification, Post, PostVote, SavedPost
+from .models import Comment, CommentVote, Conversation, Message, Notification, Post, PostVote, Report, SavedPost
 from .views import (
     build_comment_tree,
     get_or_create_conversation,
@@ -474,6 +474,73 @@ class SavedPostTests(TestCase):
         response = self.client.get(reverse("feed"))
         post = next(p for p in response.context["posts"] if p.pk == self.post.pk)
         self.assertFalse(post.is_saved)
+
+
+class ReportTests(TestCase):
+    def setUp(self):
+        self.alice = make_user("alice")
+        self.bob = make_user("bob")
+        self.post = Post.objects.create(author=self.alice, body="a post")
+        self.comment = Comment.objects.create(author=self.alice, post=self.post, body="a comment")
+
+    def test_non_author_can_report_a_post(self):
+        self.client.force_login(self.bob)
+
+        response = self.client.post(reverse("post-report", args=[self.post.pk]), {"reason": "spam"})
+
+        self.assertEqual(response.status_code, 302)
+        report = Report.objects.get(reporter=self.bob, post=self.post, comment=None)
+        self.assertEqual(report.status, Report.Status.OPEN)
+        self.assertEqual(report.reason, "spam")
+
+    def test_non_author_can_report_a_comment(self):
+        self.client.force_login(self.bob)
+
+        self.client.post(reverse("comment-report", args=[self.comment.pk]), {"reason": "rude"})
+
+        report = Report.objects.get(reporter=self.bob, comment=self.comment)
+        self.assertEqual(report.post, self.post)
+        self.assertEqual(report.reason, "rude")
+
+    def test_author_cannot_report_own_post(self):
+        self.client.force_login(self.alice)
+
+        self.client.post(reverse("post-report", args=[self.post.pk]), {"reason": "spam"})
+
+        self.assertFalse(Report.objects.filter(post=self.post, comment=None).exists())
+
+    def test_author_cannot_report_own_comment(self):
+        self.client.force_login(self.alice)
+
+        self.client.post(reverse("comment-report", args=[self.comment.pk]), {"reason": "rude"})
+
+        self.assertFalse(Report.objects.filter(comment=self.comment).exists())
+
+    def test_reporting_the_same_post_twice_is_idempotent(self):
+        self.client.force_login(self.bob)
+
+        self.client.post(reverse("post-report", args=[self.post.pk]), {"reason": "spam"})
+        self.client.post(reverse("post-report", args=[self.post.pk]), {"reason": "spam again"})
+
+        self.assertEqual(Report.objects.filter(reporter=self.bob, post=self.post, comment=None).count(), 1)
+
+    def test_empty_reason_is_accepted(self):
+        self.client.force_login(self.bob)
+
+        self.client.post(reverse("post-report", args=[self.post.pk]))
+
+        report = Report.objects.get(reporter=self.bob, post=self.post, comment=None)
+        self.assertEqual(report.reason, "")
+
+    def test_anonymous_cannot_report_a_post(self):
+        response = self.client.post(reverse("post-report", args=[self.post.pk]), {"reason": "spam"})
+        self.assertIn(reverse("login"), response.url)
+        self.assertFalse(Report.objects.exists())
+
+    def test_anonymous_cannot_report_a_comment(self):
+        response = self.client.post(reverse("comment-report", args=[self.comment.pk]), {"reason": "rude"})
+        self.assertIn(reverse("login"), response.url)
+        self.assertFalse(Report.objects.exists())
 
 
 class FeedPaginationTests(TestCase):

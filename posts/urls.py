@@ -14,9 +14,11 @@ urlpatterns = [
     path("posts/<uuid:pk>/save/", views.PostSaveView.as_view(), name="post-save"),
     path("posts/<uuid:pk>/unsave/", views.PostUnsaveView.as_view(), name="post-unsave"),
     path("saved/", views.SavedPostsView.as_view(), name="saved-posts"),
+    path("posts/<uuid:pk>/report/", views.PostReportView.as_view(), name="post-report"),
     path("posts/<uuid:pk>/comment/", views.CommentCreateView.as_view(), name="comment-create"),
     path("comments/<uuid:pk>/edit/", views.CommentEditView.as_view(), name="comment-edit"),
     path("comments/<uuid:pk>/delete/", views.CommentDeleteView.as_view(), name="comment-delete"),
+    path("comments/<uuid:pk>/report/", views.CommentReportView.as_view(), name="comment-report"),
     path(
         "posts/<uuid:pk>/upvote/",
         views.PostVoteView.as_view(value=PostVote.UP),

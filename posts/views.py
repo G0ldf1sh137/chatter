@@ -17,7 +17,7 @@ from accounts.models import Block, Mute, is_blocked_either_way, is_muted_or_bloc
 
 from .forms import CommentEditForm, CommentForm, MessageForm, PostForm
 from .mentions import extract_mentioned_users
-from .models import Comment, CommentVote, Conversation, Message, Notification, Post, PostVote, SavedPost
+from .models import Comment, CommentVote, Conversation, Message, Notification, Post, PostVote, Report, SavedPost
 from .ranking import rank_posts
 
 
@@ -371,6 +371,19 @@ class SavedPostsView(LoginRequiredMixin, ListView):
         return JsonResponse({"html": html, "next_url": next_url})
 
 
+class PostReportView(LoginRequiredMixin, View):
+    def post(self, request, pk):
+        post = get_object_or_404(Post, pk=pk)
+        if post.author_id != request.user.id:
+            Report.objects.get_or_create(
+                reporter=request.user,
+                post=post,
+                comment=None,
+                defaults={"reason": request.POST.get("reason", "").strip()},
+            )
+        return redirect_back(request, post.get_absolute_url())
+
+
 class CommentCreateView(LoginRequiredMixin, View):
     def post(self, request, pk):
         post = get_object_or_404(Post, pk=pk)
@@ -415,6 +428,19 @@ class CommentDeleteView(LoginRequiredMixin, View):
         comment.deleted = True
         comment.save(update_fields=["body", "deleted"])
         return redirect(f"{comment.post.get_absolute_url()}#comment-{comment.pk}")
+
+
+class CommentReportView(LoginRequiredMixin, View):
+    def post(self, request, pk):
+        comment = get_object_or_404(Comment, pk=pk)
+        if comment.author_id != request.user.id:
+            Report.objects.get_or_create(
+                reporter=request.user,
+                post=comment.post,
+                comment=comment,
+                defaults={"reason": request.POST.get("reason", "").strip()},
+            )
+        return redirect_back(request, f"{comment.post.get_absolute_url()}#comment-{comment.pk}")
 
 
 class PostVoteView(LoginRequiredMixin, View):
