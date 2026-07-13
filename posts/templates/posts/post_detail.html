@@ -13,13 +13,16 @@
                     <a href="{% url 'profile' post.author.username %}" class="font-medium text-fg no-underline hover:text-accent">{{ post.author.username|at_username }}</a>
                     <span>&middot; {{ post.created_at }}</span>
                     {% if post.edited %}<span class="italic">&middot; edited</span>{% endif %}
-                    {% if user == post.author and not post.deleted %}
-                        <a href="{% url 'post-edit' post.pk %}" class="ml-auto font-medium text-accent no-underline hover:underline">Edit</a>
-                        <form method="post" action="{% url 'post-delete' post.pk %}" class="inline">
-                            {% csrf_token %}
-                            <button type="submit" class="mt-0 border-none bg-transparent p-0 text-sm font-medium text-downvote no-underline hover:underline">Delete</button>
-                        </form>
-                    {% endif %}
+                    <div class="ml-auto flex items-center gap-2">
+                        {% include "_save_button.html" %}
+                        {% if user == post.author and not post.deleted %}
+                            <a href="{% url 'post-edit' post.pk %}" class="font-medium text-accent no-underline hover:underline">Edit</a>
+                            <form method="post" action="{% url 'post-delete' post.pk %}" class="inline">
+                                {% csrf_token %}
+                                <button type="submit" class="mt-0 border-none bg-transparent p-0 text-sm font-medium text-downvote no-underline hover:underline">Delete</button>
+                            </form>
+                        {% endif %}
+                    </div>
                 </div>
                 {% if post.deleted %}
                     <p class="italic text-muted">[deleted]</p>

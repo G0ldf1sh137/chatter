@@ -14,7 +14,7 @@ from django.views.generic import CreateView, DetailView, FormView, TemplateView,
 from games import stats as game_stats
 from games.models import Match
 from posts.models import CommentVote, PostVote
-from posts.views import annotate_votes
+from posts.views import annotate_saved, annotate_votes
 
 from .emails import send_verification_email
 from .forms import ProfileForm, RegistrationForm, ResendVerificationForm, UserProfileForm
@@ -93,6 +93,7 @@ class ProfileView(DetailView):
         profile_user = context["profile_user"]
         context["profile"], _ = Profile.objects.get_or_create(user=profile_user)
         posts = annotate_votes(profile_user.posts.all(), PostVote, "post", self.request.user)
+        posts = annotate_saved(posts, self.request.user)
         context["posts"] = posts[:PROFILE_ITEM_LIMIT]
         context["post_count"] = profile_user.posts.count()
         comments = profile_user.comments.select_related("post").order_by("-created_at")

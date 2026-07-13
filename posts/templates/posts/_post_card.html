@@ -7,6 +7,7 @@
                 {% include "_avatar.html" with avatar_user=post.author %}
                 <a href="{% url 'profile' post.author.username %}" class="font-medium text-fg no-underline hover:text-accent">{{ post.author.username|at_username }}</a>
                 <span>&middot; {{ post.created_at }}</span>
+                <span class="ml-auto">{% include "_save_button.html" %}</span>
             </div>
             <a href="{% url 'post-detail' post.pk %}" class="block text-fg no-underline hover:text-accent">
                 {% if post.deleted %}

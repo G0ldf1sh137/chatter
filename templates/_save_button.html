@@ -1,0 +1,17 @@
+{% if user.is_authenticated %}
+    {% if post.is_saved %}
+        <form method="post" action="{% url 'post-unsave' post.pk %}" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="mt-0 flex items-center justify-center rounded-lg border-none bg-transparent p-1 text-accent transition-colors hover:bg-border/60" aria-label="Unsave post">
+                <svg viewBox="0 0 20 20" fill="currentColor" class="h-4 w-4"><path d="M5 3a1 1 0 00-1 1v13l6-4 6 4V4a1 1 0 00-1-1H5z"/></svg>
+            </button>
+        </form>
+    {% else %}
+        <form method="post" action="{% url 'post-save' post.pk %}" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="mt-0 flex items-center justify-center rounded-lg border-none bg-transparent p-1 text-muted transition-colors hover:bg-border/60 hover:text-fg" aria-label="Save post">
+                <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" class="h-4 w-4"><path d="M5 3a1 1 0 00-1 1v13l6-4 6 4V4a1 1 0 00-1-1H5z"/></svg>
+            </button>
+        </form>
+    {% endif %}
+{% endif %}

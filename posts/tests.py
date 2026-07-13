@@ -10,7 +10,7 @@ from accounts.models import Block, Follow, Mute
 
 from .markdown import render_markdown
 from .mentions import extract_mentioned_users
-from .models import Comment, CommentVote, Conversation, Message, Notification, Post, PostVote
+from .models import Comment, CommentVote, Conversation, Message, Notification, Post, PostVote, SavedPost
 from .views import (
     build_comment_tree,
     get_or_create_conversation,
@@ -364,6 +364,116 @@ class PostDeleteTests(TestCase):
         self.client.post(reverse("post-delete", args=[self.post.pk]))
 
         self.assertTrue(Comment.objects.filter(pk=comment.pk).exists())
+
+
+class SavedPostTests(TestCase):
+    def setUp(self):
+        self.alice = make_user("alice")
+        self.bob = make_user("bob")
+        self.post = Post.objects.create(author=self.bob, body="a post worth saving")
+
+    def test_authenticated_user_can_save_a_post(self):
+        self.client.force_login(self.alice)
+
+        response = self.client.post(reverse("post-save", args=[self.post.pk]))
+
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(SavedPost.objects.filter(user=self.alice, post=self.post).exists())
+
+    def test_saving_twice_is_idempotent(self):
+        self.client.force_login(self.alice)
+
+        self.client.post(reverse("post-save", args=[self.post.pk]))
+        self.client.post(reverse("post-save", args=[self.post.pk]))
+
+        self.assertEqual(SavedPost.objects.filter(user=self.alice, post=self.post).count(), 1)
+
+    def test_user_can_unsave_a_post(self):
+        SavedPost.objects.create(user=self.alice, post=self.post)
+        self.client.force_login(self.alice)
+
+        response = self.client.post(reverse("post-unsave", args=[self.post.pk]))
+
+        self.assertEqual(response.status_code, 302)
+        self.assertFalse(SavedPost.objects.filter(user=self.alice, post=self.post).exists())
+
+    def test_unsaving_a_post_not_saved_is_a_no_op(self):
+        self.client.force_login(self.alice)
+
+        response = self.client.post(reverse("post-unsave", args=[self.post.pk]))
+
+        self.assertEqual(response.status_code, 302)
+        self.assertFalse(SavedPost.objects.filter(user=self.alice, post=self.post).exists())
+
+    def test_anonymous_cannot_save(self):
+        response = self.client.post(reverse("post-save", args=[self.post.pk]))
+        self.assertIn(reverse("login"), response.url)
+
+    def test_anonymous_cannot_unsave(self):
+        response = self.client.post(reverse("post-unsave", args=[self.post.pk]))
+        self.assertIn(reverse("login"), response.url)
+
+    def test_saved_posts_list_shows_only_current_users_saves_most_recent_first(self):
+        other_post = Post.objects.create(author=self.bob, body="another post")
+        SavedPost.objects.create(user=self.alice, post=self.post)
+        SavedPost.objects.create(user=self.alice, post=other_post)
+        SavedPost.objects.create(user=self.bob, post=self.post)
+        self.client.force_login(self.alice)
+
+        response = self.client.get(reverse("saved-posts"))
+
+        self.assertEqual(list(response.context["posts"]), [other_post, self.post])
+
+    def test_saved_posts_list_includes_a_deleted_post_with_placeholder(self):
+        SavedPost.objects.create(user=self.alice, post=self.post)
+        self.post.body = ""
+        self.post.deleted = True
+        self.post.save(update_fields=["body", "deleted"])
+        self.client.force_login(self.alice)
+
+        response = self.client.get(reverse("saved-posts"))
+
+        self.assertContains(response, "[deleted]")
+
+    def test_saving_a_muted_authors_post_still_shows_in_saved_list(self):
+        Mute.objects.create(muter=self.alice, muted=self.bob)
+        SavedPost.objects.create(user=self.alice, post=self.post)
+        self.client.force_login(self.alice)
+
+        response = self.client.get(reverse("saved-posts"))
+
+        self.assertIn(self.post, response.context["posts"])
+
+    def test_saving_a_blocked_authors_post_still_shows_in_saved_list(self):
+        Block.objects.create(blocker=self.alice, blocked=self.bob)
+        SavedPost.objects.create(user=self.alice, post=self.post)
+        self.client.force_login(self.alice)
+
+        response = self.client.get(reverse("saved-posts"))
+
+        self.assertIn(self.post, response.context["posts"])
+
+    def test_is_saved_is_true_on_the_feed_after_saving(self):
+        SavedPost.objects.create(user=self.alice, post=self.post)
+        self.client.force_login(self.alice)
+
+        response = self.client.get(reverse("feed"))
+
+        post = next(p for p in response.context["posts"] if p.pk == self.post.pk)
+        self.assertTrue(post.is_saved)
+
+    def test_is_saved_is_false_on_the_feed_when_not_saved(self):
+        self.client.force_login(self.alice)
+
+        response = self.client.get(reverse("feed"))
+
+        post = next(p for p in response.context["posts"] if p.pk == self.post.pk)
+        self.assertFalse(post.is_saved)
+
+    def test_is_saved_is_false_for_anonymous_visitors(self):
+        response = self.client.get(reverse("feed"))
+        post = next(p for p in response.context["posts"] if p.pk == self.post.pk)
+        self.assertFalse(post.is_saved)
 
 
 class FeedPaginationTests(TestCase):

@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% load post_extras static %}
+
+{% block title %}Saved posts — Chatter{% endblock %}
+
+{% block content %}
+    <h1 class="mb-4 text-2xl font-extrabold tracking-tight">Saved posts</h1>
+
+    <div class="space-y-4" id="post-list">
+        {% for post in posts %}
+            {% include "posts/_post_card.html" %}
+        {% empty %}
+            <div class="rounded-2xl border border-dashed border-border p-8 text-center text-muted">
+                <p>You haven't saved any posts yet.</p>
+            </div>
+        {% endfor %}
+        {% if page_obj.has_next %}
+            <div data-infinite-scroll-sentinel data-next-url="?page={{ page_obj.next_page_number }}" class="h-8 text-center text-sm text-muted"></div>
+        {% endif %}
+    </div>
+
+    <script src="{% static 'posts/js/infinite_scroll.js' %}"></script>
+{% endblock %}

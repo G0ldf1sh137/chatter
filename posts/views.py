@@ -4,7 +4,7 @@ from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 from django.contrib.auth.models import User
 from django.core.paginator import Paginator
-from django.db.models import Count, Max, OuterRef, Q, Subquery, Sum
+from django.db.models import BooleanField, Count, Exists, Max, OuterRef, Q, Subquery, Sum, Value
 from django.db.models.functions import Coalesce
 from django.http import Http404, JsonResponse
 from django.shortcuts import get_object_or_404, redirect
@@ -17,7 +17,7 @@ from accounts.models import Block, Mute, is_blocked_either_way, is_muted_or_bloc
 
 from .forms import CommentEditForm, CommentForm, MessageForm, PostForm
 from .mentions import extract_mentioned_users
-from .models import Comment, CommentVote, Conversation, Message, Notification, Post, PostVote
+from .models import Comment, CommentVote, Conversation, Message, Notification, Post, PostVote, SavedPost
 from .ranking import rank_posts
 
 
@@ -76,6 +76,13 @@ def annotate_votes(queryset, vote_model, fk_name, user):
     if ordering:
         queryset = queryset.order_by(*ordering)
     return queryset
+
+
+def annotate_saved(queryset, user):
+    if not user.is_authenticated:
+        return queryset.annotate(is_saved=Value(False, output_field=BooleanField()))
+    saved_qs = SavedPost.objects.filter(post=OuterRef("pk"), user=user)
+    return queryset.annotate(is_saved=Exists(saved_qs))
 
 
 def toggle_vote(vote_model, lookup, user, value):
@@ -149,7 +156,8 @@ class FeedView(ListView):
         hidden = hidden_author_ids(self.request.user)
         if hidden:
             queryset = queryset.exclude(author_id__in=hidden)
-        return annotate_votes(queryset, PostVote, "post", self.request.user)
+        queryset = annotate_votes(queryset, PostVote, "post", self.request.user)
+        return annotate_saved(queryset, self.request.user)
 
     def get_queryset(self):
         queryset = self.get_base_queryset()
@@ -211,6 +219,7 @@ class SearchView(TemplateView):
             posts = posts.exclude(author_id__in=hidden)
             comments = comments.exclude(author_id__in=hidden)
         posts = annotate_votes(posts.order_by("-created_at"), PostVote, "post", self.request.user)
+        posts = annotate_saved(posts, self.request.user)
         comments = annotate_votes(comments.order_by("-created_at"), CommentVote, "comment", self.request.user)
 
         if search_type == SEARCH_TYPE_POSTS:
@@ -248,7 +257,8 @@ class PostDetailView(DetailView):
 
     def get_queryset(self):
         queryset = Post.objects.select_related("author", "author__profile")
-        return annotate_votes(queryset, PostVote, "post", self.request.user)
+        queryset = annotate_votes(queryset, PostVote, "post", self.request.user)
+        return annotate_saved(queryset, self.request.user)
 
     def get_comment_tree(self):
         comments = self.object.comments.select_related("author", "author__profile")
@@ -319,6 +329,46 @@ class PostDeleteView(LoginRequiredMixin, UserPassesTestMixin, View):
         post.deleted = True
         post.save(update_fields=["body", "deleted"])
         return redirect(post.get_absolute_url())
+
+
+class PostSaveView(LoginRequiredMixin, View):
+    def post(self, request, pk):
+        post = get_object_or_404(Post, pk=pk)
+        SavedPost.objects.get_or_create(user=request.user, post=post)
+        return redirect_back(request, post.get_absolute_url())
+
+
+class PostUnsaveView(LoginRequiredMixin, View):
+    def post(self, request, pk):
+        post = get_object_or_404(Post, pk=pk)
+        SavedPost.objects.filter(user=request.user, post=post).delete()
+        return redirect_back(request, post.get_absolute_url())
+
+
+class SavedPostsView(LoginRequiredMixin, ListView):
+    model = Post
+    template_name = "posts/saved_posts.html"
+    context_object_name = "posts"
+    paginate_by = POSTS_PAGE_SIZE
+
+    def get_queryset(self):
+        queryset = Post.objects.filter(saved_by__user=self.request.user).select_related(
+            "author", "author__profile"
+        )
+        queryset = queryset.order_by("-saved_by__created_at")
+        queryset = annotate_votes(queryset, PostVote, "post", self.request.user)
+        return annotate_saved(queryset, self.request.user)
+
+    def render_to_response(self, context, **response_kwargs):
+        if not is_ajax(self.request):
+            return super().render_to_response(context, **response_kwargs)
+
+        html = render_to_string("posts/_post_list.html", {"posts": context["posts"]}, request=self.request)
+        next_url = None
+        page_obj = context.get("page_obj")
+        if page_obj and page_obj.has_next():
+            next_url = f"{self.request.path}?page={page_obj.next_page_number()}"
+        return JsonResponse({"html": html, "next_url": next_url})
 
 
 class CommentCreateView(LoginRequiredMixin, View):
