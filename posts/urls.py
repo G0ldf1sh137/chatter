@@ -36,4 +36,10 @@ urlpatterns = [
     path("messages/start/<str:username>/", views.StartConversationView.as_view(), name="conversation-start"),
     path("messages/<uuid:pk>/", views.ConversationDetailView.as_view(), name="conversation-detail"),
     path("messages/<uuid:pk>/send/", views.MessageSendView.as_view(), name="message-send"),
+    path("notifications/", views.NotificationListView.as_view(), name="notification-list"),
+    path(
+        "notifications/unread-count/",
+        views.UnreadNotificationCountView.as_view(),
+        name="unread-notification-count",
+    ),
 ]

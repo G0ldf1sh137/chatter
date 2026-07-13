@@ -25,6 +25,14 @@
                         class="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-accent px-1 text-[10px] font-bold text-accent-fg {% if not unread_message_count %}hidden{% endif %}"
                     >{{ unread_message_count }}</span>
                 </a>
+                <a href="{% url 'notification-list' %}" class="relative rounded-full px-3 py-1.5 text-fg no-underline transition-colors hover:bg-surface-hover">
+                    Notifications
+                    <span
+                        id="notification-badge"
+                        data-count-url="{% url 'unread-notification-count' %}"
+                        class="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-accent px-1 text-[10px] font-bold text-accent-fg {% if not unread_notification_count %}hidden{% endif %}"
+                    >{{ unread_notification_count }}</span>
+                </a>
                 <a href="{% url 'profile' user.username %}" class="rounded-full px-3 py-1.5 text-fg no-underline transition-colors hover:bg-surface-hover">{{ user.username|at_username }}</a>
                 <form action="{% url 'logout' %}" method="post" class="inline">
                     {% csrf_token %}
@@ -32,6 +40,7 @@
                 </form>
                 <script src="{% static 'games/js/your_turn_badge.js' %}"></script>
                 <script src="{% static 'posts/js/unread_message_badge.js' %}"></script>
+                <script src="{% static 'posts/js/notification_badge.js' %}"></script>
             {% else %}
                 <a href="{% url 'login' %}" class="rounded-full px-3 py-1.5 text-fg no-underline transition-colors hover:bg-surface-hover">Log in</a>
                 <a href="{% url 'register' %}" class="rounded-full bg-accent px-3 py-1.5 text-accent-fg no-underline transition-opacity hover:opacity-90">Register</a>

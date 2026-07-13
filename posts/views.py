@@ -13,8 +13,16 @@ from django.views import View
 from django.views.generic import CreateView, DetailView, ListView, TemplateView, UpdateView
 
 from .forms import CommentEditForm, CommentForm, MessageForm, PostForm
-from .models import Comment, CommentVote, Conversation, Message, Post, PostVote
+from .mentions import extract_mentioned_users
+from .models import Comment, CommentVote, Conversation, Message, Notification, Post, PostVote
 from .ranking import rank_posts
+
+
+def notify_mentioned_users(body, author, post, comment=None):
+    Notification.objects.bulk_create(
+        Notification(recipient=user, actor=author, post=post, comment=comment)
+        for user in extract_mentioned_users(body, exclude=author)
+    )
 
 
 def build_comment_tree(comments):
@@ -135,7 +143,9 @@ class PostCreateView(LoginRequiredMixin, CreateView):
 
     def form_valid(self, form):
         form.instance.author = self.request.user
-        return super().form_valid(form)
+        response = super().form_valid(form)
+        notify_mentioned_users(self.object.body, self.object.author, self.object)
+        return response
 
 
 class PostDetailView(DetailView):
@@ -211,12 +221,13 @@ class CommentCreateView(LoginRequiredMixin, View):
             parent_id = form.cleaned_data.get("parent")
             if parent_id:
                 parent = get_object_or_404(Comment, pk=parent_id, post=post)
-            Comment.objects.create(
+            comment = Comment.objects.create(
                 author=request.user,
                 post=post,
                 parent=parent,
                 body=form.cleaned_data["body"],
             )
+            notify_mentioned_users(comment.body, comment.author, post, comment=comment)
         return redirect("post-detail", pk=post.pk)
 
 
@@ -344,3 +355,30 @@ class MessageSendView(LoginRequiredMixin, View):
 class UnreadMessageCountView(LoginRequiredMixin, View):
     def get(self, request):
         return JsonResponse({"count": unread_message_count(request.user)})
+
+
+def unread_notification_count(user):
+    return Notification.objects.filter(recipient=user, read=False).count()
+
+
+class NotificationListView(LoginRequiredMixin, TemplateView):
+    template_name = "posts/notification_list.html"
+
+    def get(self, request, *args, **kwargs):
+        # Marked read before rendering, not after, for the same reason
+        # ConversationDetailView does: the header badge (via the context
+        # processor) should reflect this response's own updated count.
+        Notification.objects.filter(recipient=request.user, read=False).update(read=True)
+        return super().get(request, *args, **kwargs)
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["notifications"] = Notification.objects.filter(recipient=self.request.user).select_related(
+            "actor", "post", "comment"
+        )
+        return context
+
+
+class UnreadNotificationCountView(LoginRequiredMixin, View):
+    def get(self, request):
+        return JsonResponse({"count": unread_notification_count(request.user)})

@@ -9,8 +9,9 @@ from django.utils import timezone
 from accounts.models import Follow
 
 from .markdown import render_markdown
-from .models import Comment, CommentVote, Conversation, Message, Post, PostVote
-from .views import build_comment_tree, get_or_create_conversation, unread_message_count
+from .mentions import extract_mentioned_users
+from .models import Comment, CommentVote, Conversation, Message, Notification, Post, PostVote
+from .views import build_comment_tree, get_or_create_conversation, unread_message_count, unread_notification_count
 
 
 def make_user(username):
@@ -764,3 +765,122 @@ class ConversationListViewTests(TestCase):
         response = self.client.get(reverse("conversation-list"))
         self.assertEqual(response.status_code, 302)
         self.assertIn(reverse("login"), response.url)
+
+
+class MentionExtractionTests(TestCase):
+    def setUp(self):
+        self.alice = make_user("alice")
+        self.bob = make_user("bob")
+
+    def test_finds_a_real_mentioned_user(self):
+        users = extract_mentioned_users(f"hey @{self.bob.username}, check this out")
+        self.assertEqual(users, [self.bob])
+
+    def test_ignores_a_mention_of_a_nonexistent_username(self):
+        users = extract_mentioned_users("hey @not-a-real-user")
+        self.assertEqual(users, [])
+
+    def test_matches_case_insensitively(self):
+        users = extract_mentioned_users(f"hey @{self.bob.username.upper()}")
+        self.assertEqual(users, [self.bob])
+
+    def test_deduplicates_repeated_mentions(self):
+        users = extract_mentioned_users(f"@{self.bob.username} again, @{self.bob.username}!")
+        self.assertEqual(users, [self.bob])
+
+    def test_excludes_the_given_user(self):
+        users = extract_mentioned_users(f"@{self.alice.username} @{self.bob.username}", exclude=self.alice)
+        self.assertEqual(users, [self.bob])
+
+    def test_body_with_no_mentions_returns_empty_list(self):
+        self.assertEqual(extract_mentioned_users("nothing to see here"), [])
+
+
+class MentionNotificationTests(TestCase):
+    def setUp(self):
+        self.alice = make_user("alice")
+        self.bob = make_user("bob")
+
+    def test_creating_a_post_notifies_a_mentioned_user(self):
+        self.client.force_login(self.alice)
+
+        self.client.post(reverse("post-create"), {"body": f"hi @{self.bob.username}"})
+
+        notification = Notification.objects.get()
+        self.assertEqual(notification.recipient, self.bob)
+        self.assertEqual(notification.actor, self.alice)
+        self.assertIsNone(notification.comment)
+
+    def test_creating_a_comment_notifies_a_mentioned_user(self):
+        post = Post.objects.create(author=self.alice, body="a post")
+        self.client.force_login(self.alice)
+
+        self.client.post(reverse("comment-create", args=[post.pk]), {"body": f"hi @{self.bob.username}"})
+
+        notification = Notification.objects.get()
+        self.assertEqual(notification.recipient, self.bob)
+        self.assertEqual(notification.post, post)
+        self.assertEqual(notification.comment, Comment.objects.get())
+
+    def test_mentioning_yourself_creates_no_notification(self):
+        self.client.force_login(self.alice)
+
+        self.client.post(reverse("post-create"), {"body": f"note to self @{self.alice.username}"})
+
+        self.assertFalse(Notification.objects.exists())
+
+    def test_editing_a_post_to_add_a_mention_does_not_notify(self):
+        post = Post.objects.create(author=self.alice, body="no mentions here")
+        self.client.force_login(self.alice)
+
+        self.client.post(reverse("post-edit", args=[post.pk]), {"body": f"now mentioning @{self.bob.username}"})
+
+        self.assertFalse(Notification.objects.exists())
+
+
+class NotificationListViewTests(TestCase):
+    def setUp(self):
+        self.alice = make_user("alice")
+        self.bob = make_user("bob")
+        self.post = Post.objects.create(author=self.alice, body=f"hi @{self.bob.username}")
+        self.notification = Notification.objects.create(recipient=self.bob, actor=self.alice, post=self.post)
+
+    def test_shows_only_the_viewers_own_notifications(self):
+        other_post = Post.objects.create(author=self.bob, body="unrelated")
+        Notification.objects.create(recipient=self.alice, actor=self.bob, post=other_post)
+        self.client.force_login(self.bob)
+
+        response = self.client.get(reverse("notification-list"))
+
+        notifications = list(response.context["notifications"])
+        self.assertEqual(notifications, [self.notification])
+
+    def test_viewing_marks_notifications_read(self):
+        self.client.force_login(self.bob)
+        self.assertEqual(unread_notification_count(self.bob), 1)
+
+        self.client.get(reverse("notification-list"))
+
+        self.assertEqual(unread_notification_count(self.bob), 0)
+
+    def test_anonymous_redirected_to_login(self):
+        response = self.client.get(reverse("notification-list"))
+        self.assertEqual(response.status_code, 302)
+        self.assertIn(reverse("login"), response.url)
+
+
+class UnreadNotificationCountViewTests(TestCase):
+    def setUp(self):
+        self.alice = make_user("alice")
+        self.bob = make_user("bob")
+        post = Post.objects.create(author=self.alice, body=f"hi @{self.bob.username}")
+        Notification.objects.create(recipient=self.bob, actor=self.alice, post=post)
+
+    def test_returns_the_viewers_unread_count(self):
+        self.client.force_login(self.bob)
+        response = self.client.get(reverse("unread-notification-count"))
+        self.assertEqual(response.json(), {"count": 1})
+
+    def test_anonymous_cannot_access_unread_count_endpoint(self):
+        response = self.client.get(reverse("unread-notification-count"))
+        self.assertEqual(response.status_code, 302)

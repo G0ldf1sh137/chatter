@@ -122,3 +122,23 @@ class Message(models.Model):
 
     def __str__(self):
         return f"Message({self.pk}) from {self.sender} in Conversation({self.conversation_id})"
+
+
+class Notification(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    recipient = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="notifications")
+    actor = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="+")
+    post = models.ForeignKey(Post, on_delete=models.CASCADE)
+    # Set only when the mention happened in a comment rather than the post
+    # body itself - `post` is always set either way, since it's the natural
+    # landing page for both cases.
+    comment = models.ForeignKey(Comment, on_delete=models.CASCADE, null=True, blank=True)
+    read = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [models.Index(fields=["recipient", "read"])]
+
+    def __str__(self):
+        return f"Notification({self.pk}): {self.actor} mentioned {self.recipient}"
