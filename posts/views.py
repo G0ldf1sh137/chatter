@@ -78,7 +78,13 @@ def publish_post(post):
     notify_mentioned_users(post.body, post.author, post)
 
 
-def build_comment_tree(comments):
+SORT_DEFAULT = "default"
+SORT_TOP = "top"
+SORT_NEW = "new"
+SORT_CHOICES = {SORT_DEFAULT, SORT_TOP, SORT_NEW}
+
+
+def build_comment_tree(comments, sort=SORT_DEFAULT):
     by_parent = defaultdict(list)
     for comment in comments:
         by_parent[comment.parent_id].append(comment)
@@ -88,7 +94,14 @@ def build_comment_tree(comments):
             node.children = by_parent.get(node.id, [])
             attach_children(node.children)
 
+    # comments arrives chronological-ascending (Comment.Meta.ordering), so the
+    # default case is a no-op here; sorted()'s stability means a SORT_TOP tie
+    # falls back to that same chronological order without a compound key.
     top_level = by_parent.get(None, [])
+    if sort == SORT_TOP:
+        top_level = sorted(top_level, key=lambda c: c.score, reverse=True)
+    elif sort == SORT_NEW:
+        top_level = sorted(top_level, key=lambda c: c.created_at, reverse=True)
     attach_children(top_level)
     return top_level
 
@@ -162,11 +175,6 @@ def redirect_back(request, fallback):
         return redirect(referer)
     return redirect(fallback)
 
-
-SORT_DEFAULT = "default"
-SORT_TOP = "top"
-SORT_NEW = "new"
-SORT_CHOICES = {SORT_DEFAULT, SORT_TOP, SORT_NEW}
 
 # Initial page size for both the feed and a post's top-level comments -
 # infinite_scroll.js requests further pages as the user scrolls near the
@@ -396,10 +404,14 @@ class PostDetailView(DetailView):
             raise Http404
         return post
 
+    def get_sort(self):
+        sort = self.request.GET.get("sort", SORT_DEFAULT)
+        return sort if sort in SORT_CHOICES else SORT_DEFAULT
+
     def get_comment_tree(self):
         comments = self.object.comments.select_related("author", "author__profile")
         comments = annotate_votes(comments, CommentVote, "comment", self.request.user)
-        return build_comment_tree(list(comments))
+        return build_comment_tree(list(comments), sort=self.get_sort())
 
     def get(self, request, *args, **kwargs):
         self.object = self.get_object()
@@ -425,7 +437,7 @@ class PostDetailView(DetailView):
         )
         next_url = None
         if end < len(tree):
-            next_url = f"{self.object.get_absolute_url()}?page={page + 1}"
+            next_url = f"{self.object.get_absolute_url()}?page={page + 1}&sort={self.get_sort()}"
         return JsonResponse({"html": html, "next_url": next_url})
 
     def get_context_data(self, **kwargs):
@@ -434,6 +446,7 @@ class PostDetailView(DetailView):
         context["comment_tree"] = tree[:COMMENTS_PAGE_SIZE]
         context["comments_has_next"] = len(tree) > COMMENTS_PAGE_SIZE
         context["comment_form"] = CommentForm()
+        context["active_comment_sort"] = self.get_sort()
         return context
 
 

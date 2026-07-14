@@ -103,12 +103,19 @@
     </article>
 
     {% if not post.is_draft %}
-        <h2 class="mb-3 mt-8 text-lg font-bold">Comments</h2>
+        <div class="mb-3 mt-8 flex items-center justify-between">
+            <h2 class="text-lg font-bold">Comments</h2>
+            <div class="inline-flex rounded-full bg-surface-hover p-1">
+                <a href="{{ post.get_absolute_url }}?sort=default" class="rounded-full px-3 py-1 text-xs font-medium no-underline transition-colors {% if active_comment_sort == 'default' %}bg-surface text-fg shadow-sm{% else %}text-muted hover:text-fg{% endif %}">Default</a>
+                <a href="{{ post.get_absolute_url }}?sort=top" class="rounded-full px-3 py-1 text-xs font-medium no-underline transition-colors {% if active_comment_sort == 'top' %}bg-surface text-fg shadow-sm{% else %}text-muted hover:text-fg{% endif %}">Most popular</a>
+                <a href="{{ post.get_absolute_url }}?sort=new" class="rounded-full px-3 py-1 text-xs font-medium no-underline transition-colors {% if active_comment_sort == 'new' %}bg-surface text-fg shadow-sm{% else %}text-muted hover:text-fg{% endif %}">Most recent</a>
+            </div>
+        </div>
         {% if comment_tree %}
             <div class="divide-y divide-border rounded-2xl border border-border bg-surface" id="comment-list">
                 {% include "posts/_comment_list.html" %}
                 {% if comments_has_next %}
-                    <div data-infinite-scroll-sentinel data-next-url="{% url 'post-detail' post.pk %}?page=2" class="h-8 text-center text-sm text-muted"></div>
+                    <div data-infinite-scroll-sentinel data-next-url="{% url 'post-detail' post.pk %}?page=2&sort={{ active_comment_sort }}" class="h-8 text-center text-sm text-muted"></div>
                 {% endif %}
             </div>
         {% else %}

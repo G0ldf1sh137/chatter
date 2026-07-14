@@ -878,6 +878,51 @@ class CommentPaginationTests(TestCase):
         self.assertIn(reply_to_first, first_node.children)
 
 
+class CommentSortTests(TestCase):
+    def setUp(self):
+        self.author = make_user("alice")
+        self.voter = make_user("bob")
+        self.post = Post.objects.create(author=self.author, body="hello")
+        self.low = Comment.objects.create(author=self.author, post=self.post, body="low score")
+        self.reply_to_low = Comment.objects.create(
+            author=self.author, post=self.post, body="reply to low", parent=self.low
+        )
+        self.high = Comment.objects.create(author=self.author, post=self.post, body="high score")
+        CommentVote.objects.create(user=self.voter, comment=self.high, value=CommentVote.UP)
+
+    def test_default_sort_matches_existing_chronological_order(self):
+        response = self.client.get(reverse("post-detail", args=[self.post.pk]))
+        self.assertEqual([c.body for c in response.context["comment_tree"]], ["low score", "high score"])
+
+    def test_invalid_sort_falls_back_to_default(self):
+        response = self.client.get(reverse("post-detail", args=[self.post.pk]), {"sort": "bogus"})
+        self.assertEqual(response.context["active_comment_sort"], "default")
+
+    def test_top_sort_orders_by_score_descending(self):
+        response = self.client.get(reverse("post-detail", args=[self.post.pk]), {"sort": "top"})
+        self.assertEqual([c.body for c in response.context["comment_tree"]], ["high score", "low score"])
+
+    def test_new_sort_orders_by_created_at_descending(self):
+        response = self.client.get(reverse("post-detail", args=[self.post.pk]), {"sort": "new"})
+        self.assertEqual([c.body for c in response.context["comment_tree"]], ["high score", "low score"])
+
+    def test_reply_stays_under_its_parent_regardless_of_top_level_sort(self):
+        response = self.client.get(reverse("post-detail", args=[self.post.pk]), {"sort": "top"})
+        low_node = next(c for c in response.context["comment_tree"] if c.body == "low score")
+        self.assertEqual([c.body for c in low_node.children], ["reply to low"])
+
+    def test_ajax_next_url_carries_sort_forward(self):
+        for i in range(10):
+            Comment.objects.create(author=self.author, post=self.post, body=f"extra {i}")
+        response = self.client.get(
+            reverse("post-detail", args=[self.post.pk]),
+            {"sort": "top"},
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        data = response.json()
+        self.assertIn("sort=top", data["next_url"])
+
+
 class VoteTests(TestCase):
     def setUp(self):
         self.author = make_user("alice")
