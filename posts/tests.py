@@ -1371,6 +1371,15 @@ class HashtagExtractionTests(TestCase):
     def test_body_with_no_hashtags_returns_empty_set(self):
         self.assertEqual(extract_hashtag_names("nothing to see here"), set())
 
+    def test_does_not_extract_hash_inside_inline_code(self):
+        self.assertEqual(extract_hashtag_names("use `#include` in C"), set())
+
+    def test_does_not_extract_hash_inside_a_fenced_code_block(self):
+        self.assertEqual(extract_hashtag_names("```python\n# not a tag\n```"), set())
+
+    def test_still_extracts_a_real_hashtag_alongside_code(self):
+        self.assertEqual(extract_hashtag_names("check out #django, and `#include` too"), {"django"})
+
 
 class MarkdownHashtagRenderingTests(TestCase):
     def test_hashtag_renders_as_a_link(self):
@@ -1490,6 +1499,72 @@ class TagDetailViewTests(TestCase):
         response = self.client.get(reverse("tag-detail", args=["popular"]))
 
         self.assertTrue(response.context["page_obj"].has_next())
+
+
+class TagIndexViewTests(TestCase):
+    def setUp(self):
+        self.alice = make_user("alice")
+
+    def test_tags_ordered_by_post_count_descending_ties_broken_by_name(self):
+        popular = Tag.objects.get_or_create(name="popular")[0]
+        rare = Tag.objects.get_or_create(name="rare")[0]
+        also_rare = Tag.objects.get_or_create(name="alsorare")[0]
+        for i in range(3):
+            post = Post.objects.create(author=self.alice, body=f"post {i} #popular")
+            post.tags.set([popular])
+        Post.objects.create(author=self.alice, body="one #rare").tags.set([rare])
+        Post.objects.create(author=self.alice, body="one #alsorare").tags.set([also_rare])
+
+        response = self.client.get(reverse("tag-index"))
+
+        self.assertEqual([t.name for t in response.context["tags"]], ["popular", "alsorare", "rare"])
+
+    def test_tag_with_only_deleted_posts_does_not_appear(self):
+        tag = Tag.objects.get_or_create(name="gone")[0]
+        post = Post.objects.create(author=self.alice, body="#gone", deleted=True)
+        post.tags.set([tag])
+
+        response = self.client.get(reverse("tag-index"))
+
+        self.assertNotIn(tag, response.context["tags"])
+
+    def test_count_reflects_only_non_deleted_posts(self):
+        tag = Tag.objects.get_or_create(name="mixed")[0]
+        live = Post.objects.create(author=self.alice, body="#mixed live")
+        live.tags.set([tag])
+        deleted = Post.objects.create(author=self.alice, body="#mixed deleted", deleted=True)
+        deleted.tags.set([tag])
+
+        response = self.client.get(reverse("tag-index"))
+
+        result_tag = next(t for t in response.context["tags"] if t.name == "mixed")
+        self.assertEqual(result_tag.post_count, 1)
+
+    def test_tag_never_used_by_any_post_does_not_appear(self):
+        Tag.objects.get_or_create(name="unused")
+
+        response = self.client.get(reverse("tag-index"))
+
+        self.assertEqual(list(response.context["tags"]), [])
+
+    def test_pagination_spans_a_second_page(self):
+        for i in range(25):
+            tag = Tag.objects.get_or_create(name=f"tag{i}")[0]
+            post = Post.objects.create(author=self.alice, body=f"post {i}")
+            post.tags.set([tag])
+
+        response = self.client.get(reverse("tag-index"))
+
+        self.assertTrue(response.context["page_obj"].has_next())
+
+    def test_tag_detail_page_links_back_to_the_index(self):
+        tag = Tag.objects.get_or_create(name="chatter")[0]
+        post = Post.objects.create(author=self.alice, body="#chatter")
+        post.tags.set([tag])
+
+        response = self.client.get(reverse("tag-detail", args=["chatter"]))
+
+        self.assertContains(response, reverse("tag-index"))
 
 
 class MentionNotificationTests(TestCase):

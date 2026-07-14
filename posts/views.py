@@ -18,7 +18,7 @@ from accounts.models import Block, Mute, is_blocked_either_way, is_muted_or_bloc
 from .forms import CommentEditForm, CommentForm, MessageForm, PostForm
 from .hashtags import sync_post_tags
 from .mentions import extract_mentioned_users
-from .models import Comment, CommentVote, Conversation, Message, Notification, Post, PostVote, Report, SavedPost
+from .models import Comment, CommentVote, Conversation, Message, Notification, Post, PostVote, Report, SavedPost, Tag
 from .ranking import rank_posts
 
 
@@ -125,6 +125,8 @@ SEARCH_TYPE_ALL = "all"
 SEARCH_TYPE_POSTS = "posts"
 SEARCH_TYPE_COMMENTS = "comments"
 SEARCH_TYPES = {SEARCH_TYPE_ALL, SEARCH_TYPE_POSTS, SEARCH_TYPE_COMMENTS}
+
+TAG_INDEX_PAGE_SIZE = 20
 
 
 def is_ajax(request):
@@ -375,6 +377,20 @@ class SavedPostsView(LoginRequiredMixin, ListView):
         if page_obj and page_obj.has_next():
             next_url = f"{self.request.path}?page={page_obj.next_page_number()}"
         return JsonResponse({"html": html, "next_url": next_url})
+
+
+class TagIndexView(ListView):
+    model = Tag
+    template_name = "posts/tag_index.html"
+    context_object_name = "tags"
+    paginate_by = TAG_INDEX_PAGE_SIZE
+
+    def get_queryset(self):
+        return (
+            Tag.objects.annotate(post_count=Count("posts", filter=Q(posts__deleted=False)))
+            .filter(post_count__gt=0)
+            .order_by("-post_count", "name")
+        )
 
 
 class TagDetailView(ListView):

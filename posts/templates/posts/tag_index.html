@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+
+{% block title %}Tags — Chatter{% endblock %}
+
+{% block content %}
+    <h1 class="mb-4 text-2xl font-extrabold tracking-tight">Tags</h1>
+
+    <ol class="divide-y divide-border rounded-2xl border border-border bg-surface">
+        {% for tag in tags %}
+            <li class="flex items-center justify-between px-4 py-2 text-sm">
+                <a href="{% url 'tag-detail' tag.name %}" class="font-medium text-fg no-underline hover:text-accent">#{{ tag.name }}</a>
+                <span class="font-semibold text-muted">{{ tag.post_count }} post{{ tag.post_count|pluralize }}</span>
+            </li>
+        {% empty %}
+            <li class="px-4 py-2 text-sm text-muted">No tags yet.</li>
+        {% endfor %}
+    </ol>
+
+    {% if page_obj.has_previous or page_obj.has_next %}
+        <div class="mt-4 flex justify-center gap-3 text-sm">
+            {% if page_obj.has_previous %}<a href="?page={{ page_obj.previous_page_number }}" class="text-accent no-underline hover:underline">Previous</a>{% endif %}
+            {% if page_obj.has_next %}<a href="?page={{ page_obj.next_page_number }}" class="text-accent no-underline hover:underline">Next</a>{% endif %}
+        </div>
+    {% endif %}
+{% endblock %}

@@ -4,6 +4,7 @@
 {% block title %}#{{ tag_name }} — Chatter{% endblock %}
 
 {% block content %}
+    <a href="{% url 'tag-index' %}" class="mb-2 inline-block text-sm text-accent no-underline hover:underline">&larr; All tags</a>
     <h1 class="mb-4 text-2xl font-extrabold tracking-tight">#{{ tag_name }}</h1>
 
     <div class="space-y-4" id="post-list">
