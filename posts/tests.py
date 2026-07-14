@@ -27,6 +27,7 @@ from .models import (
     PollVote,
     Post,
     PostReaction,
+    PostRevision,
     PostVote,
     Report,
     Repost,
@@ -290,6 +291,54 @@ class PostTests(TestCase):
         self.client.post(reverse("post-edit", args=[post.pk]), {"body": "original"})
         post.refresh_from_db()
         self.assertFalse(post.edited)
+
+
+class PostRevisionTests(TestCase):
+    def setUp(self):
+        self.author = make_user("alice")
+        self.post = Post.objects.create(author=self.author, body="original")
+        self.client.force_login(self.author)
+
+    def test_editing_body_creates_a_revision_with_the_old_text(self):
+        self.client.post(reverse("post-edit", args=[self.post.pk]), {"body": "updated"})
+        revision = PostRevision.objects.get(post=self.post)
+        self.assertEqual(revision.body, "original")
+        self.post.refresh_from_db()
+        self.assertEqual(self.post.body, "updated")
+
+    def test_editing_only_the_image_creates_no_revision(self):
+        image = SimpleUploadedFile("pic.gif", TINY_GIF, content_type="image/gif")
+        self.client.post(reverse("post-edit", args=[self.post.pk]), {"body": "original", "image": image})
+        self.assertFalse(PostRevision.objects.exists())
+
+    def test_editing_a_draft_creates_no_revision(self):
+        draft = Post.objects.create(author=self.author, body="wip", is_draft=True)
+        self.client.post(reverse("post-edit", args=[draft.pk]), {"body": "still wip", "action": "draft"})
+        self.assertFalse(PostRevision.objects.filter(post=draft).exists())
+
+    def test_the_edit_that_publishes_a_draft_creates_no_revision(self):
+        draft = Post.objects.create(author=self.author, body="wip", is_draft=True)
+        self.client.post(reverse("post-edit", args=[draft.pk]), {"body": "ready now", "action": "publish"})
+        self.assertFalse(PostRevision.objects.filter(post=draft).exists())
+
+    def test_second_edit_creates_a_second_revision_newest_first(self):
+        self.client.post(reverse("post-edit", args=[self.post.pk]), {"body": "second version"})
+        self.client.post(reverse("post-edit", args=[self.post.pk]), {"body": "third version"})
+        bodies = list(PostRevision.objects.filter(post=self.post).values_list("body", flat=True))
+        self.assertEqual(bodies, ["second version", "original"])
+
+    def test_history_toggle_only_renders_with_at_least_one_revision(self):
+        response = self.client.get(reverse("post-detail", args=[self.post.pk]))
+        self.assertNotContains(response, "(history)")
+
+        self.client.post(reverse("post-edit", args=[self.post.pk]), {"body": "updated"})
+        response = self.client.get(reverse("post-detail", args=[self.post.pk]))
+        self.assertContains(response, "(history)")
+
+    def test_revision_body_renders_as_markdown(self):
+        self.client.post(reverse("post-edit", args=[self.post.pk]), {"body": "`original`"})
+        response = self.client.get(reverse("post-detail", args=[self.post.pk]))
+        self.assertContains(response, "<code>original</code>")
 
 
 class MuteBlockFeedTests(TestCase):

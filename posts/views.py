@@ -32,6 +32,7 @@ from .models import (
     PollVote,
     Post,
     PostReaction,
+    PostRevision,
     PostVote,
     Report,
     Repost,
@@ -452,7 +453,9 @@ class PostDetailView(DetailView):
     context_object_name = "post"
 
     def get_queryset(self):
-        queryset = Post.objects.select_related("author", "author__profile").prefetch_related("reactions", "poll__options__votes", "reposts")
+        queryset = Post.objects.select_related("author", "author__profile").prefetch_related(
+            "reactions", "poll__options__votes", "reposts", "revisions"
+        )
         queryset = annotate_votes(queryset, PostVote, "post", self.request.user)
         queryset = annotate_saved(queryset, self.request.user)
         return annotate_reposted(queryset, self.request.user)
@@ -532,6 +535,7 @@ class PostEditView(LoginRequiredMixin, UserPassesTestMixin, UpdateView):
 
     def post(self, request, *args, **kwargs):
         self.object = self.get_object()
+        self.original_body = self.object.body
         form = self.get_form()
         poll_form = PollForm(request.POST)
         existing_poll = getattr(self.object, "poll", None)
@@ -546,9 +550,12 @@ class PostEditView(LoginRequiredMixin, UserPassesTestMixin, UpdateView):
 
     def form_valid(self, form):
         was_draft = form.instance.is_draft
+        create_revision = not was_draft and "body" in form.changed_data
         if form.has_changed():
             form.instance.edited = True
         response = super().form_valid(form)
+        if create_revision:
+            PostRevision.objects.create(post=self.object, body=self.original_body)
         if was_draft and self.request.POST.get("action") == "publish":
             publish_post(self.object)
         else:
