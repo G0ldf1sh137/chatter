@@ -2722,6 +2722,55 @@ class TagIndexViewTests(TestCase):
         self.assertContains(response, reverse("tag-index"))
 
 
+class TagIndexWindowTests(TestCase):
+    def setUp(self):
+        self.alice = make_user("alice")
+
+    def make_tagged_post(self, tag_name, age):
+        tag = Tag.objects.get_or_create(name=tag_name)[0]
+        post = Post.objects.create(author=self.alice, body=f"#{tag_name}")
+        post.tags.set([tag])
+        Post.objects.filter(pk=post.pk).update(created_at=timezone.now() - age)
+        return tag
+
+    def test_no_window_param_matches_all_time_behavior(self):
+        old_tag = self.make_tagged_post("ancient", timedelta(days=100))
+
+        response = self.client.get(reverse("tag-index"))
+
+        self.assertEqual(response.context["active_window"], "all")
+        self.assertIn(old_tag, response.context["tags"])
+
+    def test_day_window_excludes_a_post_older_than_24_hours(self):
+        fresh_tag = self.make_tagged_post("fresh", timedelta(hours=1))
+        stale_tag = self.make_tagged_post("stale", timedelta(hours=25))
+
+        response = self.client.get(reverse("tag-index"), {"window": "day"})
+
+        self.assertIn(fresh_tag, response.context["tags"])
+        self.assertNotIn(stale_tag, response.context["tags"])
+
+    def test_week_window_includes_two_days_ago_excludes_ten_days_ago(self):
+        recent_tag = self.make_tagged_post("recent", timedelta(days=2))
+        old_tag = self.make_tagged_post("old", timedelta(days=10))
+
+        response = self.client.get(reverse("tag-index"), {"window": "week"})
+
+        self.assertIn(recent_tag, response.context["tags"])
+        self.assertNotIn(old_tag, response.context["tags"])
+
+    def test_tag_with_no_posts_in_window_is_excluded_entirely(self):
+        tag = self.make_tagged_post("faraway", timedelta(days=30))
+
+        response = self.client.get(reverse("tag-index"), {"window": "day"})
+
+        self.assertNotIn(tag, response.context["tags"])
+
+    def test_invalid_window_falls_back_to_all(self):
+        response = self.client.get(reverse("tag-index"), {"window": "bogus"})
+        self.assertEqual(response.context["active_window"], "all")
+
+
 class TagSearchViewTests(TestCase):
     def setUp(self):
         self.viewer = make_user("dave")

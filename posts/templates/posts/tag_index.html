@@ -5,6 +5,12 @@
 {% block content %}
     <h1 class="mb-4 text-2xl font-extrabold tracking-tight">Tags</h1>
 
+    <div class="mb-4 inline-flex rounded-full bg-surface-hover p-1">
+        <a href="?window=all" class="rounded-full px-4 py-1.5 text-sm font-medium no-underline transition-colors {% if active_window == 'all' %}bg-surface text-fg shadow-sm{% else %}text-muted hover:text-fg{% endif %}">All time</a>
+        <a href="?window=day" class="rounded-full px-4 py-1.5 text-sm font-medium no-underline transition-colors {% if active_window == 'day' %}bg-surface text-fg shadow-sm{% else %}text-muted hover:text-fg{% endif %}">Last 24h</a>
+        <a href="?window=week" class="rounded-full px-4 py-1.5 text-sm font-medium no-underline transition-colors {% if active_window == 'week' %}bg-surface text-fg shadow-sm{% else %}text-muted hover:text-fg{% endif %}">Last 7 days</a>
+    </div>
+
     <ol class="divide-y divide-border rounded-2xl border border-border bg-surface">
         {% for tag in tags %}
             <li class="flex items-center justify-between px-4 py-2 text-sm">
@@ -18,8 +24,8 @@
 
     {% if page_obj.has_previous or page_obj.has_next %}
         <div class="mt-4 flex justify-center gap-3 text-sm">
-            {% if page_obj.has_previous %}<a href="?page={{ page_obj.previous_page_number }}" class="text-accent no-underline hover:underline">Previous</a>{% endif %}
-            {% if page_obj.has_next %}<a href="?page={{ page_obj.next_page_number }}" class="text-accent no-underline hover:underline">Next</a>{% endif %}
+            {% if page_obj.has_previous %}<a href="?page={{ page_obj.previous_page_number }}&window={{ active_window }}" class="text-accent no-underline hover:underline">Previous</a>{% endif %}
+            {% if page_obj.has_next %}<a href="?page={{ page_obj.next_page_number }}&window={{ active_window }}" class="text-accent no-underline hover:underline">Next</a>{% endif %}
         </div>
     {% endif %}
 {% endblock %}

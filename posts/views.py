@@ -1,4 +1,5 @@
 from collections import defaultdict
+from datetime import timedelta
 
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
@@ -195,6 +196,12 @@ SEARCH_TYPES = {SEARCH_TYPE_ALL, SEARCH_TYPE_POSTS, SEARCH_TYPE_COMMENTS}
 
 TAG_INDEX_PAGE_SIZE = 20
 TAG_SEARCH_LIMIT = 8
+
+TAG_WINDOW_ALL = "all"
+TAG_WINDOW_DAY = "day"
+TAG_WINDOW_WEEK = "week"
+TAG_WINDOW_CHOICES = {TAG_WINDOW_ALL, TAG_WINDOW_DAY, TAG_WINDOW_WEEK}
+TAG_WINDOW_DELTAS = {TAG_WINDOW_DAY: timedelta(days=1), TAG_WINDOW_WEEK: timedelta(days=7)}
 
 SEARCH_FILTER_PARAMS = ("q", "author", "tag", "date_from", "date_to")
 
@@ -739,14 +746,25 @@ class TagIndexView(ListView):
     context_object_name = "tags"
     paginate_by = TAG_INDEX_PAGE_SIZE
 
+    def get_window(self):
+        window = self.request.GET.get("window", TAG_WINDOW_ALL)
+        return window if window in TAG_WINDOW_CHOICES else TAG_WINDOW_ALL
+
     def get_queryset(self):
+        post_filter = Q(posts__deleted=False, posts__is_draft=False)
+        delta = TAG_WINDOW_DELTAS.get(self.get_window())
+        if delta:
+            post_filter &= Q(posts__created_at__gte=timezone.now() - delta)
         return (
-            Tag.objects.annotate(
-                post_count=Count("posts", filter=Q(posts__deleted=False, posts__is_draft=False))
-            )
+            Tag.objects.annotate(post_count=Count("posts", filter=post_filter))
             .filter(post_count__gt=0)
             .order_by("-post_count", "name")
         )
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["active_window"] = self.get_window()
+        return context
 
 
 class TagDetailView(ListView):
