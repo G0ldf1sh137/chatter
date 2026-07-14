@@ -9,6 +9,7 @@ from django.db.models.functions import Coalesce
 from django.http import Http404, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template.loader import render_to_string
+from django.utils import timezone
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views import View
 from django.views.generic import CreateView, DetailView, ListView, TemplateView, UpdateView
@@ -66,6 +67,14 @@ def notify_mentioned_users(body, author, post, comment=None):
         for user in extract_mentioned_users(body, exclude=author)
         if not is_muted_or_blocked(user, author) and notifications_enabled(user, Notification.Kind.MENTION)
     )
+
+
+def publish_post(post):
+    post.is_draft = False
+    post.created_at = timezone.now()
+    post.save(update_fields=["is_draft", "created_at"])
+    sync_post_tags(post, post.body)
+    notify_mentioned_users(post.body, post.author, post)
 
 
 def build_comment_tree(comments):
@@ -202,7 +211,9 @@ class FeedView(ListView):
         return sort if sort in SORT_CHOICES else SORT_DEFAULT
 
     def get_base_queryset(self):
-        queryset = Post.objects.select_related("author", "author__profile").prefetch_related("reactions", "poll__options__votes", "reposts")
+        queryset = Post.objects.select_related("author", "author__profile").prefetch_related(
+            "reactions", "poll__options__votes", "reposts"
+        ).exclude(is_draft=True)
         hidden = hidden_author_ids(self.request.user)
         if hidden:
             queryset = queryset.exclude(author_id__in=hidden)
@@ -260,7 +271,7 @@ class SearchView(TemplateView):
 
         hidden = hidden_author_ids(self.request.user)
 
-        posts = Post.objects.filter(body__icontains=query, deleted=False).select_related(
+        posts = Post.objects.filter(body__icontains=query, deleted=False, is_draft=False).select_related(
             "author", "author__profile"
         ).prefetch_related("reactions", "poll__options__votes", "reposts")
         comments = Comment.objects.filter(body__icontains=query, deleted=False).select_related(
@@ -316,9 +327,11 @@ class PostCreateView(LoginRequiredMixin, CreateView):
 
     def form_valid(self, form):
         form.instance.author = self.request.user
+        form.instance.is_draft = self.request.POST.get("action") == "draft"
         response = super().form_valid(form)
         sync_post_tags(self.object, self.object.body)
-        notify_mentioned_users(self.object.body, self.object.author, self.object)
+        if not self.object.is_draft:
+            notify_mentioned_users(self.object.body, self.object.author, self.object)
         return response
 
 
@@ -332,6 +345,12 @@ class PostDetailView(DetailView):
         queryset = annotate_votes(queryset, PostVote, "post", self.request.user)
         queryset = annotate_saved(queryset, self.request.user)
         return annotate_reposted(queryset, self.request.user)
+
+    def get_object(self, queryset=None):
+        post = super().get_object(queryset)
+        if post.is_draft and post.author_id != self.request.user.id:
+            raise Http404
+        return post
 
     def get_comment_tree(self):
         comments = self.object.comments.select_related("author", "author__profile")
@@ -384,11 +403,39 @@ class PostEditView(LoginRequiredMixin, UserPassesTestMixin, UpdateView):
         return post.author_id == self.request.user.id and not post.deleted
 
     def form_valid(self, form):
+        was_draft = form.instance.is_draft
         if form.has_changed():
             form.instance.edited = True
         response = super().form_valid(form)
-        sync_post_tags(self.object, self.object.body)
+        if was_draft and self.request.POST.get("action") == "publish":
+            publish_post(self.object)
+        else:
+            sync_post_tags(self.object, self.object.body)
         return response
+
+
+class PostPublishView(LoginRequiredMixin, UserPassesTestMixin, View):
+    def get_post(self):
+        return get_object_or_404(Post, pk=self.kwargs["pk"])
+
+    def test_func(self):
+        return self.get_post().author_id == self.request.user.id
+
+    def post(self, request, pk):
+        post = self.get_post()
+        if post.is_draft:
+            publish_post(post)
+        return redirect(post.get_absolute_url())
+
+
+class DraftListView(LoginRequiredMixin, ListView):
+    model = Post
+    template_name = "posts/draft_list.html"
+    context_object_name = "posts"
+    paginate_by = POSTS_PAGE_SIZE
+
+    def get_queryset(self):
+        return Post.objects.filter(author=self.request.user, is_draft=True).order_by("-updated_at")
 
 
 class PostDeleteView(LoginRequiredMixin, UserPassesTestMixin, View):
@@ -508,7 +555,9 @@ class TagIndexView(ListView):
 
     def get_queryset(self):
         return (
-            Tag.objects.annotate(post_count=Count("posts", filter=Q(posts__deleted=False)))
+            Tag.objects.annotate(
+                post_count=Count("posts", filter=Q(posts__deleted=False, posts__is_draft=False))
+            )
             .filter(post_count__gt=0)
             .order_by("-post_count", "name")
         )
@@ -522,7 +571,7 @@ class TagDetailView(ListView):
 
     def get_queryset(self):
         self.tag_name = self.kwargs["name"].lower()
-        queryset = Post.objects.filter(tags__name=self.tag_name, deleted=False).select_related(
+        queryset = Post.objects.filter(tags__name=self.tag_name, deleted=False, is_draft=False).select_related(
             "author", "author__profile"
         ).prefetch_related("reactions", "poll__options__votes", "reposts")
         hidden = hidden_author_ids(self.request.user)

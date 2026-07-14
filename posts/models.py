@@ -24,6 +24,7 @@ class Post(models.Model):
     tags = models.ManyToManyField(Tag, related_name="posts", blank=True)
     edited = models.BooleanField(default=False)
     deleted = models.BooleanField(default=False)
+    is_draft = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

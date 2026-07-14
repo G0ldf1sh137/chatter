@@ -6,7 +6,7 @@
 {% block content %}
     <article class="rounded-2xl border border-border bg-surface p-4 shadow-sm sm:p-5">
         <div class="flex gap-3">
-            {% include "_post_vote.html" %}
+            {% if not post.is_draft %}{% include "_post_vote.html" %}{% endif %}
             <div class="min-w-0 flex-1">
                 {% if user.is_authenticated and user != post.author %}
                     <input type="checkbox" id="report-post-toggle" class="peer/report hidden">
@@ -17,20 +17,28 @@
                     <span>&middot; {{ post.created_at }}</span>
                     {% if post.edited %}<span class="italic">&middot; edited</span>{% endif %}
                     <div class="ml-auto flex items-center gap-2">
-                        {% include "_repost_button.html" %}
-                        {% if user.is_authenticated %}
-                            <a href="{% url 'post-quote' post.pk %}" class="rounded-lg p-1 text-muted transition-colors hover:bg-border/60 hover:text-fg" aria-label="Quote post">
-                                <svg viewBox="0 0 20 20" fill="currentColor" class="h-4 w-4"><path d="M7 5a2 2 0 00-2 2v3a2 2 0 002 2h1v2l3-2v-.05A2 2 0 0012 10V7a2 2 0 00-2-2H7z"/></svg>
-                            </a>
-                        {% endif %}
-                        {% include "_save_button.html" %}
-                        {% if user.is_authenticated and user != post.author %}
-                            <label for="report-post-toggle" class="cursor-pointer rounded-lg p-1 text-muted transition-colors hover:bg-border/60 hover:text-fg" aria-label="Report post">
-                                <svg viewBox="0 0 20 20" fill="currentColor" class="h-4 w-4"><path d="M5 2a1 1 0 00-1 1v14a1 1 0 102 0v-5h8.5a.5.5 0 00.4-.8l-2.1-2.7 2.1-2.7a.5.5 0 00-.4-.8H6V3a1 1 0 00-1-1z"/></svg>
-                            </label>
+                        {% if not post.is_draft %}
+                            {% include "_repost_button.html" %}
+                            {% if user.is_authenticated %}
+                                <a href="{% url 'post-quote' post.pk %}" class="rounded-lg p-1 text-muted transition-colors hover:bg-border/60 hover:text-fg" aria-label="Quote post">
+                                    <svg viewBox="0 0 20 20" fill="currentColor" class="h-4 w-4"><path d="M7 5a2 2 0 00-2 2v3a2 2 0 002 2h1v2l3-2v-.05A2 2 0 0012 10V7a2 2 0 00-2-2H7z"/></svg>
+                                </a>
+                            {% endif %}
+                            {% include "_save_button.html" %}
+                            {% if user.is_authenticated and user != post.author %}
+                                <label for="report-post-toggle" class="cursor-pointer rounded-lg p-1 text-muted transition-colors hover:bg-border/60 hover:text-fg" aria-label="Report post">
+                                    <svg viewBox="0 0 20 20" fill="currentColor" class="h-4 w-4"><path d="M5 2a1 1 0 00-1 1v14a1 1 0 102 0v-5h8.5a.5.5 0 00.4-.8l-2.1-2.7 2.1-2.7a.5.5 0 00-.4-.8H6V3a1 1 0 00-1-1z"/></svg>
+                                </label>
+                            {% endif %}
                         {% endif %}
                         {% if user == post.author and not post.deleted %}
                             <a href="{% url 'post-edit' post.pk %}" class="font-medium text-accent no-underline hover:underline">Edit</a>
+                            {% if post.is_draft %}
+                                <form method="post" action="{% url 'post-publish' post.pk %}" class="inline">
+                                    {% csrf_token %}
+                                    <button type="submit" class="mt-0 border-none bg-transparent p-0 text-sm font-medium text-accent no-underline hover:underline">Publish</button>
+                                </form>
+                            {% endif %}
                             <form method="post" action="{% url 'post-delete' post.pk %}" class="inline">
                                 {% csrf_token %}
                                 <button type="submit" class="mt-0 border-none bg-transparent p-0 text-sm font-medium text-downvote no-underline hover:underline">Delete</button>
@@ -38,6 +46,9 @@
                         {% endif %}
                     </div>
                 </div>
+                {% if post.is_draft %}
+                    <p class="mb-2 text-sm italic text-muted">This is a draft — only you can see it.</p>
+                {% endif %}
                 {% if post.deleted %}
                     <p class="italic text-muted">[deleted]</p>
                 {% else %}
@@ -45,38 +56,40 @@
                     {% if post.image %}
                         <img src="{{ post.image.url }}" alt="" class="mt-3 max-h-[32rem] rounded-xl object-contain">
                     {% endif %}
-                    {% if post.poll %}
-                        {% with results=post.poll|poll_results:user %}
-                            <div class="mt-3 space-y-1.5">
-                                <p class="text-sm font-medium">{{ post.poll.question }}</p>
-                                {% for opt in results.options %}
-                                    {% if user.is_authenticated %}
-                                        <form method="post" action="{% url 'poll-vote' post.poll.pk %}">
-                                            {% csrf_token %}
-                                            <input type="hidden" name="option" value="{{ opt.id }}">
-                                            <button type="submit" class="relative block w-full overflow-hidden rounded-lg border px-3 py-1.5 text-left text-sm {% if opt.mine %}border-accent{% else %}border-border{% endif %}">
+                    {% if not post.is_draft %}
+                        {% if post.poll %}
+                            {% with results=post.poll|poll_results:user %}
+                                <div class="mt-3 space-y-1.5">
+                                    <p class="text-sm font-medium">{{ post.poll.question }}</p>
+                                    {% for opt in results.options %}
+                                        {% if user.is_authenticated %}
+                                            <form method="post" action="{% url 'poll-vote' post.poll.pk %}">
+                                                {% csrf_token %}
+                                                <input type="hidden" name="option" value="{{ opt.id }}">
+                                                <button type="submit" class="relative block w-full overflow-hidden rounded-lg border px-3 py-1.5 text-left text-sm {% if opt.mine %}border-accent{% else %}border-border{% endif %}">
+                                                    <span class="absolute inset-y-0 left-0 bg-accent/15" style="width: {{ opt.pct }}%"></span>
+                                                    <span class="relative flex justify-between">
+                                                        <span>{{ opt.text }}{% if opt.mine %} &check;{% endif %}</span>
+                                                        <span class="text-muted">{{ opt.pct }}%</span>
+                                                    </span>
+                                                </button>
+                                            </form>
+                                        {% else %}
+                                            <div class="relative block w-full overflow-hidden rounded-lg border border-border px-3 py-1.5 text-left text-sm">
                                                 <span class="absolute inset-y-0 left-0 bg-accent/15" style="width: {{ opt.pct }}%"></span>
                                                 <span class="relative flex justify-between">
-                                                    <span>{{ opt.text }}{% if opt.mine %} &check;{% endif %}</span>
+                                                    <span>{{ opt.text }}</span>
                                                     <span class="text-muted">{{ opt.pct }}%</span>
                                                 </span>
-                                            </button>
-                                        </form>
-                                    {% else %}
-                                        <div class="relative block w-full overflow-hidden rounded-lg border border-border px-3 py-1.5 text-left text-sm">
-                                            <span class="absolute inset-y-0 left-0 bg-accent/15" style="width: {{ opt.pct }}%"></span>
-                                            <span class="relative flex justify-between">
-                                                <span>{{ opt.text }}</span>
-                                                <span class="text-muted">{{ opt.pct }}%</span>
-                                            </span>
-                                        </div>
-                                    {% endif %}
-                                {% endfor %}
-                                <p class="text-xs text-muted">{{ results.total }} vote{{ results.total|pluralize }}</p>
-                            </div>
-                        {% endwith %}
+                                            </div>
+                                        {% endif %}
+                                    {% endfor %}
+                                    <p class="text-xs text-muted">{{ results.total }} vote{{ results.total|pluralize }}</p>
+                                </div>
+                            {% endwith %}
+                        {% endif %}
+                        {% include "_post_reactions.html" %}
                     {% endif %}
-                    {% include "_post_reactions.html" %}
                 {% endif %}
                 {% if user.is_authenticated and user != post.author %}
                     <form method="post" action="{% url 'post-report' post.pk %}" class="mt-3 hidden peer-checked/report:block">
@@ -89,26 +102,28 @@
         </div>
     </article>
 
-    <h2 class="mb-3 mt-8 text-lg font-bold">Comments</h2>
-    {% if comment_tree %}
-        <div class="divide-y divide-border rounded-2xl border border-border bg-surface" id="comment-list">
-            {% include "posts/_comment_list.html" %}
-            {% if comments_has_next %}
-                <div data-infinite-scroll-sentinel data-next-url="{% url 'post-detail' post.pk %}?page=2" class="h-8 text-center text-sm text-muted"></div>
-            {% endif %}
-        </div>
-    {% else %}
-        <p class="text-muted">No comments yet.</p>
-    {% endif %}
+    {% if not post.is_draft %}
+        <h2 class="mb-3 mt-8 text-lg font-bold">Comments</h2>
+        {% if comment_tree %}
+            <div class="divide-y divide-border rounded-2xl border border-border bg-surface" id="comment-list">
+                {% include "posts/_comment_list.html" %}
+                {% if comments_has_next %}
+                    <div data-infinite-scroll-sentinel data-next-url="{% url 'post-detail' post.pk %}?page=2" class="h-8 text-center text-sm text-muted"></div>
+                {% endif %}
+            </div>
+        {% else %}
+            <p class="text-muted">No comments yet.</p>
+        {% endif %}
 
-    {% if user.is_authenticated %}
-        <form method="post" action="{% url 'comment-create' post.pk %}" id="comment-form" class="mt-6 rounded-2xl border border-border bg-surface p-4 sm:p-5">
-            {% csrf_token %}
-            {{ comment_form.as_p }}
-            <button type="submit">Comment</button>
-        </form>
-    {% else %}
-        <p class="mt-4"><a href="{% url 'login' %}">Log in</a> to comment.</p>
+        {% if user.is_authenticated %}
+            <form method="post" action="{% url 'comment-create' post.pk %}" id="comment-form" class="mt-6 rounded-2xl border border-border bg-surface p-4 sm:p-5">
+                {% csrf_token %}
+                {{ comment_form.as_p }}
+                <button type="submit">Comment</button>
+            </form>
+        {% else %}
+            <p class="mt-4"><a href="{% url 'login' %}">Log in</a> to comment.</p>
+        {% endif %}
     {% endif %}
 
     <script src="{% static 'posts/js/infinite_scroll.js' %}"></script>

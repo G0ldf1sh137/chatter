@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Drafts — Chatter{% endblock %}
+
+{% block content %}
+    <h1 class="mb-4 text-2xl font-extrabold tracking-tight">Drafts</h1>
+
+    <div class="divide-y divide-border rounded-2xl border border-border bg-surface" id="post-list">
+        {% for post in posts %}
+            <div class="flex items-center justify-between gap-3 p-4">
+                <a href="{% url 'post-edit' post.pk %}" class="min-w-0 flex-1 text-fg no-underline hover:text-accent">
+                    <p class="truncate">{{ post.first_line|default:"Untitled draft" }}</p>
+                    <p class="text-xs text-muted">{{ post.updated_at }}</p>
+                </a>
+                <div class="flex shrink-0 items-center gap-2">
+                    <form method="post" action="{% url 'post-publish' post.pk %}">
+                        {% csrf_token %}
+                        <button type="submit">Publish</button>
+                    </form>
+                    <form method="post" action="{% url 'post-delete' post.pk %}">
+                        {% csrf_token %}
+                        <button type="submit" class="text-downvote">Delete</button>
+                    </form>
+                </div>
+            </div>
+        {% empty %}
+            <div class="p-8 text-center text-muted">
+                <p>No drafts yet.</p>
+            </div>
+        {% endfor %}
+        {% if page_obj.has_next %}
+            <div data-infinite-scroll-sentinel data-next-url="?page={{ page_obj.next_page_number }}" class="h-8 text-center text-sm text-muted"></div>
+        {% endif %}
+    </div>
+
+    <script src="{% static 'posts/js/infinite_scroll.js' %}"></script>
+{% endblock %}

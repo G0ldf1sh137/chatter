@@ -1441,6 +1441,214 @@ class QuoteNotificationTests(TestCase):
         self.assertEqual(Notification.objects.filter(kind=Notification.Kind.REPOST).count(), 1)
 
 
+class PostCreateDraftTests(TestCase):
+    def setUp(self):
+        self.alice = make_user("alice")
+        self.bob = make_user("bob")
+        self.client.force_login(self.alice)
+
+    def test_saving_as_draft_creates_a_draft(self):
+        self.client.post(reverse("post-create"), {"body": "wip", "action": "draft"})
+        post = Post.objects.get()
+        self.assertTrue(post.is_draft)
+
+    def test_saving_as_draft_does_not_notify_a_mentioned_user(self):
+        self.client.post(reverse("post-create"), {"body": f"hi @{self.bob.username}", "action": "draft"})
+        self.assertFalse(Notification.objects.exists())
+
+    def test_saving_as_draft_still_syncs_tags(self):
+        self.client.post(reverse("post-create"), {"body": "#python is fun", "action": "draft"})
+        post = Post.objects.get()
+        self.assertEqual(list(post.tags.values_list("name", flat=True)), ["python"])
+
+    def test_publishing_notifies_a_mentioned_user(self):
+        self.client.post(reverse("post-create"), {"body": f"hi @{self.bob.username}", "action": "publish"})
+        self.assertTrue(Notification.objects.filter(recipient=self.bob).exists())
+
+    def test_plain_post_without_action_still_publishes(self):
+        self.client.post(reverse("post-create"), {"body": "hello"})
+        post = Post.objects.get()
+        self.assertFalse(post.is_draft)
+
+
+class PostEditDraftTests(TestCase):
+    def setUp(self):
+        self.alice = make_user("alice")
+        self.bob = make_user("bob")
+        self.client.force_login(self.alice)
+
+    def test_editing_a_draft_with_draft_action_stays_a_draft(self):
+        post = Post.objects.create(author=self.alice, body="wip", is_draft=True)
+        self.client.post(reverse("post-edit", args=[post.pk]), {"body": "still wip", "action": "draft"})
+        post.refresh_from_db()
+        self.assertTrue(post.is_draft)
+
+    def test_editing_a_draft_with_publish_action_publishes_it(self):
+        post = Post.objects.create(author=self.alice, body="wip", is_draft=True)
+        original_created_at = post.created_at
+        self.client.post(
+            reverse("post-edit", args=[post.pk]),
+            {"body": f"ready now @{self.bob.username}", "action": "publish"},
+        )
+        post.refresh_from_db()
+        self.assertFalse(post.is_draft)
+        self.assertGreater(post.created_at, original_created_at)
+        self.assertTrue(Notification.objects.filter(recipient=self.bob).exists())
+
+    def test_forged_publish_action_on_a_published_post_is_a_no_op(self):
+        post = Post.objects.create(author=self.alice, body="live", is_draft=False)
+        original_created_at = post.created_at
+        self.client.post(
+            reverse("post-edit", args=[post.pk]),
+            {"body": f"edited @{self.bob.username}", "action": "publish"},
+        )
+        post.refresh_from_db()
+        self.assertFalse(post.is_draft)
+        self.assertEqual(post.created_at, original_created_at)
+        self.assertFalse(Notification.objects.exists())
+
+
+class PostPublishViewTests(TestCase):
+    def setUp(self):
+        self.alice = make_user("alice")
+        self.bob = make_user("bob")
+        self.draft = Post.objects.create(author=self.alice, body="wip", is_draft=True)
+
+    def test_author_can_publish_their_own_draft(self):
+        self.client.force_login(self.alice)
+        self.client.post(reverse("post-publish", args=[self.draft.pk]))
+        self.draft.refresh_from_db()
+        self.assertFalse(self.draft.is_draft)
+
+    def test_non_author_gets_403(self):
+        self.client.force_login(self.bob)
+        response = self.client.post(reverse("post-publish", args=[self.draft.pk]))
+        self.assertEqual(response.status_code, 403)
+
+    def test_publishing_an_already_published_post_is_a_no_op(self):
+        post = Post.objects.create(author=self.alice, body="live", is_draft=False)
+        original_created_at = post.created_at
+        self.client.force_login(self.alice)
+        self.client.post(reverse("post-publish", args=[post.pk]))
+        post.refresh_from_db()
+        self.assertEqual(post.created_at, original_created_at)
+
+    def test_anonymous_redirected_to_login(self):
+        response = self.client.post(reverse("post-publish", args=[self.draft.pk]))
+        self.assertEqual(response.status_code, 302)
+        self.assertIn(reverse("login"), response.url)
+
+
+class DraftVisibilityTests(TestCase):
+    def setUp(self):
+        self.alice = make_user("alice")
+        self.bob = make_user("bob")
+        self.draft = Post.objects.create(author=self.alice, body="wip", is_draft=True)
+        self.published = Post.objects.create(author=self.alice, body="live", is_draft=False)
+        self.tag = Tag.objects.create(name="wip")
+        self.draft.tags.add(self.tag)
+
+    def test_excluded_from_feed(self):
+        response = self.client.get(reverse("feed"))
+        self.assertNotIn(self.draft, response.context["posts"])
+        self.assertIn(self.published, response.context["posts"])
+
+    def test_excluded_from_following_feed(self):
+        Follow.objects.create(follower=self.bob, followed=self.alice)
+        self.client.force_login(self.bob)
+        response = self.client.get(reverse("following-feed"))
+        self.assertNotIn(self.draft, response.context["posts"])
+
+    def test_excluded_from_search(self):
+        response = self.client.get(reverse("search"), {"q": "wip", "type": "posts"})
+        self.assertNotIn(self.draft, response.context["posts_page"].object_list)
+
+    def test_excluded_from_tag_detail(self):
+        response = self.client.get(reverse("tag-detail", args=["wip"]))
+        self.assertNotIn(self.draft, response.context["posts"])
+
+    def test_excluded_from_tag_index_counts(self):
+        response = self.client.get(reverse("tag-index"))
+        self.assertFalse(any(tag.name == "wip" for tag in response.context["tags"]))
+
+    def test_excluded_from_another_users_profile_view(self):
+        self.client.force_login(self.bob)
+        response = self.client.get(reverse("profile", args=[self.alice.username]))
+        self.assertNotIn(self.draft, response.context["posts"])
+
+    def test_author_sees_their_own_draft_on_their_own_profile(self):
+        self.client.force_login(self.alice)
+        response = self.client.get(reverse("profile", args=[self.alice.username]))
+        self.assertIn(self.draft, response.context["posts"])
+
+    def test_author_can_view_their_own_draft_detail_page(self):
+        self.client.force_login(self.alice)
+        response = self.client.get(reverse("post-detail", args=[self.draft.pk]))
+        self.assertEqual(response.status_code, 200)
+
+    def test_non_author_gets_404_on_draft_detail_page(self):
+        self.client.force_login(self.bob)
+        response = self.client.get(reverse("post-detail", args=[self.draft.pk]))
+        self.assertEqual(response.status_code, 404)
+
+    def test_anonymous_gets_404_on_draft_detail_page(self):
+        response = self.client.get(reverse("post-detail", args=[self.draft.pk]))
+        self.assertEqual(response.status_code, 404)
+
+
+class DraftListViewTests(TestCase):
+    def setUp(self):
+        self.alice = make_user("alice")
+        self.bob = make_user("bob")
+        self.older = Post.objects.create(author=self.alice, body="older draft", is_draft=True)
+        self.newer = Post.objects.create(author=self.alice, body="newer draft", is_draft=True)
+        self.published = Post.objects.create(author=self.alice, body="live", is_draft=False)
+        self.other_draft = Post.objects.create(author=self.bob, body="bob's draft", is_draft=True)
+
+    def test_lists_only_own_drafts_most_recently_updated_first(self):
+        self.client.force_login(self.alice)
+        response = self.client.get(reverse("draft-list"))
+        self.assertEqual(list(response.context["posts"]), [self.newer, self.older])
+
+    def test_publish_action_works_from_the_list(self):
+        self.client.force_login(self.alice)
+        self.client.post(reverse("post-publish", args=[self.older.pk]))
+        self.older.refresh_from_db()
+        self.assertFalse(self.older.is_draft)
+
+    def test_delete_action_works_from_the_list(self):
+        self.client.force_login(self.alice)
+        self.client.post(reverse("post-delete", args=[self.older.pk]))
+        self.older.refresh_from_db()
+        self.assertTrue(self.older.deleted)
+
+    def test_anonymous_redirected_to_login(self):
+        response = self.client.get(reverse("draft-list"))
+        self.assertEqual(response.status_code, 302)
+        self.assertIn(reverse("login"), response.url)
+
+
+class DraftPostDetailRenderingTests(TestCase):
+    def setUp(self):
+        self.alice = make_user("alice")
+        self.client.force_login(self.alice)
+
+    def test_draft_detail_shows_banner_and_hides_interactive_furniture(self):
+        draft = Post.objects.create(author=self.alice, body="wip", is_draft=True)
+        response = self.client.get(reverse("post-detail", args=[draft.pk]))
+        self.assertContains(response, "only you can see it")
+        self.assertNotContains(response, 'aria-label="Repost"')
+        self.assertNotContains(response, "React with")
+        self.assertNotContains(response, reverse("comment-create", args=[draft.pk]))
+        self.assertNotContains(response, "Comments</h2>")
+
+    def test_published_post_detail_is_unaffected(self):
+        post = Post.objects.create(author=self.alice, body="live", is_draft=False)
+        response = self.client.get(reverse("post-detail", args=[post.pk]))
+        self.assertNotContains(response, "only you can see it")
+        self.assertContains(response, reverse("comment-create", args=[post.pk]))
+
+
 class MarkdownRenderingTests(TestCase):
     def test_heading_renders(self):
         self.assertIn("<h1>Title</h1>", render_markdown("# Title"))

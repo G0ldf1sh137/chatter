@@ -15,7 +15,12 @@
                     <div class="mt-3">{{ poll_form.as_p }}</div>
                 </details>
             {% endif %}
-            <button type="submit">{% if object %}Save{% else %}Post{% endif %}</button>
+            {% if object and not object.is_draft %}
+                <button type="submit">Save</button>
+            {% else %}
+                <button type="submit" name="action" value="draft">Save draft</button>
+                <button type="submit" name="action" value="publish">Publish</button>
+            {% endif %}
         </form>
     </div>
     <script src="{% static 'posts/js/autocomplete.js' %}"></script>

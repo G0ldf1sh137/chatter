@@ -93,8 +93,13 @@ class ProfileView(DetailView):
         context = super().get_context_data(**kwargs)
         profile_user = context["profile_user"]
         context["profile"], _ = Profile.objects.get_or_create(user=profile_user)
+        posts_qs = profile_user.posts.all()
+        post_count_qs = profile_user.posts.all()
+        if self.request.user != profile_user:
+            posts_qs = posts_qs.filter(is_draft=False)
+            post_count_qs = post_count_qs.filter(is_draft=False)
         posts = annotate_votes(
-            profile_user.posts.all().prefetch_related("reactions", "poll__options__votes", "reposts"),
+            posts_qs.prefetch_related("reactions", "poll__options__votes", "reposts"),
             PostVote,
             "post",
             self.request.user,
@@ -102,8 +107,8 @@ class ProfileView(DetailView):
         posts = annotate_saved(posts, self.request.user)
         posts = annotate_reposted(posts, self.request.user)
         context["posts"] = posts[:PROFILE_ITEM_LIMIT]
-        context["post_count"] = profile_user.posts.count()
-        reposts = Post.objects.filter(reposts__user=profile_user, deleted=False).select_related(
+        context["post_count"] = post_count_qs.count()
+        reposts = Post.objects.filter(reposts__user=profile_user, deleted=False, is_draft=False).select_related(
             "author", "author__profile"
         ).prefetch_related("reactions", "poll__options__votes", "reposts")
         reposts = reposts.order_by("-reposts__created_at")
