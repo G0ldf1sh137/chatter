@@ -11,9 +11,10 @@ from django.utils import timezone
 
 from accounts.models import Block, Follow, Mute
 
+from .hashtags import extract_hashtag_names
 from .markdown import render_markdown
 from .mentions import extract_mentioned_users
-from .models import Comment, CommentVote, Conversation, Message, Notification, Post, PostVote, Report, SavedPost
+from .models import Comment, CommentVote, Conversation, Message, Notification, Post, PostVote, Report, SavedPost, Tag
 from .views import (
     build_comment_tree,
     get_or_create_conversation,
@@ -1348,6 +1349,147 @@ class MentionExtractionTests(TestCase):
 
     def test_body_with_no_mentions_returns_empty_list(self):
         self.assertEqual(extract_mentioned_users("nothing to see here"), [])
+
+
+class HashtagExtractionTests(TestCase):
+    def test_finds_a_simple_hashtag(self):
+        self.assertEqual(extract_hashtag_names("check out #django"), {"django"})
+
+    def test_deduplicates_case_insensitively(self):
+        self.assertEqual(extract_hashtag_names("#Django and #django again"), {"django"})
+
+    def test_does_not_match_hash_preceded_by_a_word_character(self):
+        self.assertEqual(extract_hashtag_names("I love C#"), set())
+
+    def test_does_not_match_an_atx_heading(self):
+        self.assertEqual(extract_hashtag_names("# Heading"), set())
+        self.assertEqual(extract_hashtag_names("## Subheading"), set())
+
+    def test_finds_several_distinct_tags(self):
+        self.assertEqual(extract_hashtag_names("#chatter is #awesome and #fun"), {"chatter", "awesome", "fun"})
+
+    def test_body_with_no_hashtags_returns_empty_set(self):
+        self.assertEqual(extract_hashtag_names("nothing to see here"), set())
+
+
+class MarkdownHashtagRenderingTests(TestCase):
+    def test_hashtag_renders_as_a_link(self):
+        html = render_markdown("check out #django")
+        self.assertIn('<a href="/tags/django/" rel="nofollow noopener">#django</a>', html)
+
+    def test_link_text_preserves_original_casing(self):
+        html = render_markdown("#DjangoTips")
+        self.assertIn('<a href="/tags/djangotips/" rel="nofollow noopener">#DjangoTips</a>', html)
+
+    def test_atx_heading_still_renders_as_a_heading(self):
+        html = render_markdown("# Heading")
+        self.assertIn("<h1>Heading</h1>", html)
+        self.assertNotIn('<a href="/tags/', html)
+
+    def test_hash_inside_fenced_code_block_is_not_linkified(self):
+        html = render_markdown("```python\n# not a tag\n```")
+        self.assertNotIn('<a href="/tags/', html)
+
+    def test_hash_inside_inline_code_is_not_linkified(self):
+        html = render_markdown("use `#define` in C")
+        self.assertNotIn('<a href="/tags/', html)
+
+    def test_hashtag_inside_an_existing_link_does_not_nest_anchors(self):
+        html = render_markdown("[check out #django](https://example.com)")
+        self.assertEqual(html.count("<a "), 1)
+
+    def test_linkify_hashtags_false_leaves_hashtags_as_plain_text(self):
+        html = render_markdown("check out #django", linkify_hashtags=False)
+        self.assertNotIn("<a ", html)
+        self.assertIn("#django", html)
+
+
+class PostCardHashtagRenderingTests(TestCase):
+    def test_feed_card_does_not_nest_anchors_for_a_hashtagged_first_line(self):
+        author = make_user("alice")
+        Post.objects.create(author=author, body="#django is great")
+
+        response = self.client.get(reverse("feed"))
+
+        # markdown_preview (used for the card's clickable first-line preview,
+        # itself wrapped in an <a> to the post) must not also emit a hashtag
+        # <a> - that would nest anchors, which browsers "fix" by splitting
+        # the outer link into dead fragments.
+        self.assertNotIn("/tags/django/", response.content.decode())
+        self.assertContains(response, "#django")
+
+
+class PostTagSyncTests(TestCase):
+    def setUp(self):
+        self.author = make_user("alice")
+
+    def test_creating_a_post_associates_its_hashtags(self):
+        self.client.force_login(self.author)
+
+        self.client.post(reverse("post-create"), {"body": "#django and #Flask"})
+
+        post = Post.objects.get(body="#django and #Flask")
+        self.assertEqual(set(post.tags.values_list("name", flat=True)), {"django", "flask"})
+
+    def test_editing_a_post_to_remove_a_tag_detaches_it(self):
+        post = Post.objects.create(author=self.author, body="#django and #flask")
+        post.tags.set([Tag.objects.get_or_create(name="django")[0], Tag.objects.get_or_create(name="flask")[0]])
+        self.client.force_login(self.author)
+
+        self.client.post(reverse("post-edit", args=[post.pk]), {"body": "#django only now"})
+
+        post.refresh_from_db()
+        self.assertEqual(set(post.tags.values_list("name", flat=True)), {"django"})
+
+    def test_two_posts_with_the_same_tag_share_one_tag_row(self):
+        self.client.force_login(self.author)
+
+        self.client.post(reverse("post-create"), {"body": "first #shared"})
+        self.client.post(reverse("post-create"), {"body": "second #shared"})
+
+        self.assertEqual(Tag.objects.filter(name="shared").count(), 1)
+
+
+class TagDetailViewTests(TestCase):
+    def setUp(self):
+        self.alice = make_user("alice")
+        self.bob = make_user("bob")
+
+    def test_shows_only_non_deleted_posts_with_the_tag(self):
+        tagged = Post.objects.create(author=self.alice, body="#chatter is great")
+        tagged.tags.set([Tag.objects.get_or_create(name="chatter")[0]])
+        deleted = Post.objects.create(author=self.alice, body="#chatter deleted", deleted=True)
+        deleted.tags.set([Tag.objects.get_or_create(name="chatter")[0]])
+        Post.objects.create(author=self.alice, body="no tag here")
+
+        response = self.client.get(reverse("tag-detail", args=["chatter"]))
+
+        self.assertEqual(list(response.context["posts"]), [tagged])
+
+    def test_excludes_muted_or_blocked_authors_posts(self):
+        post = Post.objects.create(author=self.bob, body="#chatter")
+        post.tags.set([Tag.objects.get_or_create(name="chatter")[0]])
+        Mute.objects.create(muter=self.alice, muted=self.bob)
+        self.client.force_login(self.alice)
+
+        response = self.client.get(reverse("tag-detail", args=["chatter"]))
+
+        self.assertNotIn(post, response.context["posts"])
+
+    def test_unused_tag_name_renders_an_empty_state_not_a_404(self):
+        response = self.client.get(reverse("tag-detail", args=["neverused"]))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(list(response.context["posts"]), [])
+
+    def test_pagination_spans_a_second_page(self):
+        tag = Tag.objects.get_or_create(name="popular")[0]
+        for i in range(8):
+            post = Post.objects.create(author=self.alice, body=f"post {i} #popular")
+            post.tags.set([tag])
+
+        response = self.client.get(reverse("tag-detail", args=["popular"]))
+
+        self.assertTrue(response.context["page_obj"].has_next())
 
 
 class MentionNotificationTests(TestCase):

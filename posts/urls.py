@@ -14,6 +14,7 @@ urlpatterns = [
     path("posts/<uuid:pk>/save/", views.PostSaveView.as_view(), name="post-save"),
     path("posts/<uuid:pk>/unsave/", views.PostUnsaveView.as_view(), name="post-unsave"),
     path("saved/", views.SavedPostsView.as_view(), name="saved-posts"),
+    path("tags/<str:name>/", views.TagDetailView.as_view(), name="tag-detail"),
     path("posts/<uuid:pk>/report/", views.PostReportView.as_view(), name="post-report"),
     path("posts/<uuid:pk>/comment/", views.CommentCreateView.as_view(), name="comment-create"),
     path("comments/<uuid:pk>/edit/", views.CommentEditView.as_view(), name="comment-edit"),

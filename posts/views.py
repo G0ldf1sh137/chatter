@@ -16,6 +16,7 @@ from django.views.generic import CreateView, DetailView, ListView, TemplateView,
 from accounts.models import Block, Mute, is_blocked_either_way, is_muted_or_blocked
 
 from .forms import CommentEditForm, CommentForm, MessageForm, PostForm
+from .hashtags import sync_post_tags
 from .mentions import extract_mentioned_users
 from .models import Comment, CommentVote, Conversation, Message, Notification, Post, PostVote, Report, SavedPost
 from .ranking import rank_posts
@@ -246,6 +247,7 @@ class PostCreateView(LoginRequiredMixin, CreateView):
     def form_valid(self, form):
         form.instance.author = self.request.user
         response = super().form_valid(form)
+        sync_post_tags(self.object, self.object.body)
         notify_mentioned_users(self.object.body, self.object.author, self.object)
         return response
 
@@ -313,7 +315,9 @@ class PostEditView(LoginRequiredMixin, UserPassesTestMixin, UpdateView):
     def form_valid(self, form):
         if form.has_changed():
             form.instance.edited = True
-        return super().form_valid(form)
+        response = super().form_valid(form)
+        sync_post_tags(self.object, self.object.body)
+        return response
 
 
 class PostDeleteView(LoginRequiredMixin, UserPassesTestMixin, View):
@@ -360,6 +364,40 @@ class SavedPostsView(LoginRequiredMixin, ListView):
         queryset = queryset.order_by("-saved_by__created_at")
         queryset = annotate_votes(queryset, PostVote, "post", self.request.user)
         return annotate_saved(queryset, self.request.user)
+
+    def render_to_response(self, context, **response_kwargs):
+        if not is_ajax(self.request):
+            return super().render_to_response(context, **response_kwargs)
+
+        html = render_to_string("posts/_post_list.html", {"posts": context["posts"]}, request=self.request)
+        next_url = None
+        page_obj = context.get("page_obj")
+        if page_obj and page_obj.has_next():
+            next_url = f"{self.request.path}?page={page_obj.next_page_number()}"
+        return JsonResponse({"html": html, "next_url": next_url})
+
+
+class TagDetailView(ListView):
+    model = Post
+    template_name = "posts/tag_detail.html"
+    context_object_name = "posts"
+    paginate_by = POSTS_PAGE_SIZE
+
+    def get_queryset(self):
+        self.tag_name = self.kwargs["name"].lower()
+        queryset = Post.objects.filter(tags__name=self.tag_name, deleted=False).select_related(
+            "author", "author__profile"
+        )
+        hidden = hidden_author_ids(self.request.user)
+        if hidden:
+            queryset = queryset.exclude(author_id__in=hidden)
+        queryset = annotate_votes(queryset.order_by("-created_at"), PostVote, "post", self.request.user)
+        return annotate_saved(queryset, self.request.user)
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["tag_name"] = self.tag_name
+        return context
 
     def render_to_response(self, context, **response_kwargs):
         if not is_ajax(self.request):
