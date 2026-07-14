@@ -125,6 +125,45 @@ class PostReaction(Reaction):
         return f"{self.user} reacted {self.emoji} to Post({self.post_id})"
 
 
+class Poll(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    post = models.OneToOneField(Post, on_delete=models.CASCADE, related_name="poll")
+    question = models.CharField(max_length=300)
+
+    def __str__(self):
+        return f"Poll({self.pk}) on Post({self.post_id})"
+
+
+class PollOption(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    poll = models.ForeignKey(Poll, on_delete=models.CASCADE, related_name="options")
+    text = models.CharField(max_length=120)
+    order = models.PositiveSmallIntegerField(default=0)
+
+    class Meta:
+        ordering = ["order"]
+
+    def __str__(self):
+        return self.text
+
+
+class PollVote(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    # Denormalized from option.poll so uniqueness can be enforced per-poll
+    # rather than per-option - a per-option constraint would let one user
+    # vote for two different options in the same poll.
+    poll = models.ForeignKey(Poll, on_delete=models.CASCADE, related_name="votes")
+    option = models.ForeignKey(PollOption, on_delete=models.CASCADE, related_name="votes")
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=["user", "poll"], name="unique_poll_vote")]
+
+    def __str__(self):
+        return f"{self.user} voted {self.option} in Poll({self.poll_id})"
+
+
 class Conversation(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     # Always stored with user1_id < user2_id (see views.get_or_create_conversation)

@@ -9,6 +9,12 @@
         <form method="post" enctype="multipart/form-data">
             {% csrf_token %}
             {{ form.as_p }}
+            {% if not object %}
+                <details class="mb-4 rounded-lg border border-border p-3">
+                    <summary class="cursor-pointer text-sm font-medium">Add a poll (optional)</summary>
+                    <div class="mt-3">{{ poll_form.as_p }}</div>
+                </details>
+            {% endif %}
             <button type="submit">{% if object %}Save{% else %}Post{% endif %}</button>
         </form>
     </div>

@@ -15,7 +15,7 @@ from django.views.generic import CreateView, DetailView, ListView, TemplateView,
 
 from accounts.models import Block, Mute, is_blocked_either_way, is_muted_or_blocked
 
-from .forms import CommentEditForm, CommentForm, MessageForm, PostForm
+from .forms import CommentEditForm, CommentForm, MessageForm, PollForm, PostForm
 from .hashtags import sync_post_tags
 from .mentions import extract_mentioned_users
 from .models import (
@@ -24,6 +24,9 @@ from .models import (
     Conversation,
     Message,
     Notification,
+    Poll,
+    PollOption,
+    PollVote,
     Post,
     PostReaction,
     PostVote,
@@ -123,6 +126,17 @@ def toggle_reaction(reaction_model, lookup, user, emoji):
         existing.save(update_fields=["emoji"])
 
 
+def toggle_poll_vote(poll, option, user):
+    existing = PollVote.objects.filter(user=user, poll=poll).first()
+    if existing is None:
+        PollVote.objects.create(user=user, poll=poll, option=option)
+    elif existing.option_id == option.id:
+        existing.delete()
+    else:
+        existing.option = option
+        existing.save(update_fields=["option"])
+
+
 def redirect_back(request, fallback):
     referer = request.META.get("HTTP_REFERER")
     if referer and url_has_allowed_host_and_scheme(referer, allowed_hosts={request.get_host()}):
@@ -179,7 +193,7 @@ class FeedView(ListView):
         return sort if sort in SORT_CHOICES else SORT_DEFAULT
 
     def get_base_queryset(self):
-        queryset = Post.objects.select_related("author", "author__profile").prefetch_related("reactions")
+        queryset = Post.objects.select_related("author", "author__profile").prefetch_related("reactions", "poll__options__votes")
         hidden = hidden_author_ids(self.request.user)
         if hidden:
             queryset = queryset.exclude(author_id__in=hidden)
@@ -238,7 +252,7 @@ class SearchView(TemplateView):
 
         posts = Post.objects.filter(body__icontains=query, deleted=False).select_related(
             "author", "author__profile"
-        ).prefetch_related("reactions")
+        ).prefetch_related("reactions", "poll__options__votes")
         comments = Comment.objects.filter(body__icontains=query, deleted=False).select_related(
             "author", "author__profile", "post"
         )
@@ -270,6 +284,25 @@ class PostCreateView(LoginRequiredMixin, CreateView):
     form_class = PostForm
     template_name = "posts/post_form.html"
 
+    def get_context_data(self, **kwargs):
+        kwargs.setdefault("poll_form", PollForm())
+        return super().get_context_data(**kwargs)
+
+    def post(self, request, *args, **kwargs):
+        self.object = None
+        form = self.get_form()
+        poll_form = PollForm(request.POST)
+        if form.is_valid() and poll_form.is_valid():
+            response = self.form_valid(form)
+            if poll_form.cleaned_data.get("has_poll"):
+                poll = Poll.objects.create(post=self.object, question=poll_form.cleaned_data["question"])
+                PollOption.objects.bulk_create(
+                    PollOption(poll=poll, text=text, order=i)
+                    for i, text in enumerate(poll_form.cleaned_data["poll_options"])
+                )
+            return response
+        return self.render_to_response(self.get_context_data(form=form, poll_form=poll_form))
+
     def form_valid(self, form):
         form.instance.author = self.request.user
         response = super().form_valid(form)
@@ -284,7 +317,7 @@ class PostDetailView(DetailView):
     context_object_name = "post"
 
     def get_queryset(self):
-        queryset = Post.objects.select_related("author", "author__profile").prefetch_related("reactions")
+        queryset = Post.objects.select_related("author", "author__profile").prefetch_related("reactions", "poll__options__votes")
         queryset = annotate_votes(queryset, PostVote, "post", self.request.user)
         return annotate_saved(queryset, self.request.user)
 
@@ -386,7 +419,7 @@ class SavedPostsView(LoginRequiredMixin, ListView):
     def get_queryset(self):
         queryset = Post.objects.filter(saved_by__user=self.request.user).select_related(
             "author", "author__profile"
-        ).prefetch_related("reactions")
+        ).prefetch_related("reactions", "poll__options__votes")
         queryset = queryset.order_by("-saved_by__created_at")
         queryset = annotate_votes(queryset, PostVote, "post", self.request.user)
         return annotate_saved(queryset, self.request.user)
@@ -443,7 +476,7 @@ class TagDetailView(ListView):
         self.tag_name = self.kwargs["name"].lower()
         queryset = Post.objects.filter(tags__name=self.tag_name, deleted=False).select_related(
             "author", "author__profile"
-        ).prefetch_related("reactions")
+        ).prefetch_related("reactions", "poll__options__votes")
         hidden = hidden_author_ids(self.request.user)
         if hidden:
             queryset = queryset.exclude(author_id__in=hidden)
@@ -557,6 +590,14 @@ class PostReactionView(LoginRequiredMixin, View):
         if emoji in PostReaction.Emoji.values:
             toggle_reaction(PostReaction, {"post": post}, request.user, emoji)
         return redirect_back(request, post.get_absolute_url())
+
+
+class PollVoteView(LoginRequiredMixin, View):
+    def post(self, request, pk):
+        poll = get_object_or_404(Poll, pk=pk)
+        option = get_object_or_404(PollOption, pk=request.POST.get("option"), poll=poll)
+        toggle_poll_vote(poll, option, request.user)
+        return redirect_back(request, poll.post.get_absolute_url())
 
 
 class CommentVoteView(LoginRequiredMixin, View):

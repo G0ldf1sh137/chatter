@@ -11,6 +11,7 @@ from django.utils import timezone
 
 from accounts.models import Block, Follow, Mute
 
+from .forms import PollForm
 from .hashtags import extract_hashtag_names
 from .markdown import render_markdown
 from .mentions import extract_mentioned_users
@@ -20,6 +21,9 @@ from .models import (
     Conversation,
     Message,
     Notification,
+    Poll,
+    PollOption,
+    PollVote,
     Post,
     PostReaction,
     PostVote,
@@ -27,10 +31,11 @@ from .models import (
     SavedPost,
     Tag,
 )
-from .templatetags.post_extras import group_reactions
+from .templatetags.post_extras import group_reactions, poll_results, poll_vote_count
 from .views import (
     build_comment_tree,
     get_or_create_conversation,
+    toggle_poll_vote,
     toggle_reaction,
     toggle_vote,
     unread_message_count,
@@ -1050,6 +1055,203 @@ class PostReactionRenderingTests(TestCase):
     def test_anonymous_visitor_sees_no_reaction_buttons(self):
         response = self.client.get(reverse("post-detail", args=[self.post.pk]))
         self.assertNotContains(response, "post-react")
+
+
+class PollFormTests(TestCase):
+    def make_data(self, **overrides):
+        data = {"question": "", "option_1": "", "option_2": "", "option_3": "", "option_4": ""}
+        data.update(overrides)
+        return data
+
+    def test_all_blank_is_valid_with_no_poll(self):
+        form = PollForm(self.make_data())
+        self.assertTrue(form.is_valid())
+        self.assertNotIn("has_poll", form.cleaned_data)
+
+    def test_question_with_zero_options_is_invalid(self):
+        form = PollForm(self.make_data(question="Best color?"))
+        self.assertFalse(form.is_valid())
+
+    def test_question_with_one_option_is_invalid(self):
+        form = PollForm(self.make_data(question="Best color?", option_1="Red"))
+        self.assertFalse(form.is_valid())
+
+    def test_question_with_two_to_four_options_is_valid(self):
+        form = PollForm(self.make_data(question="Best color?", option_1="Red", option_2="Blue"))
+        self.assertTrue(form.is_valid())
+        self.assertTrue(form.cleaned_data["has_poll"])
+        self.assertEqual(form.cleaned_data["poll_options"], ["Red", "Blue"])
+
+    def test_duplicate_option_text_is_invalid(self):
+        form = PollForm(self.make_data(question="Best color?", option_1="Red", option_2="Red"))
+        self.assertFalse(form.is_valid())
+
+    def test_blank_trailing_options_are_ignored(self):
+        form = PollForm(self.make_data(question="Best color?", option_1="Red", option_2="Blue", option_3="", option_4=""))
+        self.assertTrue(form.is_valid())
+        self.assertEqual(len(form.cleaned_data["poll_options"]), 2)
+
+
+class PostCreatePollTests(TestCase):
+    def setUp(self):
+        self.user = make_user("alice")
+        self.client.force_login(self.user)
+
+    def test_creating_post_with_poll_creates_poll_and_options_in_order(self):
+        self.client.post(
+            reverse("post-create"),
+            {
+                "body": "vote now",
+                "question": "Best color?",
+                "option_1": "Red",
+                "option_2": "Blue",
+                "option_3": "Green",
+                "option_4": "",
+            },
+        )
+        post = Post.objects.get()
+        poll = Poll.objects.get(post=post)
+        self.assertEqual(poll.question, "Best color?")
+        self.assertEqual(list(poll.options.values_list("text", flat=True)), ["Red", "Blue", "Green"])
+
+    def test_creating_post_without_poll_fields_creates_no_poll(self):
+        self.client.post(reverse("post-create"), {"body": "no poll here"})
+        post = Post.objects.get()
+        self.assertFalse(Poll.objects.filter(post=post).exists())
+
+    def test_invalid_poll_blocks_post_creation_entirely(self):
+        self.client.post(
+            reverse("post-create"),
+            {"body": "should not save", "question": "Best color?", "option_1": "Red", "option_2": "", "option_3": "", "option_4": ""},
+        )
+        self.assertFalse(Post.objects.exists())
+
+
+class TogglePollVoteTests(TestCase):
+    def setUp(self):
+        self.author = make_user("alice")
+        self.voter = make_user("bob")
+        self.post = Post.objects.create(author=self.author, body="vote now")
+        self.poll = Poll.objects.create(post=self.post, question="Best color?")
+        self.red = PollOption.objects.create(poll=self.poll, text="Red", order=0)
+        self.blue = PollOption.objects.create(poll=self.poll, text="Blue", order=1)
+
+    def test_voting_creates_a_row(self):
+        toggle_poll_vote(self.poll, self.red, self.voter)
+        vote = PollVote.objects.get(user=self.voter, poll=self.poll)
+        self.assertEqual(vote.option, self.red)
+
+    def test_voting_same_option_again_removes_it(self):
+        toggle_poll_vote(self.poll, self.red, self.voter)
+        toggle_poll_vote(self.poll, self.red, self.voter)
+        self.assertFalse(PollVote.objects.filter(user=self.voter, poll=self.poll).exists())
+
+    def test_voting_different_option_switches_it(self):
+        toggle_poll_vote(self.poll, self.red, self.voter)
+        toggle_poll_vote(self.poll, self.blue, self.voter)
+        self.assertEqual(PollVote.objects.filter(user=self.voter, poll=self.poll).count(), 1)
+        vote = PollVote.objects.get(user=self.voter, poll=self.poll)
+        self.assertEqual(vote.option, self.blue)
+
+
+class PollVoteViewTests(TestCase):
+    def setUp(self):
+        self.author = make_user("alice")
+        self.voter = make_user("bob")
+        self.post = Post.objects.create(author=self.author, body="vote now")
+        self.poll = Poll.objects.create(post=self.post, question="Best color?")
+        self.red = PollOption.objects.create(poll=self.poll, text="Red", order=0)
+        self.other_post = Post.objects.create(author=self.author, body="other")
+        self.other_poll = Poll.objects.create(post=self.other_post, question="Best animal?")
+        self.cat = PollOption.objects.create(poll=self.other_poll, text="Cat", order=0)
+
+    def test_authenticated_user_can_vote(self):
+        self.client.force_login(self.voter)
+        self.client.post(reverse("poll-vote", args=[self.poll.pk]), {"option": self.red.pk})
+        self.assertTrue(PollVote.objects.filter(user=self.voter, poll=self.poll, option=self.red).exists())
+
+    def test_anonymous_redirected_to_login(self):
+        response = self.client.post(reverse("poll-vote", args=[self.poll.pk]), {"option": self.red.pk})
+        self.assertEqual(response.status_code, 302)
+        self.assertIn(reverse("login"), response.url)
+
+    def test_option_from_different_poll_404s(self):
+        self.client.force_login(self.voter)
+        response = self.client.post(reverse("poll-vote", args=[self.poll.pk]), {"option": self.cat.pk})
+        self.assertEqual(response.status_code, 404)
+
+
+class PollResultsFilterTests(TestCase):
+    def setUp(self):
+        self.author = make_user("alice")
+        self.viewer = make_user("bob")
+        self.other = make_user("carol")
+        self.post = Post.objects.create(author=self.author, body="vote now")
+        self.poll = Poll.objects.create(post=self.post, question="Best color?")
+        self.red = PollOption.objects.create(poll=self.poll, text="Red", order=0)
+        self.blue = PollOption.objects.create(poll=self.poll, text="Blue", order=1)
+
+    def test_counts_and_percentages_are_correct(self):
+        PollVote.objects.create(user=self.viewer, poll=self.poll, option=self.red)
+        PollVote.objects.create(user=self.other, poll=self.poll, option=self.blue)
+        results = poll_results(self.poll, self.viewer)
+        by_id = {o["id"]: o for o in results["options"]}
+        self.assertEqual(by_id[self.red.id]["count"], 1)
+        self.assertEqual(by_id[self.red.id]["pct"], 50)
+        self.assertEqual(results["total"], 2)
+
+    def test_zero_votes_does_not_divide_by_zero(self):
+        results = poll_results(self.poll, self.viewer)
+        self.assertTrue(all(o["pct"] == 0 for o in results["options"]))
+        self.assertEqual(results["total"], 0)
+
+    def test_mine_set_only_for_viewers_own_vote(self):
+        PollVote.objects.create(user=self.viewer, poll=self.poll, option=self.red)
+        PollVote.objects.create(user=self.other, poll=self.poll, option=self.blue)
+        results = poll_results(self.poll, self.viewer)
+        by_id = {o["id"]: o for o in results["options"]}
+        self.assertTrue(by_id[self.red.id]["mine"])
+        self.assertFalse(by_id[self.blue.id]["mine"])
+
+    def test_anonymous_viewer_never_gets_mine_true(self):
+        PollVote.objects.create(user=self.other, poll=self.poll, option=self.blue)
+        results = poll_results(self.poll, AnonymousUser())
+        self.assertFalse(any(o["mine"] for o in results["options"]))
+
+
+class PollRenderingTests(TestCase):
+    def setUp(self):
+        self.author = make_user("alice")
+        self.voter = make_user("bob")
+        self.post = Post.objects.create(author=self.author, body="vote now")
+        self.poll = Poll.objects.create(post=self.post, question="Best color?")
+        self.red = PollOption.objects.create(poll=self.poll, text="Red", order=0)
+        self.blue = PollOption.objects.create(poll=self.poll, text="Blue", order=1)
+
+    def test_feed_card_shows_compact_summary_without_vote_form(self):
+        self.client.force_login(self.voter)
+        response = self.client.get(reverse("feed"))
+        self.assertContains(response, "Best color?")
+        self.assertNotContains(response, "poll-vote")
+
+    def test_post_detail_shows_full_interactive_poll(self):
+        self.client.force_login(self.voter)
+        response = self.client.get(reverse("post-detail", args=[self.post.pk]))
+        self.assertContains(response, "Best color?")
+        self.assertContains(response, reverse("poll-vote", args=[self.poll.pk]))
+        self.assertContains(response, "Red")
+        self.assertContains(response, "Blue")
+
+    def test_post_detail_highlights_viewers_own_vote(self):
+        PollVote.objects.create(user=self.voter, poll=self.poll, option=self.red)
+        self.client.force_login(self.voter)
+        response = self.client.get(reverse("post-detail", args=[self.post.pk]))
+        self.assertContains(response, "Red &check;")
+
+    def test_post_without_poll_shows_neither_block(self):
+        plain_post = Post.objects.create(author=self.author, body="no poll")
+        response = self.client.get(reverse("post-detail", args=[plain_post.pk]))
+        self.assertNotContains(response, "poll-vote")
 
 
 class MarkdownRenderingTests(TestCase):

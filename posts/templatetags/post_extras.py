@@ -33,3 +33,34 @@ def group_reactions(reactions, viewer):
         {"value": value, "glyph": glyph, "count": counts.get(value, 0), "mine": value == mine}
         for value, glyph in PostReaction.Emoji.choices
     ]
+
+
+@register.filter(name="poll_results")
+def poll_results(poll, viewer):
+    # Reads only poll.options.all() / option.votes.all() - both populated by
+    # the "poll__options__votes" prefetch chain, so this is zero extra
+    # queries per post, same as group_reactions above.
+    options = list(poll.options.all())
+    total = sum(len(o.votes.all()) for o in options)
+    mine = next(
+        (o.id for o in options if viewer.is_authenticated and any(v.user_id == viewer.id for v in o.votes.all())),
+        None,
+    )
+    return {
+        "total": total,
+        "options": [
+            {
+                "id": o.id,
+                "text": o.text,
+                "count": len(o.votes.all()),
+                "pct": round(100 * len(o.votes.all()) / total) if total else 0,
+                "mine": o.id == mine,
+            }
+            for o in options
+        ],
+    }
+
+
+@register.filter(name="poll_vote_count")
+def poll_vote_count(poll):
+    return sum(len(o.votes.all()) for o in poll.options.all())

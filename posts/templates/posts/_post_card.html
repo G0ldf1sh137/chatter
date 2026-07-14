@@ -17,6 +17,9 @@
                     {% if post.image %}
                         <img src="{{ post.image.url }}" alt="" class="mt-2 max-h-64 w-full rounded-xl object-cover">
                     {% endif %}
+                    {% if post.poll %}
+                        <p class="mt-2 text-xs text-muted">&#128202; {{ post.poll.question }} &mdash; {{ post.poll|poll_vote_count }} vote{{ post.poll|poll_vote_count|pluralize }}</p>
+                    {% endif %}
                 {% endif %}
             </a>
             {% if not post.deleted %}
