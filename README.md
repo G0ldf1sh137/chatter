@@ -125,16 +125,16 @@ https://<service-name>.onrender.com/accounts/google/login/callback/
 ```
 then set `GOOGLE_OAUTH_CLIENT_ID`/`GOOGLE_OAUTH_CLIENT_SECRET` in Render's environment (same values as local dev — one OAuth client can have multiple redirect URIs registered).
 
-### 5. Optional: persistent avatar storage
+### 5. Optional: persistent file storage (avatars, post images)
 
-Render's free-tier web service has **ephemeral disk** — uploaded avatars are wiped on every redeploy/restart unless you switch to S3-compatible storage. [Cloudflare R2](https://developers.cloudflare.com/r2/) has a permanent free tier (10GB storage, no egress fees) and works as a drop-in S3-compatible backend. Once you have a bucket and API token, set in Render's environment:
+Render's free-tier web service has **ephemeral disk** — uploaded avatars and post images are both wiped on every redeploy/restart unless you switch to S3-compatible storage. [Cloudflare R2](https://developers.cloudflare.com/r2/) has a permanent free tier (10GB storage, no egress fees) and works as a drop-in S3-compatible backend. Once you have a bucket and API token, set in Render's environment:
 ```
 AWS_STORAGE_BUCKET_NAME=<your-bucket-name>
 AWS_ACCESS_KEY_ID=<r2-access-key-id>
 AWS_SECRET_ACCESS_KEY=<r2-secret-access-key>
 AWS_S3_ENDPOINT_URL=https://<account-id>.r2.cloudflarestorage.com
 ```
-Leave these unset to keep local disk storage (fine until you care about avatars surviving a redeploy).
+Leave these unset to keep local disk storage (fine until you care about uploads surviving a redeploy).
 
 ### Known free-tier limitations
 

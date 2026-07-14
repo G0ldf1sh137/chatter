@@ -1126,6 +1126,93 @@ class MessageSendViewTests(TestCase):
         self.assertEqual(Message.objects.count(), 0)
 
 
+class MessageImageTests(TestCase):
+    def setUp(self):
+        self.alice = make_user("alice")
+        self.bob = make_user("bob")
+        self.conversation = get_or_create_conversation(self.alice, self.bob)
+        media_root = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, media_root, ignore_errors=True)
+        override = override_settings(MEDIA_ROOT=media_root)
+        override.enable()
+        self.addCleanup(override.disable)
+
+    def test_sending_an_image_only_message_succeeds(self):
+        self.client.force_login(self.alice)
+        image = SimpleUploadedFile("photo.gif", TINY_GIF, content_type="image/gif")
+
+        response = self.client.post(
+            reverse("message-send", args=[self.conversation.pk]), {"body": "", "image": image}
+        )
+
+        self.assertRedirects(response, reverse("conversation-detail", args=[self.conversation.pk]))
+        message = Message.objects.get()
+        self.assertEqual(message.body, "")
+        self.assertTrue(message.image)
+
+    def test_sending_a_message_with_body_and_image_succeeds(self):
+        self.client.force_login(self.alice)
+        image = SimpleUploadedFile("photo.gif", TINY_GIF, content_type="image/gif")
+
+        self.client.post(
+            reverse("message-send", args=[self.conversation.pk]), {"body": "look at this", "image": image}
+        )
+
+        message = Message.objects.get()
+        self.assertEqual(message.body, "look at this")
+        self.assertTrue(message.image)
+
+    def test_sending_with_neither_body_nor_image_is_rejected(self):
+        self.client.force_login(self.alice)
+
+        self.client.post(reverse("message-send", args=[self.conversation.pk]), {"body": ""})
+
+        self.assertEqual(Message.objects.count(), 0)
+
+    @override_settings(MAX_MESSAGE_IMAGE_UPLOAD_SIZE=10)
+    def test_oversized_image_rejected(self):
+        self.client.force_login(self.alice)
+        image = SimpleUploadedFile("photo.gif", TINY_GIF, content_type="image/gif")
+
+        self.client.post(
+            reverse("message-send", args=[self.conversation.pk]), {"body": "", "image": image}
+        )
+
+        self.assertEqual(Message.objects.count(), 0)
+
+    def test_conversation_page_renders_image_tag_for_a_message_with_one(self):
+        Message.objects.create(
+            conversation=self.conversation,
+            sender=self.alice,
+            image=SimpleUploadedFile("photo.gif", TINY_GIF, content_type="image/gif"),
+        )
+        self.client.force_login(self.bob)
+
+        response = self.client.get(reverse("conversation-detail", args=[self.conversation.pk]))
+
+        self.assertContains(response, "<img")
+
+    def test_conversation_page_does_not_render_image_tag_for_a_text_only_message(self):
+        Message.objects.create(conversation=self.conversation, sender=self.alice, body="just text")
+        self.client.force_login(self.bob)
+
+        response = self.client.get(reverse("conversation-detail", args=[self.conversation.pk]))
+
+        self.assertNotContains(response, "<img")
+
+    def test_image_only_message_does_not_render_an_empty_body_div(self):
+        Message.objects.create(
+            conversation=self.conversation,
+            sender=self.alice,
+            image=SimpleUploadedFile("photo.gif", TINY_GIF, content_type="image/gif"),
+        )
+        self.client.force_login(self.bob)
+
+        response = self.client.get(reverse("conversation-detail", args=[self.conversation.pk]))
+
+        self.assertNotContains(response, "message-body")
+
+
 class MessageMarkdownRenderingTests(TestCase):
     def setUp(self):
         self.alice = make_user("alice")

@@ -112,7 +112,10 @@ class Message(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     conversation = models.ForeignKey(Conversation, on_delete=models.CASCADE, related_name="messages")
     sender = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="sent_messages")
-    body = models.TextField(max_length=5000)
+    # blank=True since a message can be image-only - see MessageForm.clean()
+    # for the "at least one of body/image" requirement.
+    body = models.TextField(max_length=5000, blank=True)
+    image = models.ImageField(upload_to="message_images/", blank=True)
     # Whether the *other* participant has read it - a conversation only ever
     # has two people, so there's no need for a per-recipient read-receipt
     # table the way a group chat would need.

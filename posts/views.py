@@ -558,9 +558,14 @@ class MessageSendView(LoginRequiredMixin, View):
             messages.error(request, "You can't message this user.")
             return redirect("conversation-detail", pk=conversation.pk)
 
-        form = MessageForm(request.POST)
+        form = MessageForm(request.POST, request.FILES)
         if form.is_valid():
-            Message.objects.create(conversation=conversation, sender=request.user, body=form.cleaned_data["body"])
+            Message.objects.create(
+                conversation=conversation,
+                sender=request.user,
+                body=form.cleaned_data["body"],
+                image=form.cleaned_data["image"],
+            )
         return redirect("conversation-detail", pk=conversation.pk)
 
 

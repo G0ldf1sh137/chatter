@@ -45,7 +45,20 @@ class CommentEditForm(forms.ModelForm):
 class MessageForm(forms.ModelForm):
     class Meta:
         model = Message
-        fields = ["body"]
+        fields = ["body", "image"]
         widgets = {
             "body": forms.Textarea(attrs={"rows": 2, "placeholder": "Write a message... Markdown supported"}),
         }
+
+    def clean_image(self):
+        image = self.cleaned_data.get("image")
+        if image and hasattr(image, "size") and image.size > settings.MAX_MESSAGE_IMAGE_UPLOAD_SIZE:
+            max_mb = settings.MAX_MESSAGE_IMAGE_UPLOAD_SIZE // (1024 * 1024)
+            raise forms.ValidationError(f"Image must be smaller than {max_mb}MB.")
+        return image
+
+    def clean(self):
+        cleaned_data = super().clean()
+        if not cleaned_data.get("body") and not cleaned_data.get("image"):
+            raise forms.ValidationError("Message can't be empty.")
+        return cleaned_data

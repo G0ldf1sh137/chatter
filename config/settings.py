@@ -190,6 +190,9 @@ MAX_AVATAR_UPLOAD_SIZE = 2 * 1024 * 1024
 # Max upload size for post image attachments, enforced in posts.forms.
 MAX_POST_IMAGE_UPLOAD_SIZE = 5 * 1024 * 1024
 
+# Max upload size for message image attachments, enforced in posts.forms.
+MAX_MESSAGE_IMAGE_UPLOAD_SIZE = 5 * 1024 * 1024
+
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 LOGIN_URL = "login"
