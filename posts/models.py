@@ -222,11 +222,25 @@ class SavedPost(models.Model):
         return f"{self.user} saved {self.post_id}"
 
 
+class Repost(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="reposts")
+    post = models.ForeignKey(Post, on_delete=models.CASCADE, related_name="reposts")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=["user", "post"], name="unique_repost")]
+
+    def __str__(self):
+        return f"{self.user} reposted {self.post_id}"
+
+
 class Notification(models.Model):
     class Kind(models.TextChoices):
         MENTION = "mention", "Mention"
         REPLY = "reply", "Reply"
         UPVOTE = "upvote", "Upvote"
+        REPOST = "repost", "Repost"
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     kind = models.CharField(max_length=10, choices=Kind.choices, default=Kind.MENTION)

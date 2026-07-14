@@ -64,3 +64,8 @@ def poll_results(poll, viewer):
 @register.filter(name="poll_vote_count")
 def poll_vote_count(poll):
     return sum(len(o.votes.all()) for o in poll.options.all())
+
+
+@register.filter(name="repost_count")
+def repost_count(post):
+    return len(post.reposts.all())

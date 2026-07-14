@@ -13,8 +13,8 @@ from django.views.generic import CreateView, DetailView, FormView, ListView, Tem
 
 from games import stats as game_stats
 from games.models import Match
-from posts.models import CommentVote, PostVote
-from posts.views import annotate_saved, annotate_votes
+from posts.models import CommentVote, Post, PostVote, Repost
+from posts.views import annotate_reposted, annotate_saved, annotate_votes
 
 from .emails import send_verification_email
 from .forms import ProfileForm, RegistrationForm, ResendVerificationForm, UserProfileForm
@@ -94,14 +94,24 @@ class ProfileView(DetailView):
         profile_user = context["profile_user"]
         context["profile"], _ = Profile.objects.get_or_create(user=profile_user)
         posts = annotate_votes(
-            profile_user.posts.all().prefetch_related("reactions", "poll__options__votes"),
+            profile_user.posts.all().prefetch_related("reactions", "poll__options__votes", "reposts"),
             PostVote,
             "post",
             self.request.user,
         )
         posts = annotate_saved(posts, self.request.user)
+        posts = annotate_reposted(posts, self.request.user)
         context["posts"] = posts[:PROFILE_ITEM_LIMIT]
         context["post_count"] = profile_user.posts.count()
+        reposts = Post.objects.filter(reposts__user=profile_user, deleted=False).select_related(
+            "author", "author__profile"
+        ).prefetch_related("reactions", "poll__options__votes", "reposts")
+        reposts = reposts.order_by("-reposts__created_at")
+        reposts = annotate_votes(reposts, PostVote, "post", self.request.user)
+        reposts = annotate_saved(reposts, self.request.user)
+        reposts = annotate_reposted(reposts, self.request.user)
+        context["reposts"] = reposts[:PROFILE_ITEM_LIMIT]
+        context["repost_count"] = Repost.objects.filter(user=profile_user).count()
         comments = profile_user.comments.select_related("post").order_by("-created_at")
         comments = annotate_votes(comments, CommentVote, "comment", self.request.user)
         context["comments"] = comments[:PROFILE_ITEM_LIMIT]

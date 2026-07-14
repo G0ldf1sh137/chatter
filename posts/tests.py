@@ -28,10 +28,11 @@ from .models import (
     PostReaction,
     PostVote,
     Report,
+    Repost,
     SavedPost,
     Tag,
 )
-from .templatetags.post_extras import group_reactions, poll_results, poll_vote_count
+from .templatetags.post_extras import group_reactions, poll_results, poll_vote_count, repost_count
 from .views import (
     build_comment_tree,
     get_or_create_conversation,
@@ -1252,6 +1253,120 @@ class PollRenderingTests(TestCase):
         plain_post = Post.objects.create(author=self.author, body="no poll")
         response = self.client.get(reverse("post-detail", args=[plain_post.pk]))
         self.assertNotContains(response, "poll-vote")
+
+
+class PostRepostViewTests(TestCase):
+    def setUp(self):
+        self.author = make_user("alice")
+        self.reposter = make_user("bob")
+        self.post = Post.objects.create(author=self.author, body="hello")
+
+    def test_authenticated_user_can_repost(self):
+        self.client.force_login(self.reposter)
+        self.client.post(reverse("post-repost", args=[self.post.pk]))
+        self.assertTrue(Repost.objects.filter(user=self.reposter, post=self.post).exists())
+
+    def test_reposting_twice_does_not_create_a_duplicate(self):
+        self.client.force_login(self.reposter)
+        self.client.post(reverse("post-repost", args=[self.post.pk]))
+        self.client.post(reverse("post-repost", args=[self.post.pk]))
+        self.assertEqual(Repost.objects.filter(user=self.reposter, post=self.post).count(), 1)
+
+    def test_unreposting_removes_it(self):
+        Repost.objects.create(user=self.reposter, post=self.post)
+        self.client.force_login(self.reposter)
+        self.client.post(reverse("post-unrepost", args=[self.post.pk]))
+        self.assertFalse(Repost.objects.filter(user=self.reposter, post=self.post).exists())
+
+    def test_anonymous_redirected_to_login(self):
+        response = self.client.post(reverse("post-repost", args=[self.post.pk]))
+        self.assertEqual(response.status_code, 302)
+        self.assertIn(reverse("login"), response.url)
+        self.assertFalse(Repost.objects.exists())
+
+    def test_author_can_repost_own_post(self):
+        self.client.force_login(self.author)
+        self.client.post(reverse("post-repost", args=[self.post.pk]))
+        self.assertTrue(Repost.objects.filter(user=self.author, post=self.post).exists())
+
+
+class RepostNotificationTests(TestCase):
+    def setUp(self):
+        self.alice = make_user("alice")
+        self.bob = make_user("bob")
+        self.post = Post.objects.create(author=self.alice, body="a post")
+
+    def test_reposting_someone_elses_post_notifies_them(self):
+        self.client.force_login(self.bob)
+        self.client.post(reverse("post-repost", args=[self.post.pk]))
+        notification = Notification.objects.get(kind=Notification.Kind.REPOST)
+        self.assertEqual(notification.recipient, self.alice)
+        self.assertEqual(notification.actor, self.bob)
+
+    def test_reposting_your_own_post_does_not_notify(self):
+        self.client.force_login(self.alice)
+        self.client.post(reverse("post-repost", args=[self.post.pk]))
+        self.assertFalse(Notification.objects.filter(kind=Notification.Kind.REPOST).exists())
+
+    def test_disabling_repost_notifications_suppresses_them(self):
+        self.alice.profile.notify_on_reposts = False
+        self.alice.profile.save(update_fields=["notify_on_reposts"])
+        self.client.force_login(self.bob)
+        self.client.post(reverse("post-repost", args=[self.post.pk]))
+        self.assertFalse(Notification.objects.filter(kind=Notification.Kind.REPOST).exists())
+
+    def test_muting_suppresses_a_repost_notification(self):
+        Mute.objects.create(muter=self.alice, muted=self.bob)
+        self.client.force_login(self.bob)
+        self.client.post(reverse("post-repost", args=[self.post.pk]))
+        self.assertFalse(Notification.objects.filter(kind=Notification.Kind.REPOST).exists())
+
+    def test_reposting_again_after_unrepost_notifies_again(self):
+        self.client.force_login(self.bob)
+        self.client.post(reverse("post-repost", args=[self.post.pk]))
+        self.client.post(reverse("post-unrepost", args=[self.post.pk]))
+        Notification.objects.filter(kind=Notification.Kind.REPOST).delete()
+
+        self.client.post(reverse("post-repost", args=[self.post.pk]))
+
+        self.assertTrue(Notification.objects.filter(kind=Notification.Kind.REPOST).exists())
+
+
+class RepostCountFilterTests(TestCase):
+    def setUp(self):
+        self.author = make_user("alice")
+        self.post = Post.objects.create(author=self.author, body="hello")
+
+    def test_count_is_zero_with_no_reposts(self):
+        self.assertEqual(repost_count(self.post), 0)
+
+    def test_count_reflects_number_of_reposts(self):
+        Repost.objects.create(user=make_user("bob"), post=self.post)
+        Repost.objects.create(user=make_user("carol"), post=self.post)
+        self.assertEqual(repost_count(self.post), 2)
+
+
+class RepostRenderingTests(TestCase):
+    def setUp(self):
+        self.author = make_user("alice")
+        self.reposter = make_user("bob")
+        self.post = Post.objects.create(author=self.author, body="hello")
+        Repost.objects.create(user=self.reposter, post=self.post)
+
+    def test_feed_shows_repost_button_and_count(self):
+        self.client.force_login(self.reposter)
+        response = self.client.get(reverse("feed"))
+        self.assertContains(response, reverse("post-unrepost", args=[self.post.pk]))
+
+    def test_post_detail_shows_repost_button(self):
+        self.client.force_login(self.author)
+        response = self.client.get(reverse("post-detail", args=[self.post.pk]))
+        self.assertContains(response, reverse("post-repost", args=[self.post.pk]))
+
+    def test_anonymous_visitor_sees_no_repost_button(self):
+        response = self.client.get(reverse("post-detail", args=[self.post.pk]))
+        self.assertNotContains(response, reverse("post-repost", args=[self.post.pk]))
+        self.assertNotContains(response, reverse("post-unrepost", args=[self.post.pk]))
 
 
 class MarkdownRenderingTests(TestCase):

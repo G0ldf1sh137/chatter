@@ -61,6 +61,7 @@ class ProfileForm(forms.ModelForm):
             "notify_on_mentions",
             "notify_on_replies",
             "notify_on_upvotes",
+            "notify_on_reposts",
         ]
         widgets = {
             "bio": forms.Textarea(attrs={"rows": 4}),

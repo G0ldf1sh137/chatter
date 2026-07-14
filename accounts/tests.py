@@ -13,7 +13,7 @@ from django.test import RequestFactory, TestCase, override_settings
 from django.urls import reverse
 
 from games.models import Match, SinglePlayerResult
-from posts.models import Comment, CommentVote, Conversation, Post, PostVote
+from posts.models import Comment, CommentVote, Conversation, Post, PostVote, Repost
 
 from .adapter import SocialAccountAdapter
 from .models import Block, Follow, Mute, Profile, is_blocked_either_way, is_muted_or_blocked
@@ -302,6 +302,49 @@ class ProfileViewTests(TestCase):
         # post: +1 self-upvote, +1 voter1, +1 voter2 = 3. comment: +1 self-upvote, -1 voter1 = 0.
         self.assertContains(response, "3 karma")
         self.assertEqual(response.context["karma"], 3)
+
+
+class ProfileRepostsTests(TestCase):
+    def setUp(self):
+        self.carol = User.objects.create_user(username="carol", password="correct-horse-battery-staple")
+        self.dave = User.objects.create_user(username="dave", password="correct-horse-battery-staple")
+        self.post1 = Post.objects.create(author=self.dave, body="first")
+        self.post2 = Post.objects.create(author=self.dave, body="second")
+
+    def test_profile_lists_reposted_posts_most_recent_first(self):
+        Repost.objects.create(user=self.carol, post=self.post1)
+        Repost.objects.create(user=self.carol, post=self.post2)
+
+        response = self.client.get(reverse("profile", args=["carol"]))
+
+        self.assertEqual(list(response.context["reposts"]), [self.post2, self.post1])
+        self.assertEqual(response.context["repost_count"], 2)
+        self.assertContains(response, "2 reposts")
+
+    def test_deleted_original_drops_out_of_the_list(self):
+        Repost.objects.create(user=self.carol, post=self.post1)
+        self.post1.deleted = True
+        self.post1.body = ""
+        self.post1.save(update_fields=["deleted", "body"])
+
+        response = self.client.get(reverse("profile", args=["carol"]))
+
+        self.assertNotIn(self.post1, list(response.context["reposts"]))
+
+    def test_reposts_are_not_cross_contaminated_between_users(self):
+        Repost.objects.create(user=self.carol, post=self.post1)
+        Repost.objects.create(user=self.dave, post=self.post2)
+
+        carol_response = self.client.get(reverse("profile", args=["carol"]))
+        dave_response = self.client.get(reverse("profile", args=["dave"]))
+
+        self.assertEqual(list(carol_response.context["reposts"]), [self.post1])
+        self.assertEqual(list(dave_response.context["reposts"]), [self.post2])
+
+    def test_profile_with_no_reposts_shows_empty_state(self):
+        response = self.client.get(reverse("profile", args=["carol"]))
+        self.assertContains(response, "No reposts yet.")
+        self.assertEqual(response.context["repost_count"], 0)
 
 
 class AtUsernameFilterTests(TestCase):

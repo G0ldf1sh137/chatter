@@ -1,0 +1,20 @@
+{% load post_extras %}
+{% if user.is_authenticated %}
+    {% if post.is_reposted %}
+        <form method="post" action="{% url 'post-unrepost' post.pk %}" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="mt-0 flex items-center gap-1 rounded-lg border-none bg-transparent p-1 text-accent transition-colors hover:bg-border/60" aria-label="Undo repost">
+                <svg viewBox="0 0 20 20" fill="currentColor" class="h-4 w-4"><path d="M6 3a1 1 0 011 1v1h6a3 3 0 013 3v3a1 1 0 11-2 0V8a1 1 0 00-1-1H7v1a1 1 0 01-1.7.7l-2-2a1 1 0 010-1.4l2-2A1 1 0 016 3zm8 10a1 1 0 01-1 1v1H7a3 3 0 01-3-3v-3a1 1 0 112 0v3a1 1 0 001 1h6v-1a1 1 0 011.7-.7l2 2a1 1 0 010 1.4l-2 2A1 1 0 0114 17v-1z"/></svg>
+                {% if post|repost_count %}<span class="text-xs">{{ post|repost_count }}</span>{% endif %}
+            </button>
+        </form>
+    {% else %}
+        <form method="post" action="{% url 'post-repost' post.pk %}" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="mt-0 flex items-center gap-1 rounded-lg border-none bg-transparent p-1 text-muted transition-colors hover:bg-border/60 hover:text-fg" aria-label="Repost">
+                <svg viewBox="0 0 20 20" fill="currentColor" class="h-4 w-4"><path d="M6 3a1 1 0 011 1v1h6a3 3 0 013 3v3a1 1 0 11-2 0V8a1 1 0 00-1-1H7v1a1 1 0 01-1.7.7l-2-2a1 1 0 010-1.4l2-2A1 1 0 016 3zm8 10a1 1 0 01-1 1v1H7a3 3 0 01-3-3v-3a1 1 0 112 0v3a1 1 0 001 1h6v-1a1 1 0 011.7-.7l2 2a1 1 0 010 1.4l-2 2A1 1 0 0114 17v-1z"/></svg>
+                {% if post|repost_count %}<span class="text-xs">{{ post|repost_count }}</span>{% endif %}
+            </button>
+        </form>
+    {% endif %}
+{% endif %}

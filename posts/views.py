@@ -31,6 +31,7 @@ from .models import (
     PostReaction,
     PostVote,
     Report,
+    Repost,
     SavedPost,
     Tag,
 )
@@ -41,6 +42,7 @@ NOTIFICATION_PREFERENCE_FIELDS = {
     Notification.Kind.MENTION: "notify_on_mentions",
     Notification.Kind.REPLY: "notify_on_replies",
     Notification.Kind.UPVOTE: "notify_on_upvotes",
+    Notification.Kind.REPOST: "notify_on_reposts",
 }
 
 
@@ -99,6 +101,13 @@ def annotate_saved(queryset, user):
         return queryset.annotate(is_saved=Value(False, output_field=BooleanField()))
     saved_qs = SavedPost.objects.filter(post=OuterRef("pk"), user=user)
     return queryset.annotate(is_saved=Exists(saved_qs))
+
+
+def annotate_reposted(queryset, user):
+    if not user.is_authenticated:
+        return queryset.annotate(is_reposted=Value(False, output_field=BooleanField()))
+    reposted_qs = Repost.objects.filter(post=OuterRef("pk"), user=user)
+    return queryset.annotate(is_reposted=Exists(reposted_qs))
 
 
 def toggle_vote(vote_model, lookup, user, value):
@@ -193,12 +202,13 @@ class FeedView(ListView):
         return sort if sort in SORT_CHOICES else SORT_DEFAULT
 
     def get_base_queryset(self):
-        queryset = Post.objects.select_related("author", "author__profile").prefetch_related("reactions", "poll__options__votes")
+        queryset = Post.objects.select_related("author", "author__profile").prefetch_related("reactions", "poll__options__votes", "reposts")
         hidden = hidden_author_ids(self.request.user)
         if hidden:
             queryset = queryset.exclude(author_id__in=hidden)
         queryset = annotate_votes(queryset, PostVote, "post", self.request.user)
-        return annotate_saved(queryset, self.request.user)
+        queryset = annotate_saved(queryset, self.request.user)
+        return annotate_reposted(queryset, self.request.user)
 
     def get_queryset(self):
         queryset = self.get_base_queryset()
@@ -252,7 +262,7 @@ class SearchView(TemplateView):
 
         posts = Post.objects.filter(body__icontains=query, deleted=False).select_related(
             "author", "author__profile"
-        ).prefetch_related("reactions", "poll__options__votes")
+        ).prefetch_related("reactions", "poll__options__votes", "reposts")
         comments = Comment.objects.filter(body__icontains=query, deleted=False).select_related(
             "author", "author__profile", "post"
         )
@@ -261,6 +271,7 @@ class SearchView(TemplateView):
             comments = comments.exclude(author_id__in=hidden)
         posts = annotate_votes(posts.order_by("-created_at"), PostVote, "post", self.request.user)
         posts = annotate_saved(posts, self.request.user)
+        posts = annotate_reposted(posts, self.request.user)
         comments = annotate_votes(comments.order_by("-created_at"), CommentVote, "comment", self.request.user)
 
         if search_type == SEARCH_TYPE_POSTS:
@@ -317,9 +328,10 @@ class PostDetailView(DetailView):
     context_object_name = "post"
 
     def get_queryset(self):
-        queryset = Post.objects.select_related("author", "author__profile").prefetch_related("reactions", "poll__options__votes")
+        queryset = Post.objects.select_related("author", "author__profile").prefetch_related("reactions", "poll__options__votes", "reposts")
         queryset = annotate_votes(queryset, PostVote, "post", self.request.user)
-        return annotate_saved(queryset, self.request.user)
+        queryset = annotate_saved(queryset, self.request.user)
+        return annotate_reposted(queryset, self.request.user)
 
     def get_comment_tree(self):
         comments = self.object.comments.select_related("author", "author__profile")
@@ -410,6 +422,22 @@ class PostUnsaveView(LoginRequiredMixin, View):
         return redirect_back(request, post.get_absolute_url())
 
 
+class PostRepostView(LoginRequiredMixin, View):
+    def post(self, request, pk):
+        post = get_object_or_404(Post, pk=pk)
+        _, created = Repost.objects.get_or_create(user=request.user, post=post)
+        if created:
+            create_notification(Notification.Kind.REPOST, post.author, request.user, post)
+        return redirect_back(request, post.get_absolute_url())
+
+
+class PostUnrepostView(LoginRequiredMixin, View):
+    def post(self, request, pk):
+        post = get_object_or_404(Post, pk=pk)
+        Repost.objects.filter(user=request.user, post=post).delete()
+        return redirect_back(request, post.get_absolute_url())
+
+
 class SavedPostsView(LoginRequiredMixin, ListView):
     model = Post
     template_name = "posts/saved_posts.html"
@@ -419,10 +447,11 @@ class SavedPostsView(LoginRequiredMixin, ListView):
     def get_queryset(self):
         queryset = Post.objects.filter(saved_by__user=self.request.user).select_related(
             "author", "author__profile"
-        ).prefetch_related("reactions", "poll__options__votes")
+        ).prefetch_related("reactions", "poll__options__votes", "reposts")
         queryset = queryset.order_by("-saved_by__created_at")
         queryset = annotate_votes(queryset, PostVote, "post", self.request.user)
-        return annotate_saved(queryset, self.request.user)
+        queryset = annotate_saved(queryset, self.request.user)
+        return annotate_reposted(queryset, self.request.user)
 
     def render_to_response(self, context, **response_kwargs):
         if not is_ajax(self.request):
@@ -476,12 +505,13 @@ class TagDetailView(ListView):
         self.tag_name = self.kwargs["name"].lower()
         queryset = Post.objects.filter(tags__name=self.tag_name, deleted=False).select_related(
             "author", "author__profile"
-        ).prefetch_related("reactions", "poll__options__votes")
+        ).prefetch_related("reactions", "poll__options__votes", "reposts")
         hidden = hidden_author_ids(self.request.user)
         if hidden:
             queryset = queryset.exclude(author_id__in=hidden)
         queryset = annotate_votes(queryset.order_by("-created_at"), PostVote, "post", self.request.user)
-        return annotate_saved(queryset, self.request.user)
+        queryset = annotate_saved(queryset, self.request.user)
+        return annotate_reposted(queryset, self.request.user)
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)

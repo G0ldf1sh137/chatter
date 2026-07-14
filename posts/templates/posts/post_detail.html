@@ -17,6 +17,7 @@
                     <span>&middot; {{ post.created_at }}</span>
                     {% if post.edited %}<span class="italic">&middot; edited</span>{% endif %}
                     <div class="ml-auto flex items-center gap-2">
+                        {% include "_repost_button.html" %}
                         {% include "_save_button.html" %}
                         {% if user.is_authenticated and user != post.author %}
                             <label for="report-post-toggle" class="cursor-pointer rounded-lg p-1 text-muted transition-colors hover:bg-border/60 hover:text-fg" aria-label="Report post">

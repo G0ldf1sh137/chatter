@@ -17,6 +17,7 @@ class Profile(models.Model):
     notify_on_mentions = models.BooleanField(default=True, verbose_name="Notify me when I'm mentioned")
     notify_on_replies = models.BooleanField(default=True, verbose_name="Notify me on replies")
     notify_on_upvotes = models.BooleanField(default=True, verbose_name="Notify me on upvotes")
+    notify_on_reposts = models.BooleanField(default=True, verbose_name="Notify me on reposts")
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
