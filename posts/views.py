@@ -354,6 +354,68 @@ class SearchView(TemplateView):
         return context
 
 
+def poll_removes_voted_option(existing_poll, poll_form):
+    cleaned = poll_form.cleaned_data
+    existing_options = list(existing_poll.options.order_by("order"))
+    if not cleaned.get("has_poll"):
+        # Blanking the whole poll removes every option at once - same rule.
+        return any(option.votes.exists() for option in existing_options)
+    raw_texts = [(cleaned.get(f"option_{i}") or "").strip() for i in range(1, PollForm.MAX_OPTIONS + 1)]
+    for i, option in enumerate(existing_options):
+        text = raw_texts[i] if i < len(raw_texts) else ""
+        if not text and option.votes.exists():
+            return True
+    return False
+
+
+def save_poll(post, existing_poll, poll_form):
+    # Reconciles by position (option_<n> <-> the option currently at index n-1),
+    # not against PollForm.clean()'s compacted poll_options list - compacting
+    # would let a blanked middle option silently reassign a *different*
+    # surviving option's text (and therefore its already-cast votes) onto the
+    # wrong row. Positional reconciliation only ever updates or removes a
+    # given option's own row, never another one's.
+    cleaned = poll_form.cleaned_data
+    if existing_poll is None:
+        if not cleaned.get("has_poll"):
+            return
+        poll = Poll.objects.create(post=post, question=cleaned["question"])
+        PollOption.objects.bulk_create(
+            PollOption(poll=poll, text=text, order=i) for i, text in enumerate(cleaned["poll_options"])
+        )
+        return
+
+    if not cleaned.get("has_poll"):
+        existing_poll.delete()
+        return
+
+    if existing_poll.question != cleaned["question"]:
+        existing_poll.question = cleaned["question"]
+        existing_poll.save(update_fields=["question"])
+
+    existing_options = list(existing_poll.options.order_by("order"))
+    raw_texts = [(cleaned.get(f"option_{i}") or "").strip() for i in range(1, PollForm.MAX_OPTIONS + 1)]
+
+    kept = []
+    for i, option in enumerate(existing_options):
+        text = raw_texts[i] if i < len(raw_texts) else ""
+        if not text:
+            option.delete()
+            continue
+        if option.text != text:
+            option.text = text
+            option.save(update_fields=["text"])
+        kept.append(option)
+
+    for text in (t for t in raw_texts[len(existing_options):] if t):
+        kept.append(PollOption.objects.create(poll=existing_poll, text=text, order=len(kept)))
+
+    for order, option in enumerate(kept):
+        if option.order != order:
+            option.order = order
+            option.save(update_fields=["order"])
+
+
 class PostCreateView(LoginRequiredMixin, CreateView):
     model = Post
     form_class = PostForm
@@ -370,12 +432,7 @@ class PostCreateView(LoginRequiredMixin, CreateView):
         poll_form = PollForm(request.POST)
         if form.is_valid() and poll_form.is_valid():
             response = self.form_valid(form)
-            if poll_form.cleaned_data.get("has_poll"):
-                poll = Poll.objects.create(post=self.object, question=poll_form.cleaned_data["question"])
-                PollOption.objects.bulk_create(
-                    PollOption(poll=poll, text=text, order=i)
-                    for i, text in enumerate(poll_form.cleaned_data["poll_options"])
-                )
+            save_poll(self.object, None, poll_form)
             return response
         return self.render_to_response(self.get_context_data(form=form, poll_form=poll_form))
 
@@ -460,6 +517,32 @@ class PostEditView(LoginRequiredMixin, UserPassesTestMixin, UpdateView):
     def test_func(self):
         post = self.get_object()
         return post.author_id == self.request.user.id and not post.deleted
+
+    def get_context_data(self, **kwargs):
+        if "poll_form" not in kwargs:
+            poll = getattr(self.object, "poll", None)
+            initial = {}
+            if poll:
+                initial["question"] = poll.question
+                for i, option in enumerate(poll.options.order_by("order"), start=1):
+                    initial[f"option_{i}"] = option.text
+            kwargs["poll_form"] = PollForm(initial=initial)
+        kwargs.setdefault("poll_option_range", range(1, PollForm.MAX_OPTIONS + 1))
+        return super().get_context_data(**kwargs)
+
+    def post(self, request, *args, **kwargs):
+        self.object = self.get_object()
+        form = self.get_form()
+        poll_form = PollForm(request.POST)
+        existing_poll = getattr(self.object, "poll", None)
+        if form.is_valid() and poll_form.is_valid():
+            if existing_poll and poll_removes_voted_option(existing_poll, poll_form):
+                poll_form.add_error(None, "Can't remove a poll option that already has votes.")
+                return self.render_to_response(self.get_context_data(form=form, poll_form=poll_form))
+            response = self.form_valid(form)
+            save_poll(self.object, existing_poll, poll_form)
+            return response
+        return self.render_to_response(self.get_context_data(form=form, poll_form=poll_form))
 
     def form_valid(self, form):
         was_draft = form.instance.is_draft

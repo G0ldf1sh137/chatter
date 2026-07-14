@@ -9,24 +9,24 @@
         <form method="post" enctype="multipart/form-data">
             {% csrf_token %}
             {{ form.as_p }}
-            {% if not object %}
-                <details class="mb-4 rounded-lg border border-border p-3">
-                    <summary class="cursor-pointer text-sm font-medium">Add a poll (optional)</summary>
-                    <div class="mt-3 space-y-2">
-                        <p>{{ poll_form.question.label_tag }} {{ poll_form.question }}</p>
-                        {{ poll_form.question.errors }}
-                        <div id="poll-options" class="space-y-1">
-                            {% for n in poll_option_range %}
-                                <div {% if n > poll_form.MIN_OPTIONS %}class="hidden" data-poll-option{% else %}data-poll-option{% endif %}>
-                                    {{ poll_form|poll_option_field:n }}
+            <details class="mb-4 rounded-lg border border-border p-3" {% if object.poll %}open{% endif %}>
+                <summary class="cursor-pointer text-sm font-medium">{% if object.poll %}Edit poll{% else %}Add a poll (optional){% endif %}</summary>
+                <div class="mt-3 space-y-2">
+                    <p>{{ poll_form.question.label_tag }} {{ poll_form.question }}</p>
+                    {{ poll_form.question.errors }}
+                    <div id="poll-options" class="space-y-1">
+                        {% for n in poll_option_range %}
+                            {% with field=poll_form|poll_option_field:n %}
+                                <div {% if n > poll_form.MIN_OPTIONS and not field.value %}class="hidden" data-poll-option{% else %}data-poll-option{% endif %}>
+                                    {{ field }}
                                 </div>
-                            {% endfor %}
-                        </div>
-                        {{ poll_form.non_field_errors }}
-                        <button type="button" id="add-poll-option" class="text-sm font-medium text-accent">+ Add option</button>
+                            {% endwith %}
+                        {% endfor %}
                     </div>
-                </details>
-            {% endif %}
+                    {{ poll_form.non_field_errors }}
+                    <button type="button" id="add-poll-option" class="text-sm font-medium text-accent">+ Add option</button>
+                </div>
+            </details>
             {% if object and not object.is_draft %}
                 <button type="submit">Save</button>
             {% else %}

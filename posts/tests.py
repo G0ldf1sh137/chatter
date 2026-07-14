@@ -1261,6 +1261,108 @@ class PostCreatePollTests(TestCase):
         self.assertFalse(Post.objects.exists())
 
 
+class PollEditTests(TestCase):
+    def setUp(self):
+        self.author = make_user("alice")
+        self.voter1 = make_user("bob")
+        self.voter2 = make_user("carol")
+        self.post = Post.objects.create(author=self.author, body="vote now")
+        self.poll = Poll.objects.create(post=self.post, question="Best color?")
+        self.option_a = PollOption.objects.create(poll=self.poll, text="Red", order=0)
+        self.option_b = PollOption.objects.create(poll=self.poll, text="Blue", order=1)
+        self.option_c = PollOption.objects.create(poll=self.poll, text="Green", order=2)
+        PollVote.objects.create(user=self.voter1, poll=self.poll, option=self.option_a)
+        PollVote.objects.create(user=self.voter2, poll=self.poll, option=self.option_c)
+        self.client.force_login(self.author)
+
+    def edit_data(self, **overrides):
+        data = {
+            "body": "vote now",
+            "question": "Best color?",
+            "option_1": "Red",
+            "option_2": "Blue",
+            "option_3": "Green",
+        }
+        data.update(overrides)
+        return data
+
+    def test_get_edit_page_prefills_existing_poll(self):
+        response = self.client.get(reverse("post-edit", args=[self.post.pk]))
+        poll_form = response.context["poll_form"]
+        self.assertEqual(poll_form.initial["question"], "Best color?")
+        self.assertEqual(poll_form.initial["option_1"], "Red")
+        self.assertEqual(poll_form.initial["option_2"], "Blue")
+        self.assertEqual(poll_form.initial["option_3"], "Green")
+
+    def test_editing_question_text_updates_poll(self):
+        self.client.post(reverse("post-edit", args=[self.post.pk]), self.edit_data(question="Favorite color?"))
+        self.poll.refresh_from_db()
+        self.assertEqual(self.poll.question, "Favorite color?")
+
+    def test_editing_option_text_preserves_same_row_and_its_votes(self):
+        self.client.post(reverse("post-edit", args=[self.post.pk]), self.edit_data(option_1="Crimson"))
+        self.option_a.refresh_from_db()
+        self.assertEqual(self.option_a.text, "Crimson")
+        vote = PollVote.objects.get(user=self.voter1)
+        self.assertEqual(vote.option_id, self.option_a.pk)
+
+    def test_adding_a_new_option_appends_it(self):
+        self.client.post(reverse("post-edit", args=[self.post.pk]), self.edit_data(option_4="Yellow"))
+        self.assertEqual(self.poll.options.count(), 4)
+        new_option = self.poll.options.get(text="Yellow")
+        self.assertEqual(new_option.order, 3)
+
+    def test_removing_an_option_with_no_votes_deletes_it(self):
+        response = self.client.post(reverse("post-edit", args=[self.post.pk]), self.edit_data(option_2=""))
+        self.assertEqual(response.status_code, 302)
+        self.assertFalse(PollOption.objects.filter(pk=self.option_b.pk).exists())
+        self.assertEqual(list(self.poll.options.order_by("order").values_list("text", flat=True)), ["Red", "Green"])
+
+    def test_removing_an_option_with_votes_is_blocked(self):
+        response = self.client.post(
+            reverse("post-edit", args=[self.post.pk]), self.edit_data(option_1="", body="should not save")
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(PollOption.objects.filter(pk=self.option_a.pk).exists())
+        self.assertTrue(PollVote.objects.filter(user=self.voter1).exists())
+        self.post.refresh_from_db()
+        self.assertEqual(self.post.body, "vote now")
+
+    def test_removing_a_middle_option_does_not_reassign_votes(self):
+        self.client.post(reverse("post-edit", args=[self.post.pk]), self.edit_data(option_2=""))
+        self.option_a.refresh_from_db()
+        self.option_c.refresh_from_db()
+        self.assertEqual(self.option_a.text, "Red")
+        self.assertEqual(self.option_c.text, "Green")
+        self.assertEqual(PollVote.objects.get(user=self.voter1).option_id, self.option_a.pk)
+        self.assertEqual(PollVote.objects.get(user=self.voter2).option_id, self.option_c.pk)
+
+    def test_clearing_entire_poll_deletes_it_when_no_votes(self):
+        PollVote.objects.all().delete()
+        self.client.post(
+            reverse("post-edit", args=[self.post.pk]),
+            self.edit_data(question="", option_1="", option_2="", option_3=""),
+        )
+        self.assertFalse(Poll.objects.filter(post=self.post).exists())
+
+    def test_clearing_entire_poll_is_blocked_if_any_option_has_votes(self):
+        response = self.client.post(
+            reverse("post-edit", args=[self.post.pk]),
+            self.edit_data(question="", option_1="", option_2="", option_3=""),
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(Poll.objects.filter(post=self.post).exists())
+
+    def test_editing_a_post_without_a_poll_can_add_one(self):
+        plain_post = Post.objects.create(author=self.author, body="no poll here")
+        self.client.post(
+            reverse("post-edit", args=[plain_post.pk]),
+            {"body": "no poll here", "question": "New poll?", "option_1": "Yes", "option_2": "No"},
+        )
+        poll = Poll.objects.get(post=plain_post)
+        self.assertEqual(list(poll.options.values_list("text", flat=True)), ["Yes", "No"])
+
+
 class TogglePollVoteTests(TestCase):
     def setUp(self):
         self.author = make_user("alice")
