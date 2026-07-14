@@ -151,9 +151,19 @@
                             <a href="{% url 'post-detail' post.pk %}" class="no-underline hover:text-fg">{{ post.created_at }}</a>
                             <span class="ml-auto">{% include "_repost_button.html" %}</span>
                         </div>
-                        <div class="prose prose-sm max-w-none dark:prose-invert">{{ post.body|markdown }}</div>
-                        {% if post.image %}
-                            <img src="{{ post.image.url }}" alt="" class="mt-2 max-h-64 w-full rounded-xl object-cover">
+                        {% if post.repost_comment %}
+                            <div class="prose prose-sm max-w-none dark:prose-invert mb-2">{{ post.repost_comment|markdown }}</div>
+                            <div class="rounded-xl border border-border p-3">
+                                <div class="prose prose-sm max-w-none dark:prose-invert">{{ post.body|markdown }}</div>
+                                {% if post.image %}
+                                    <img src="{{ post.image.url }}" alt="" class="mt-2 max-h-64 w-full rounded-xl object-cover">
+                                {% endif %}
+                            </div>
+                        {% else %}
+                            <div class="prose prose-sm max-w-none dark:prose-invert">{{ post.body|markdown }}</div>
+                            {% if post.image %}
+                                <img src="{{ post.image.url }}" alt="" class="mt-2 max-h-64 w-full rounded-xl object-cover">
+                            {% endif %}
                         {% endif %}
                         {% include "_post_reactions.html" %}
                     </div>

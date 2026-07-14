@@ -4,7 +4,7 @@ from django.contrib.auth import login, update_session_auth_hash
 from django.contrib.auth.forms import PasswordChangeForm, SetPasswordForm
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.auth.models import User
-from django.db.models import Sum
+from django.db.models import OuterRef, Subquery, Sum
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse, reverse_lazy
@@ -110,6 +110,8 @@ class ProfileView(DetailView):
         reposts = annotate_votes(reposts, PostVote, "post", self.request.user)
         reposts = annotate_saved(reposts, self.request.user)
         reposts = annotate_reposted(reposts, self.request.user)
+        my_repost_comment = Repost.objects.filter(post=OuterRef("pk"), user=profile_user).values("comment")[:1]
+        reposts = reposts.annotate(repost_comment=Subquery(my_repost_comment))
         context["reposts"] = reposts[:PROFILE_ITEM_LIMIT]
         context["repost_count"] = Repost.objects.filter(user=profile_user).count()
         comments = profile_user.comments.select_related("post").order_by("-created_at")

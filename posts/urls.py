@@ -15,6 +15,7 @@ urlpatterns = [
     path("posts/<uuid:pk>/unsave/", views.PostUnsaveView.as_view(), name="post-unsave"),
     path("posts/<uuid:pk>/repost/", views.PostRepostView.as_view(), name="post-repost"),
     path("posts/<uuid:pk>/unrepost/", views.PostUnrepostView.as_view(), name="post-unrepost"),
+    path("posts/<uuid:pk>/quote/", views.PostQuoteView.as_view(), name="post-quote"),
     path("posts/<uuid:pk>/react/", views.PostReactionView.as_view(), name="post-react"),
     path("polls/<uuid:pk>/vote/", views.PollVoteView.as_view(), name="poll-vote"),
     path("saved/", views.SavedPostsView.as_view(), name="saved-posts"),

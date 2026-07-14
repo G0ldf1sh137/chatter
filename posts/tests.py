@@ -11,7 +11,7 @@ from django.utils import timezone
 
 from accounts.models import Block, Follow, Mute
 
-from .forms import PollForm
+from .forms import PollForm, QuoteForm
 from .hashtags import extract_hashtag_names
 from .markdown import render_markdown
 from .mentions import extract_mentioned_users
@@ -1367,6 +1367,78 @@ class RepostRenderingTests(TestCase):
         response = self.client.get(reverse("post-detail", args=[self.post.pk]))
         self.assertNotContains(response, reverse("post-repost", args=[self.post.pk]))
         self.assertNotContains(response, reverse("post-unrepost", args=[self.post.pk]))
+
+
+class QuoteFormTests(TestCase):
+    def test_blank_comment_is_valid(self):
+        form = QuoteForm({"comment": ""})
+        self.assertTrue(form.is_valid())
+        self.assertEqual(form.cleaned_data["comment"], "")
+
+
+class PostQuoteViewTests(TestCase):
+    def setUp(self):
+        self.author = make_user("alice")
+        self.reposter = make_user("bob")
+        self.post = Post.objects.create(author=self.author, body="hello")
+
+    def test_get_renders_blank_form_with_no_existing_repost(self):
+        self.client.force_login(self.reposter)
+        response = self.client.get(reverse("post-quote", args=[self.post.pk]))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["form"].initial["comment"], "")
+
+    def test_get_prefills_existing_comment(self):
+        Repost.objects.create(user=self.reposter, post=self.post, comment="already said this")
+        self.client.force_login(self.reposter)
+        response = self.client.get(reverse("post-quote", args=[self.post.pk]))
+        self.assertEqual(response.context["form"].initial["comment"], "already said this")
+
+    def test_post_with_comment_creates_repost_with_comment(self):
+        self.client.force_login(self.reposter)
+        self.client.post(reverse("post-quote", args=[self.post.pk]), {"comment": "great post"})
+        repost = Repost.objects.get(user=self.reposter, post=self.post)
+        self.assertEqual(repost.comment, "great post")
+
+    def test_post_with_blank_comment_still_creates_a_plain_repost(self):
+        self.client.force_login(self.reposter)
+        self.client.post(reverse("post-quote", args=[self.post.pk]), {"comment": ""})
+        self.assertTrue(Repost.objects.filter(user=self.reposter, post=self.post, comment="").exists())
+
+    def test_quoting_an_already_reposted_post_updates_the_comment_in_place(self):
+        Repost.objects.create(user=self.reposter, post=self.post)
+        self.client.force_login(self.reposter)
+        self.client.post(reverse("post-quote", args=[self.post.pk]), {"comment": "added later"})
+        self.assertEqual(Repost.objects.filter(user=self.reposter, post=self.post).count(), 1)
+        self.assertEqual(Repost.objects.get(user=self.reposter, post=self.post).comment, "added later")
+
+    def test_anonymous_redirected_to_login(self):
+        response = self.client.post(reverse("post-quote", args=[self.post.pk]), {"comment": "hi"})
+        self.assertEqual(response.status_code, 302)
+        self.assertIn(reverse("login"), response.url)
+        self.assertFalse(Repost.objects.exists())
+
+
+class QuoteNotificationTests(TestCase):
+    def setUp(self):
+        self.alice = make_user("alice")
+        self.bob = make_user("bob")
+        self.post = Post.objects.create(author=self.alice, body="a post")
+
+    def test_quoting_notifies_the_author_once(self):
+        self.client.force_login(self.bob)
+        self.client.post(reverse("post-quote", args=[self.post.pk]), {"comment": "nice"})
+        notification = Notification.objects.get(kind=Notification.Kind.REPOST)
+        self.assertEqual(notification.recipient, self.alice)
+        self.assertEqual(notification.actor, self.bob)
+
+    def test_editing_the_comment_later_does_not_notify_again(self):
+        self.client.force_login(self.bob)
+        self.client.post(reverse("post-quote", args=[self.post.pk]), {"comment": "nice"})
+
+        self.client.post(reverse("post-quote", args=[self.post.pk]), {"comment": "edited"})
+
+        self.assertEqual(Notification.objects.filter(kind=Notification.Kind.REPOST).count(), 1)
 
 
 class MarkdownRenderingTests(TestCase):

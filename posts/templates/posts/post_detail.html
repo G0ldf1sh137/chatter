@@ -18,6 +18,11 @@
                     {% if post.edited %}<span class="italic">&middot; edited</span>{% endif %}
                     <div class="ml-auto flex items-center gap-2">
                         {% include "_repost_button.html" %}
+                        {% if user.is_authenticated %}
+                            <a href="{% url 'post-quote' post.pk %}" class="rounded-lg p-1 text-muted transition-colors hover:bg-border/60 hover:text-fg" aria-label="Quote post">
+                                <svg viewBox="0 0 20 20" fill="currentColor" class="h-4 w-4"><path d="M7 5a2 2 0 00-2 2v3a2 2 0 002 2h1v2l3-2v-.05A2 2 0 0012 10V7a2 2 0 00-2-2H7z"/></svg>
+                            </a>
+                        {% endif %}
                         {% include "_save_button.html" %}
                         {% if user.is_authenticated and user != post.author %}
                             <label for="report-post-toggle" class="cursor-pointer rounded-lg p-1 text-muted transition-colors hover:bg-border/60 hover:text-fg" aria-label="Report post">

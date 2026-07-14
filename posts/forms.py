@@ -49,6 +49,13 @@ class PollForm(forms.Form):
         return cleaned
 
 
+class QuoteForm(forms.Form):
+    comment = forms.CharField(
+        required=False,
+        widget=forms.Textarea(attrs={"rows": 3, "placeholder": "Add a comment (optional)... Markdown supported"}),
+    )
+
+
 class CommentForm(forms.ModelForm):
     parent = forms.UUIDField(required=False, widget=forms.HiddenInput)
 

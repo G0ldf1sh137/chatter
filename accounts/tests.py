@@ -347,6 +347,28 @@ class ProfileRepostsTests(TestCase):
         self.assertEqual(response.context["repost_count"], 0)
 
 
+class RepostCommentRenderingTests(TestCase):
+    def setUp(self):
+        self.carol = User.objects.create_user(username="carol", password="correct-horse-battery-staple")
+        self.dave = User.objects.create_user(username="dave", password="correct-horse-battery-staple")
+        self.post = Post.objects.create(author=self.dave, body="an original post")
+
+    def test_repost_with_comment_shows_it_above_a_nested_original(self):
+        Repost.objects.create(user=self.carol, post=self.post, comment="my take on this")
+
+        response = self.client.get(reverse("profile", args=["carol"]))
+
+        self.assertContains(response, "my take on this")
+        self.assertContains(response, "an original post")
+
+    def test_plain_repost_renders_without_the_comment_wrapper(self):
+        Repost.objects.create(user=self.carol, post=self.post)
+
+        response = self.client.get(reverse("profile", args=["carol"]))
+
+        self.assertEqual(response.context["reposts"][0].repost_comment, "")
+
+
 class AtUsernameFilterTests(TestCase):
     def test_prefixes_a_username_with_at_sign(self):
         self.assertEqual(at_username("carol"), "@carol")

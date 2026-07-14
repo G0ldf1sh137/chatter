@@ -7,7 +7,7 @@ from django.core.paginator import Paginator
 from django.db.models import BooleanField, Count, Exists, Max, OuterRef, Q, Subquery, Sum, Value
 from django.db.models.functions import Coalesce
 from django.http import Http404, JsonResponse
-from django.shortcuts import get_object_or_404, redirect
+from django.shortcuts import get_object_or_404, redirect, render
 from django.template.loader import render_to_string
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views import View
@@ -15,7 +15,7 @@ from django.views.generic import CreateView, DetailView, ListView, TemplateView,
 
 from accounts.models import Block, Mute, is_blocked_either_way, is_muted_or_blocked
 
-from .forms import CommentEditForm, CommentForm, MessageForm, PollForm, PostForm
+from .forms import CommentEditForm, CommentForm, MessageForm, PollForm, PostForm, QuoteForm
 from .hashtags import sync_post_tags
 from .mentions import extract_mentioned_users
 from .models import (
@@ -435,6 +435,25 @@ class PostUnrepostView(LoginRequiredMixin, View):
     def post(self, request, pk):
         post = get_object_or_404(Post, pk=pk)
         Repost.objects.filter(user=request.user, post=post).delete()
+        return redirect_back(request, post.get_absolute_url())
+
+
+class PostQuoteView(LoginRequiredMixin, View):
+    def get(self, request, pk):
+        post = get_object_or_404(Post, pk=pk)
+        existing = Repost.objects.filter(user=request.user, post=post).first()
+        form = QuoteForm(initial={"comment": existing.comment if existing else ""})
+        return render(request, "posts/quote_repost.html", {"post": post, "form": form})
+
+    def post(self, request, pk):
+        post = get_object_or_404(Post, pk=pk)
+        form = QuoteForm(request.POST)
+        if form.is_valid():
+            repost, created = Repost.objects.get_or_create(user=request.user, post=post)
+            repost.comment = form.cleaned_data["comment"]
+            repost.save(update_fields=["comment"])
+            if created:
+                create_notification(Notification.Kind.REPOST, post.author, request.user, post)
         return redirect_back(request, post.get_absolute_url())
 
 
