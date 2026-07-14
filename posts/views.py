@@ -15,7 +15,7 @@ from django.utils.http import url_has_allowed_host_and_scheme
 from django.views import View
 from django.views.generic import CreateView, DetailView, ListView, TemplateView, UpdateView
 
-from accounts.models import Block, Mute, is_blocked_either_way, is_muted_or_blocked
+from accounts.models import Block, Mute, Profile, is_blocked_either_way, is_muted_or_blocked
 
 from .forms import CommentEditForm, CommentForm, MessageForm, PollForm, PostForm, QuoteForm
 from .hashtags import sync_post_tags
@@ -594,6 +594,39 @@ class PostDeleteView(LoginRequiredMixin, UserPassesTestMixin, View):
         if post.image:
             post.image.delete(save=False)
         post.save(update_fields=["body", "deleted", "image"])
+        Profile.objects.filter(pinned_post=post).update(pinned_post=None)
+        return redirect(post.get_absolute_url())
+
+
+class PostPinView(LoginRequiredMixin, UserPassesTestMixin, View):
+    def get_object(self):
+        return get_object_or_404(Post, pk=self.kwargs["pk"])
+
+    def test_func(self):
+        post = self.get_object()
+        return post.author_id == self.request.user.id and not post.deleted and not post.is_draft
+
+    def post(self, request, pk):
+        post = self.get_object()
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+        profile.pinned_post = post
+        profile.save(update_fields=["pinned_post"])
+        return redirect(post.get_absolute_url())
+
+
+class PostUnpinView(LoginRequiredMixin, UserPassesTestMixin, View):
+    def get_object(self):
+        return get_object_or_404(Post, pk=self.kwargs["pk"])
+
+    def test_func(self):
+        return self.get_object().author_id == self.request.user.id
+
+    def post(self, request, pk):
+        post = self.get_object()
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+        if profile.pinned_post_id == post.pk:
+            profile.pinned_post = None
+            profile.save(update_fields=["pinned_post"])
         return redirect(post.get_absolute_url())
 
 

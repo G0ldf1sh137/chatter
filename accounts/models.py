@@ -4,6 +4,8 @@ import zoneinfo
 from django.conf import settings
 from django.db import models
 
+from posts.models import Post
+
 TIMEZONE_CHOICES = sorted((tz, tz) for tz in zoneinfo.available_timezones())
 
 
@@ -18,6 +20,7 @@ class Profile(models.Model):
     notify_on_replies = models.BooleanField(default=True, verbose_name="Notify me on replies")
     notify_on_upvotes = models.BooleanField(default=True, verbose_name="Notify me on upvotes")
     notify_on_reposts = models.BooleanField(default=True, verbose_name="Notify me on reposts")
+    pinned_post = models.ForeignKey(Post, on_delete=models.SET_NULL, null=True, blank=True, related_name="+")
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):

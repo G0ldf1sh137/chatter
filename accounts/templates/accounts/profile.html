@@ -117,6 +117,29 @@
         </div>
     </div>
 
+    {% if pinned_post %}
+        {% with post=pinned_post %}
+            <h2 class="mb-3 mt-8 text-lg font-bold">📌 Pinned</h2>
+            <div class="space-y-4">
+                <article class="rounded-2xl border border-border bg-surface p-4 shadow-sm sm:p-5">
+                    <div class="flex gap-3">
+                        {% include "_post_vote.html" %}
+                        <div class="min-w-0 flex-1">
+                            <div class="mb-1.5 text-sm text-muted">
+                                <a href="{% url 'post-detail' post.pk %}" class="no-underline hover:text-fg">{{ post.created_at }}</a>
+                            </div>
+                            <div class="prose prose-sm max-w-none dark:prose-invert">{{ post.body|markdown }}</div>
+                            {% if post.image %}
+                                <img src="{{ post.image.url }}" alt="" class="mt-2 max-h-64 w-full rounded-xl object-cover">
+                            {% endif %}
+                            {% include "_post_reactions.html" %}
+                        </div>
+                    </div>
+                </article>
+            </div>
+        {% endwith %}
+    {% endif %}
+
     <h2 class="mb-3 mt-8 text-lg font-bold">Posts</h2>
     <div class="space-y-4">
         {% for post in posts %}

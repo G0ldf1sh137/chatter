@@ -33,6 +33,19 @@
                         {% endif %}
                         {% if user == post.author and not post.deleted %}
                             <a href="{% url 'post-edit' post.pk %}" class="font-medium text-accent no-underline hover:underline">Edit</a>
+                            {% if not post.is_draft %}
+                                {% if user.profile.pinned_post_id == post.pk %}
+                                    <form method="post" action="{% url 'post-unpin' post.pk %}" class="inline">
+                                        {% csrf_token %}
+                                        <button type="submit" class="mt-0 border-none bg-transparent p-0 text-sm font-medium text-accent no-underline hover:underline">Unpin</button>
+                                    </form>
+                                {% else %}
+                                    <form method="post" action="{% url 'post-pin' post.pk %}" class="inline">
+                                        {% csrf_token %}
+                                        <button type="submit" class="mt-0 border-none bg-transparent p-0 text-sm font-medium text-accent no-underline hover:underline">Pin</button>
+                                    </form>
+                                {% endif %}
+                            {% endif %}
                             {% if post.is_draft %}
                                 <form method="post" action="{% url 'post-publish' post.pk %}" class="inline">
                                     {% csrf_token %}

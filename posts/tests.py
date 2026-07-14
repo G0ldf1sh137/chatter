@@ -9,7 +9,7 @@ from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
-from accounts.models import Block, Follow, Mute
+from accounts.models import Block, Follow, Mute, Profile
 
 from .forms import PollForm, QuoteForm
 from .hashtags import extract_hashtag_names
@@ -395,6 +395,94 @@ class PostDeleteTests(TestCase):
         self.client.post(reverse("post-delete", args=[self.post.pk]))
 
         self.assertTrue(Comment.objects.filter(pk=comment.pk).exists())
+
+    def test_deleting_a_pinned_post_clears_the_pin(self):
+        profile, _ = Profile.objects.get_or_create(user=self.author)
+        profile.pinned_post = self.post
+        profile.save(update_fields=["pinned_post"])
+        self.client.force_login(self.author)
+
+        self.client.post(reverse("post-delete", args=[self.post.pk]))
+
+        profile.refresh_from_db()
+        self.assertIsNone(profile.pinned_post)
+
+
+class PostPinViewTests(TestCase):
+    def setUp(self):
+        self.author = make_user("alice")
+        self.other_post = Post.objects.create(author=self.author, body="another post")
+        self.post = Post.objects.create(author=self.author, body="pin me")
+
+    def test_author_can_pin_own_post(self):
+        self.client.force_login(self.author)
+        self.client.post(reverse("post-pin", args=[self.post.pk]))
+        profile = Profile.objects.get(user=self.author)
+        self.assertEqual(profile.pinned_post, self.post)
+
+    def test_pinning_a_second_post_replaces_the_first(self):
+        self.client.force_login(self.author)
+        self.client.post(reverse("post-pin", args=[self.post.pk]))
+        self.client.post(reverse("post-pin", args=[self.other_post.pk]))
+        profile = Profile.objects.get(user=self.author)
+        self.assertEqual(profile.pinned_post, self.other_post)
+
+    def test_non_author_gets_403(self):
+        other = make_user("mallory")
+        self.client.force_login(other)
+        response = self.client.post(reverse("post-pin", args=[self.post.pk]))
+        self.assertEqual(response.status_code, 403)
+
+    def test_anonymous_redirected_to_login(self):
+        response = self.client.post(reverse("post-pin", args=[self.post.pk]))
+        self.assertEqual(response.status_code, 302)
+        self.assertIn(reverse("login"), response.url)
+
+    def test_pinning_a_draft_is_blocked(self):
+        draft = Post.objects.create(author=self.author, body="wip", is_draft=True)
+        self.client.force_login(self.author)
+        response = self.client.post(reverse("post-pin", args=[draft.pk]))
+        self.assertEqual(response.status_code, 403)
+
+    def test_pinning_a_deleted_post_is_blocked(self):
+        self.post.deleted = True
+        self.post.save(update_fields=["deleted"])
+        self.client.force_login(self.author)
+        response = self.client.post(reverse("post-pin", args=[self.post.pk]))
+        self.assertEqual(response.status_code, 403)
+
+
+class PostUnpinViewTests(TestCase):
+    def setUp(self):
+        self.author = make_user("alice")
+        self.post = Post.objects.create(author=self.author, body="pinned")
+        self.other_post = Post.objects.create(author=self.author, body="not pinned")
+        self.profile, _ = Profile.objects.get_or_create(user=self.author)
+        self.profile.pinned_post = self.post
+        self.profile.save(update_fields=["pinned_post"])
+
+    def test_author_can_unpin_the_pinned_post(self):
+        self.client.force_login(self.author)
+        self.client.post(reverse("post-unpin", args=[self.post.pk]))
+        self.profile.refresh_from_db()
+        self.assertIsNone(self.profile.pinned_post)
+
+    def test_unpinning_a_post_that_is_not_pinned_is_a_no_op(self):
+        self.client.force_login(self.author)
+        self.client.post(reverse("post-unpin", args=[self.other_post.pk]))
+        self.profile.refresh_from_db()
+        self.assertEqual(self.profile.pinned_post, self.post)
+
+    def test_non_author_gets_403(self):
+        other = make_user("mallory")
+        self.client.force_login(other)
+        response = self.client.post(reverse("post-unpin", args=[self.post.pk]))
+        self.assertEqual(response.status_code, 403)
+
+    def test_anonymous_redirected_to_login(self):
+        response = self.client.post(reverse("post-unpin", args=[self.post.pk]))
+        self.assertEqual(response.status_code, 302)
+        self.assertIn(reverse("login"), response.url)
 
 
 class SavedPostTests(TestCase):

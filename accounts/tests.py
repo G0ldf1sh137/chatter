@@ -304,6 +304,40 @@ class ProfileViewTests(TestCase):
         self.assertEqual(response.context["karma"], 3)
 
 
+class ProfileViewPinnedPostTests(TestCase):
+    def setUp(self):
+        self.carol = User.objects.create_user(username="carol", password="correct-horse-battery-staple")
+        self.pinned = Post.objects.create(author=self.carol, body="pinned post")
+        self.other = Post.objects.create(author=self.carol, body="other post")
+        self.profile, _ = Profile.objects.get_or_create(user=self.carol)
+        self.profile.pinned_post = self.pinned
+        self.profile.save(update_fields=["pinned_post"])
+
+    def test_pinned_post_appears_in_context_and_is_excluded_from_posts(self):
+        response = self.client.get(reverse("profile", args=["carol"]))
+        self.assertEqual(response.context["pinned_post"], self.pinned)
+        self.assertNotIn(self.pinned, response.context["posts"])
+        self.assertIn(self.other, response.context["posts"])
+
+    def test_post_count_still_includes_the_pinned_post(self):
+        response = self.client.get(reverse("profile", args=["carol"]))
+        self.assertEqual(response.context["post_count"], 2)
+
+    def test_no_pin_means_no_pinned_post_context_and_no_section(self):
+        self.profile.pinned_post = None
+        self.profile.save(update_fields=["pinned_post"])
+        response = self.client.get(reverse("profile", args=["carol"]))
+        self.assertIsNone(response.context["pinned_post"])
+        self.assertNotContains(response, "Pinned")
+
+    def test_a_deleted_pinned_post_does_not_render_as_pinned(self):
+        self.pinned.deleted = True
+        self.pinned.body = ""
+        self.pinned.save(update_fields=["deleted", "body"])
+        response = self.client.get(reverse("profile", args=["carol"]))
+        self.assertIsNone(response.context["pinned_post"])
+
+
 class ProfileRepostsTests(TestCase):
     def setUp(self):
         self.carol = User.objects.create_user(username="carol", password="correct-horse-battery-staple")

@@ -93,11 +93,25 @@ class ProfileView(DetailView):
         context = super().get_context_data(**kwargs)
         profile_user = context["profile_user"]
         context["profile"], _ = Profile.objects.get_or_create(user=profile_user)
+
+        pinned_post = None
+        if context["profile"].pinned_post_id:
+            pinned_qs = Post.objects.filter(
+                pk=context["profile"].pinned_post_id, deleted=False, is_draft=False
+            ).prefetch_related("reactions", "poll__options__votes", "reposts")
+            pinned_qs = annotate_votes(pinned_qs, PostVote, "post", self.request.user)
+            pinned_qs = annotate_saved(pinned_qs, self.request.user)
+            pinned_qs = annotate_reposted(pinned_qs, self.request.user)
+            pinned_post = pinned_qs.first()
+        context["pinned_post"] = pinned_post
+
         posts_qs = profile_user.posts.all()
         post_count_qs = profile_user.posts.all()
         if self.request.user != profile_user:
             posts_qs = posts_qs.filter(is_draft=False)
             post_count_qs = post_count_qs.filter(is_draft=False)
+        if pinned_post:
+            posts_qs = posts_qs.exclude(pk=pinned_post.pk)
         posts = annotate_votes(
             posts_qs.prefetch_related("reactions", "poll__options__votes", "reposts"),
             PostVote,
