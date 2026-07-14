@@ -22,6 +22,7 @@ from .hashtags import sync_post_tags
 from .mentions import extract_mentioned_users
 from .models import (
     Comment,
+    CommentReaction,
     CommentVote,
     Conversation,
     Message,
@@ -360,6 +361,7 @@ class PostCreateView(LoginRequiredMixin, CreateView):
 
     def get_context_data(self, **kwargs):
         kwargs.setdefault("poll_form", PollForm())
+        kwargs.setdefault("poll_option_range", range(1, PollForm.MAX_OPTIONS + 1))
         return super().get_context_data(**kwargs)
 
     def post(self, request, *args, **kwargs):
@@ -409,7 +411,7 @@ class PostDetailView(DetailView):
         return sort if sort in SORT_CHOICES else SORT_DEFAULT
 
     def get_comment_tree(self):
-        comments = self.object.comments.select_related("author", "author__profile")
+        comments = self.object.comments.select_related("author", "author__profile").prefetch_related("reactions")
         comments = annotate_votes(comments, CommentVote, "comment", self.request.user)
         return build_comment_tree(list(comments), sort=self.get_sort())
 
@@ -745,6 +747,15 @@ class PostReactionView(LoginRequiredMixin, View):
         if emoji in PostReaction.Emoji.values:
             toggle_reaction(PostReaction, {"post": post}, request.user, emoji)
         return redirect_back(request, post.get_absolute_url())
+
+
+class CommentReactionView(LoginRequiredMixin, View):
+    def post(self, request, pk):
+        comment = get_object_or_404(Comment, pk=pk)
+        emoji = request.POST.get("emoji")
+        if emoji in CommentReaction.Emoji.values:
+            toggle_reaction(CommentReaction, {"comment": comment}, request.user, emoji)
+        return redirect_back(request, comment.post.get_absolute_url())
 
 
 class PollVoteView(LoginRequiredMixin, View):

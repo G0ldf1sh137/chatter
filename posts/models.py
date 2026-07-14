@@ -126,6 +126,16 @@ class PostReaction(Reaction):
         return f"{self.user} reacted {self.emoji} to Post({self.post_id})"
 
 
+class CommentReaction(Reaction):
+    comment = models.ForeignKey(Comment, on_delete=models.CASCADE, related_name="reactions")
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=["user", "comment"], name="unique_comment_reaction")]
+
+    def __str__(self):
+        return f"{self.user} reacted {self.emoji} to Comment({self.comment_id})"
+
+
 class Poll(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     post = models.OneToOneField(Post, on_delete=models.CASCADE, related_name="poll")

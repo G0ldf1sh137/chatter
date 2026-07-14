@@ -11,6 +11,7 @@
         <p class="italic text-muted">[deleted]</p>
     {% else %}
         <div class="prose prose-sm max-w-none dark:prose-invert">{{ comment.body|markdown }}</div>
+        {% include "_comment_reactions.html" %}
     {% endif %}
     {% if user.is_authenticated %}
         <input type="checkbox" id="reply-toggle-{{ comment.pk }}" class="peer/reply hidden">

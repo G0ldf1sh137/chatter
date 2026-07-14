@@ -17,6 +17,7 @@ from .markdown import render_markdown
 from .mentions import extract_mentioned_users
 from .models import (
     Comment,
+    CommentReaction,
     CommentVote,
     Conversation,
     Message,
@@ -1103,6 +1104,81 @@ class PostReactionRenderingTests(TestCase):
         self.assertNotContains(response, "post-react")
 
 
+class CommentReactionViewTests(TestCase):
+    def setUp(self):
+        self.author = make_user("alice")
+        self.reactor = make_user("bob")
+        self.post = Post.objects.create(author=self.author, body="hello")
+        self.comment = Comment.objects.create(author=self.author, post=self.post, body="a comment")
+
+    def test_authenticated_user_can_react(self):
+        self.client.force_login(self.reactor)
+        self.client.post(reverse("comment-react", args=[self.comment.pk]), {"emoji": "thumbsup"})
+        self.assertTrue(CommentReaction.objects.filter(user=self.reactor, comment=self.comment).exists())
+
+    def test_reacting_with_the_same_emoji_again_removes_it(self):
+        self.client.force_login(self.reactor)
+        self.client.post(reverse("comment-react", args=[self.comment.pk]), {"emoji": "thumbsup"})
+        self.client.post(reverse("comment-react", args=[self.comment.pk]), {"emoji": "thumbsup"})
+        self.assertFalse(CommentReaction.objects.filter(user=self.reactor, comment=self.comment).exists())
+
+    def test_reacting_with_a_different_emoji_switches_it_in_place(self):
+        self.client.force_login(self.reactor)
+        self.client.post(reverse("comment-react", args=[self.comment.pk]), {"emoji": "thumbsup"})
+        self.client.post(reverse("comment-react", args=[self.comment.pk]), {"emoji": "heart"})
+        self.assertEqual(CommentReaction.objects.filter(user=self.reactor, comment=self.comment).count(), 1)
+        reaction = CommentReaction.objects.get(user=self.reactor, comment=self.comment)
+        self.assertEqual(reaction.emoji, "heart")
+
+    def test_invalid_emoji_is_ignored(self):
+        self.client.force_login(self.reactor)
+        self.client.post(reverse("comment-react", args=[self.comment.pk]), {"emoji": "not-a-real-emoji"})
+        self.assertFalse(CommentReaction.objects.exists())
+
+    def test_anonymous_redirected_to_login(self):
+        response = self.client.post(reverse("comment-react", args=[self.comment.pk]), {"emoji": "thumbsup"})
+        self.assertEqual(response.status_code, 302)
+        self.assertIn(reverse("login"), response.url)
+
+    def test_author_can_react_to_own_comment(self):
+        self.client.force_login(self.author)
+        self.client.post(reverse("comment-react", args=[self.comment.pk]), {"emoji": "thumbsup"})
+        self.assertTrue(CommentReaction.objects.filter(user=self.author, comment=self.comment).exists())
+
+
+class CommentReactionRenderingTests(TestCase):
+    def setUp(self):
+        self.author = make_user("alice")
+        self.reactor = make_user("bob")
+        self.post = Post.objects.create(author=self.author, body="hello")
+        self.comment = Comment.objects.create(author=self.author, post=self.post, body="a comment")
+        CommentReaction.objects.create(user=self.reactor, comment=self.comment, emoji="thumbsup")
+
+    def test_post_detail_shows_reaction_count_and_highlights_mine(self):
+        self.client.force_login(self.reactor)
+        response = self.client.get(reverse("post-detail", args=[self.post.pk]))
+        self.assertContains(response, "👍 1")
+
+    def test_anonymous_visitor_sees_no_reaction_buttons(self):
+        response = self.client.get(reverse("post-detail", args=[self.post.pk]))
+        self.assertNotContains(response, "/react/")
+
+    def test_deleted_comment_shows_no_reaction_row(self):
+        self.comment.body = ""
+        self.comment.deleted = True
+        self.comment.save(update_fields=["body", "deleted"])
+        self.client.force_login(self.reactor)
+        response = self.client.get(reverse("post-detail", args=[self.post.pk]))
+        self.assertNotContains(response, reverse("comment-react", args=[self.comment.pk]))
+
+    def test_reply_renders_its_own_reaction_row(self):
+        reply = Comment.objects.create(author=self.author, post=self.post, body="a reply", parent=self.comment)
+        CommentReaction.objects.create(user=self.author, comment=reply, emoji="heart")
+        self.client.force_login(self.reactor)
+        response = self.client.get(reverse("post-detail", args=[self.post.pk]))
+        self.assertContains(response, "❤️ 1")
+
+
 class PollFormTests(TestCase):
     def make_data(self, **overrides):
         data = {"question": "", "option_1": "", "option_2": "", "option_3": "", "option_4": ""}
@@ -1122,7 +1198,7 @@ class PollFormTests(TestCase):
         form = PollForm(self.make_data(question="Best color?", option_1="Red"))
         self.assertFalse(form.is_valid())
 
-    def test_question_with_two_to_four_options_is_valid(self):
+    def test_question_with_two_options_is_valid(self):
         form = PollForm(self.make_data(question="Best color?", option_1="Red", option_2="Blue"))
         self.assertTrue(form.is_valid())
         self.assertTrue(form.cleaned_data["has_poll"])
@@ -1136,6 +1212,18 @@ class PollFormTests(TestCase):
         form = PollForm(self.make_data(question="Best color?", option_1="Red", option_2="Blue", option_3="", option_4=""))
         self.assertTrue(form.is_valid())
         self.assertEqual(len(form.cleaned_data["poll_options"]), 2)
+
+    def test_all_ten_options_are_accepted(self):
+        data = self.make_data(question="Best color?", option_1="Red", option_2="Blue")
+        for i in range(3, 11):
+            data[f"option_{i}"] = f"Color {i}"
+        form = PollForm(data)
+        self.assertTrue(form.is_valid())
+        self.assertEqual(len(form.cleaned_data["poll_options"]), 10)
+
+    def test_field_beyond_max_options_does_not_exist(self):
+        form = PollForm(self.make_data(question="Best color?", option_1="Red", option_2="Blue"))
+        self.assertNotIn("option_11", form.fields)
 
 
 class PostCreatePollTests(TestCase):

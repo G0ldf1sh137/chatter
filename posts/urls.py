@@ -29,6 +29,7 @@ urlpatterns = [
     path("comments/<uuid:pk>/edit/", views.CommentEditView.as_view(), name="comment-edit"),
     path("comments/<uuid:pk>/delete/", views.CommentDeleteView.as_view(), name="comment-delete"),
     path("comments/<uuid:pk>/report/", views.CommentReportView.as_view(), name="comment-report"),
+    path("comments/<uuid:pk>/react/", views.CommentReactionView.as_view(), name="comment-react"),
     path(
         "posts/<uuid:pk>/upvote/",
         views.PostVoteView.as_view(value=PostVote.UP),

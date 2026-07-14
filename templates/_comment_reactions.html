@@ -1,0 +1,14 @@
+{% load post_extras %}
+{% if user.is_authenticated %}
+    <div class="mt-2 flex flex-wrap gap-1">
+        {% for r in comment.reactions.all|group_reactions:user %}
+            <form method="post" action="{% url 'comment-react' comment.pk %}" class="inline">
+                {% csrf_token %}
+                <input type="hidden" name="emoji" value="{{ r.value }}">
+                <button type="submit" aria-label="React with {{ r.glyph }}" class="mt-0 rounded-full border px-2 py-0.5 text-xs transition-colors {% if r.mine %}border-accent bg-accent/20 text-accent{% else %}border-border bg-surface-hover text-muted hover:text-fg{% endif %}">
+                    {{ r.glyph }}{% if r.count %} {{ r.count }}{% endif %}
+                </button>
+            </form>
+        {% endfor %}
+    </div>
+{% endif %}

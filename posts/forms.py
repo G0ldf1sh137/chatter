@@ -21,20 +21,29 @@ class PostForm(forms.ModelForm):
 
 
 class PollForm(forms.Form):
-    # Plain Form, not a ModelForm/formset - a poll has a fixed 2-4 option
-    # shape for v1, so four explicit fields keep the create page a single
-    # POST without formset management-form plumbing. Leaving every field
-    # blank means "no poll" rather than a validation error.
+    # Plain Form, not a ModelForm/formset - a fixed, numbered set of option
+    # fields keeps the create page a single POST without formset
+    # management-form plumbing. Fields beyond MIN_OPTIONS are declared the
+    # same way but rendered hidden-by-default in the template, revealed by a
+    # small JS "+ Add option" button - the field names/validation don't need
+    # to know anything about that, only how many can exist at most. Leaving
+    # every field blank means "no poll" rather than a validation error.
+    MIN_OPTIONS = 2
+    MAX_OPTIONS = 10
+
     question = forms.CharField(max_length=300, required=False)
-    option_1 = forms.CharField(max_length=120, required=False)
-    option_2 = forms.CharField(max_length=120, required=False)
-    option_3 = forms.CharField(max_length=120, required=False)
-    option_4 = forms.CharField(max_length=120, required=False)
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        for i in range(1, self.MAX_OPTIONS + 1):
+            self.fields[f"option_{i}"] = forms.CharField(
+                max_length=120, required=False, widget=forms.TextInput(attrs={"placeholder": f"Option {i}"})
+            )
 
     def clean(self):
         cleaned = super().clean()
         question = (cleaned.get("question") or "").strip()
-        options = [(cleaned.get(f"option_{i}") or "").strip() for i in range(1, 5)]
+        options = [(cleaned.get(f"option_{i}") or "").strip() for i in range(1, self.MAX_OPTIONS + 1)]
         options = [o for o in options if o]
         if not question and not options:
             return cleaned
@@ -42,8 +51,8 @@ class PollForm(forms.Form):
             raise forms.ValidationError("Poll question is required.")
         if len(set(options)) < len(options):
             raise forms.ValidationError("Poll options must be unique.")
-        if len(options) < 2:
-            raise forms.ValidationError("A poll needs at least 2 options.")
+        if len(options) < self.MIN_OPTIONS:
+            raise forms.ValidationError(f"A poll needs at least {self.MIN_OPTIONS} options.")
         cleaned["poll_options"] = options
         cleaned["has_poll"] = True
         return cleaned
