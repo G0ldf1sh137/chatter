@@ -6,10 +6,11 @@ from django.contrib.auth.models import User
 from django.core.paginator import Paginator
 from django.db.models import BooleanField, Count, Exists, Max, OuterRef, Q, Subquery, Sum, Value
 from django.db.models.functions import Coalesce
-from django.http import Http404, JsonResponse
+from django.http import Http404, JsonResponse, QueryDict
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template.loader import render_to_string
 from django.utils import timezone
+from django.utils.dateparse import parse_date
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views import View
 from django.views.generic import CreateView, DetailView, ListView, TemplateView, UpdateView
@@ -184,6 +185,8 @@ SEARCH_TYPES = {SEARCH_TYPE_ALL, SEARCH_TYPE_POSTS, SEARCH_TYPE_COMMENTS}
 TAG_INDEX_PAGE_SIZE = 20
 TAG_SEARCH_LIMIT = 8
 
+SEARCH_FILTER_PARAMS = ("q", "author", "tag", "date_from", "date_to")
+
 
 def is_ajax(request):
     return request.headers.get("X-Requested-With") == "XMLHttpRequest"
@@ -197,6 +200,19 @@ def hidden_author_ids(user):
     ids = list(Mute.objects.filter(muter=user).values_list("muted", flat=True))
     ids += list(Block.objects.filter(blocker=user).values_list("blocked", flat=True))
     return ids
+
+
+def build_search_querystring(request):
+    # Carries every active filter through the search page's tab/pagination/
+    # "see all" links, so a single context value replaces what would
+    # otherwise be a `q=...&author=...&tag=...&date_from=...&date_to=...`
+    # repeated at every one of those links individually.
+    params = QueryDict(mutable=True)
+    for key in SEARCH_FILTER_PARAMS:
+        value = request.GET.get(key, "").strip()
+        if value:
+            params[key] = value
+    return params.urlencode()
 
 
 class FeedView(ListView):
@@ -261,22 +277,50 @@ class SearchView(TemplateView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         query = self.request.GET.get("q", "").strip()
+        author = self.request.GET.get("author", "").strip().lstrip("@")
+        tag = self.request.GET.get("tag", "").strip().lower().lstrip("#")
+        raw_date_from = self.request.GET.get("date_from", "").strip()
+        raw_date_to = self.request.GET.get("date_to", "").strip()
+        date_from = parse_date(raw_date_from)
+        date_to = parse_date(raw_date_to)
         search_type = self.request.GET.get("type", SEARCH_TYPE_ALL)
         if search_type not in SEARCH_TYPES:
             search_type = SEARCH_TYPE_ALL
         context["query"] = query
+        context["author"] = author
+        context["tag"] = tag
+        context["date_from"] = raw_date_from
+        context["date_to"] = raw_date_to
         context["search_type"] = search_type
-        if not query:
+        context["filter_qs"] = build_search_querystring(self.request)
+        context["has_criteria"] = bool(query or author or tag or date_from or date_to)
+        if not context["has_criteria"]:
             return context
 
         hidden = hidden_author_ids(self.request.user)
 
-        posts = Post.objects.filter(body__icontains=query, deleted=False, is_draft=False).select_related(
-            "author", "author__profile"
-        ).prefetch_related("reactions", "poll__options__votes", "reposts")
-        comments = Comment.objects.filter(body__icontains=query, deleted=False).select_related(
-            "author", "author__profile", "post"
+        posts = Post.objects.filter(deleted=False, is_draft=False)
+        comments = Comment.objects.filter(deleted=False)
+        if query:
+            posts = posts.filter(body__icontains=query)
+            comments = comments.filter(body__icontains=query)
+        if author:
+            posts = posts.filter(author__username__iexact=author)
+            comments = comments.filter(author__username__iexact=author)
+        if tag:
+            posts = posts.filter(tags__name=tag)
+            comments = comments.filter(post__tags__name=tag)
+        if date_from:
+            posts = posts.filter(created_at__date__gte=date_from)
+            comments = comments.filter(created_at__date__gte=date_from)
+        if date_to:
+            posts = posts.filter(created_at__date__lte=date_to)
+            comments = comments.filter(created_at__date__lte=date_to)
+
+        posts = posts.select_related("author", "author__profile").prefetch_related(
+            "reactions", "poll__options__votes", "reposts"
         )
+        comments = comments.select_related("author", "author__profile", "post")
         if hidden:
             posts = posts.exclude(author_id__in=hidden)
             comments = comments.exclude(author_id__in=hidden)

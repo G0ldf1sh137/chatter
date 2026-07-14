@@ -2894,3 +2894,82 @@ class SearchViewTests(TestCase):
     def test_anonymous_can_search(self):
         response = self.client.get(reverse("search"), {"q": "pelican"})
         self.assertEqual(response.status_code, 200)
+
+
+class SearchFilterTests(TestCase):
+    def setUp(self):
+        self.alice = make_user("alice")
+        self.bob = make_user("bob")
+        self.python_tag = Tag.objects.create(name="python")
+        self.alice_python_post = Post.objects.create(author=self.alice, body="a post")
+        self.alice_python_post.tags.add(self.python_tag)
+        self.bob_python_post = Post.objects.create(author=self.bob, body="another post")
+        self.bob_python_post.tags.add(self.python_tag)
+        self.alice_other_post = Post.objects.create(author=self.alice, body="untagged post")
+        self.comment_on_python_post = Comment.objects.create(
+            author=self.bob, post=self.alice_python_post, body="nice"
+        )
+
+    def test_author_filter_matches_only_that_authors_posts_and_comments(self):
+        response = self.client.get(reverse("search"), {"author": "alice"})
+        self.assertIn(self.alice_python_post, response.context["posts_preview"])
+        self.assertIn(self.alice_other_post, response.context["posts_preview"])
+        self.assertNotIn(self.bob_python_post, response.context["posts_preview"])
+
+    def test_author_filter_strips_leading_at_sign(self):
+        response = self.client.get(reverse("search"), {"author": "@alice"})
+        self.assertIn(self.alice_python_post, response.context["posts_preview"])
+
+    def test_nonexistent_author_yields_no_results_without_error(self):
+        response = self.client.get(reverse("search"), {"author": "nobody"})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(list(response.context["posts_preview"]), [])
+
+    def test_tag_filter_matches_tagged_posts_and_their_comments(self):
+        response = self.client.get(reverse("search"), {"tag": "python"})
+        self.assertIn(self.alice_python_post, response.context["posts_preview"])
+        self.assertIn(self.bob_python_post, response.context["posts_preview"])
+        self.assertNotIn(self.alice_other_post, response.context["posts_preview"])
+        self.assertIn(self.comment_on_python_post, response.context["comments_preview"])
+
+    def test_tag_filter_strips_leading_hash_and_lowercases(self):
+        response = self.client.get(reverse("search"), {"tag": "#PYTHON"})
+        self.assertIn(self.alice_python_post, response.context["posts_preview"])
+
+    def test_date_range_filter(self):
+        old_post = Post.objects.create(author=self.alice, body="old post")
+        Post.objects.filter(pk=old_post.pk).update(created_at=timezone.now() - timedelta(days=10))
+
+        response = self.client.get(
+            reverse("search"),
+            {"author": "alice", "date_from": timezone.now().date().isoformat()},
+        )
+
+        self.assertIn(self.alice_python_post, response.context["posts_preview"])
+        self.assertNotIn(old_post, response.context["posts_preview"])
+
+    def test_invalid_date_is_silently_ignored(self):
+        response = self.client.get(reverse("search"), {"author": "alice", "date_from": "not-a-date"})
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(self.alice_python_post, response.context["posts_preview"])
+
+    def test_filters_combine_with_and_not_or(self):
+        response = self.client.get(reverse("search"), {"author": "alice", "tag": "python"})
+        self.assertIn(self.alice_python_post, response.context["posts_preview"])
+        self.assertNotIn(self.alice_other_post, response.context["posts_preview"])
+        self.assertNotIn(self.bob_python_post, response.context["posts_preview"])
+
+    def test_filter_only_search_needs_no_keyword(self):
+        response = self.client.get(reverse("search"), {"tag": "python"})
+        self.assertTrue(response.context["has_criteria"])
+        self.assertIn(self.alice_python_post, response.context["posts_preview"])
+
+    def test_no_criteria_at_all_shows_no_results(self):
+        response = self.client.get(reverse("search"))
+        self.assertFalse(response.context["has_criteria"])
+        self.assertNotIn("posts_preview", response.context)
+
+    def test_filter_qs_carries_filters_into_links(self):
+        response = self.client.get(reverse("search"), {"author": "alice", "tag": "python"})
+        self.assertContains(response, "author=alice")
+        self.assertContains(response, "tag=python")
