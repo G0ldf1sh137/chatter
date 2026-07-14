@@ -1567,6 +1567,41 @@ class TagIndexViewTests(TestCase):
         self.assertContains(response, reverse("tag-index"))
 
 
+class TagSearchViewTests(TestCase):
+    def setUp(self):
+        self.viewer = make_user("dave")
+        Tag.objects.create(name="chatter")
+        Tag.objects.create(name="chat")
+        Tag.objects.create(name="django")
+
+    def test_anonymous_user_cannot_search(self):
+        response = self.client.get(reverse("tag-search"), {"q": "cha"})
+        self.assertEqual(response.status_code, 302)
+        self.assertIn(reverse("login"), response.url)
+
+    def test_prefix_match_is_case_insensitive(self):
+        self.client.force_login(self.viewer)
+
+        response = self.client.get(reverse("tag-search"), {"q": "CHA"})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {"names": ["chat", "chatter"]})
+
+    def test_non_matching_query_returns_empty_list(self):
+        self.client.force_login(self.viewer)
+
+        response = self.client.get(reverse("tag-search"), {"q": "zzz"})
+
+        self.assertEqual(response.json(), {"names": []})
+
+    def test_empty_query_returns_empty_list(self):
+        self.client.force_login(self.viewer)
+
+        response = self.client.get(reverse("tag-search"), {"q": ""})
+
+        self.assertEqual(response.json(), {"names": []})
+
+
 class MentionNotificationTests(TestCase):
     def setUp(self):
         self.alice = make_user("alice")

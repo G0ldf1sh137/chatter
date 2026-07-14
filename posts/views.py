@@ -127,6 +127,7 @@ SEARCH_TYPE_COMMENTS = "comments"
 SEARCH_TYPES = {SEARCH_TYPE_ALL, SEARCH_TYPE_POSTS, SEARCH_TYPE_COMMENTS}
 
 TAG_INDEX_PAGE_SIZE = 20
+TAG_SEARCH_LIMIT = 8
 
 
 def is_ajax(request):
@@ -377,6 +378,22 @@ class SavedPostsView(LoginRequiredMixin, ListView):
         if page_obj and page_obj.has_next():
             next_url = f"{self.request.path}?page={page_obj.next_page_number()}"
         return JsonResponse({"html": html, "next_url": next_url})
+
+
+class TagSearchView(LoginRequiredMixin, View):
+    # Powers the #hashtag autocomplete in post/comment textareas
+    # (posts/static/posts/js/autocomplete.js) - mirrors UserSearchView
+    # (accounts/views.py) exactly, just against Tag.name instead of username.
+    def get(self, request):
+        query = request.GET.get("q", "").strip().lower()
+        if not query:
+            return JsonResponse({"names": []})
+        names = list(
+            Tag.objects.filter(name__istartswith=query).order_by("name").values_list("name", flat=True)[
+                :TAG_SEARCH_LIMIT
+            ]
+        )
+        return JsonResponse({"names": names})
 
 
 class TagIndexView(ListView):

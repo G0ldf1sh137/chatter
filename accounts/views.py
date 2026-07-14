@@ -284,7 +284,7 @@ class UnblockView(LoginRequiredMixin, View):
 
 class UserSearchView(LoginRequiredMixin, View):
     # Powers the @mention autocomplete in post/comment textareas
-    # (posts/static/posts/js/mention_autocomplete.js) - a plain prefix match
+    # (posts/static/posts/js/autocomplete.js) - a plain prefix match
     # is enough for a typeahead, no need for full-text search here.
     def get(self, request):
         query = request.GET.get("q", "").strip()
