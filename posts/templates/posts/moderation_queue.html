@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% load user_extras %}
+
+{% block title %}Moderation — Chatter{% endblock %}
+
+{% block content %}
+    <h1 class="mb-4 text-2xl font-extrabold tracking-tight">Moderation queue</h1>
+
+    <div class="divide-y divide-border rounded-2xl border border-border bg-surface">
+        {% for report in reports %}
+            <div class="flex items-start justify-between gap-3 p-4">
+                <div class="min-w-0 flex-1">
+                    {% if report.comment %}
+                        <a href="{% url 'post-detail' report.post.pk %}#comment-{{ report.comment.pk }}" class="text-fg no-underline hover:text-accent">
+                            <p class="truncate">Comment by {{ report.comment.author.username|at_username }}: {{ report.comment.body|truncatechars:120 }}</p>
+                        </a>
+                    {% else %}
+                        <a href="{% url 'post-detail' report.post.pk %}" class="text-fg no-underline hover:text-accent">
+                            <p class="truncate">Post by {{ report.post.author.username|at_username }}: {{ report.post.body|truncatechars:120 }}</p>
+                        </a>
+                    {% endif %}
+                    <p class="mt-1 text-xs text-muted">Reported by {{ report.reporter.username|at_username }} on {{ report.created_at }}</p>
+                    {% if report.reason %}
+                        <p class="mt-1 text-sm text-muted">"{{ report.reason }}"</p>
+                    {% endif %}
+                </div>
+                <div class="flex shrink-0 items-center gap-2">
+                    <form method="post" action="{% url 'moderation-report-remove' report.pk %}">
+                        {% csrf_token %}
+                        <button type="submit" class="text-downvote">Remove content</button>
+                    </form>
+                    <form method="post" action="{% url 'moderation-report-dismiss' report.pk %}">
+                        {% csrf_token %}
+                        <button type="submit">Dismiss</button>
+                    </form>
+                </div>
+            </div>
+        {% empty %}
+            <div class="p-8 text-center text-muted">
+                <p>No open reports.</p>
+            </div>
+        {% endfor %}
+    </div>
+
+    {% if page_obj.has_previous or page_obj.has_next %}
+        <div class="mt-4 flex justify-center gap-3 text-sm">
+            {% if page_obj.has_previous %}<a href="?page={{ page_obj.previous_page_number }}" class="text-accent no-underline hover:underline">Previous</a>{% endif %}
+            {% if page_obj.has_next %}<a href="?page={{ page_obj.next_page_number }}" class="text-accent no-underline hover:underline">Next</a>{% endif %}
+        </div>
+    {% endif %}
+{% endblock %}

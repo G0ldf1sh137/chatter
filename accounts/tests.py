@@ -1068,6 +1068,98 @@ class BlockTests(TestCase):
         self.assertFalse(is_blocked_either_way(self.alice, self.bob))
 
 
+class SuspendUserTests(TestCase):
+    def setUp(self):
+        self.staff = User.objects.create_user(username="staff", password="correct-horse-battery-staple")
+        self.staff.is_staff = True
+        self.staff.save()
+        self.alice = User.objects.create_user(username="alice", password="correct-horse-battery-staple")
+        self.alice.profile.email_verified = True
+        self.alice.profile.save(update_fields=["email_verified"])
+        self.bob = User.objects.create_user(username="bob", password="correct-horse-battery-staple")
+
+    def test_anonymous_cannot_suspend(self):
+        response = self.client.post(reverse("suspend-user", args=["alice"]))
+        self.assertEqual(response.status_code, 302)
+        self.assertIn(reverse("login"), response.url)
+        self.alice.refresh_from_db()
+        self.assertTrue(self.alice.is_active)
+
+    def test_non_staff_cannot_suspend(self):
+        self.client.force_login(self.bob)
+        response = self.client.post(reverse("suspend-user", args=["alice"]))
+        self.assertEqual(response.status_code, 403)
+        self.alice.refresh_from_db()
+        self.assertTrue(self.alice.is_active)
+
+    def test_staff_can_suspend_and_unsuspend(self):
+        self.client.force_login(self.staff)
+
+        self.client.post(reverse("suspend-user", args=["alice"]))
+        self.alice.refresh_from_db()
+        self.assertFalse(self.alice.is_active)
+
+        self.client.post(reverse("unsuspend-user", args=["alice"]))
+        self.alice.refresh_from_db()
+        self.assertTrue(self.alice.is_active)
+
+    def test_staff_cannot_suspend_self(self):
+        self.client.force_login(self.staff)
+        self.client.post(reverse("suspend-user", args=["staff"]))
+        self.staff.refresh_from_db()
+        self.assertTrue(self.staff.is_active)
+
+    def test_suspended_user_cannot_log_in(self):
+        self.alice.is_active = False
+        self.alice.save(update_fields=["is_active"])
+
+        response = self.client.post(
+            reverse("login"), {"username": "alice", "password": "correct-horse-battery-staple"}
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(response.wsgi_request.user.is_authenticated)
+
+    def test_suspending_logs_out_an_already_authenticated_session_on_its_next_request(self):
+        # ModelBackend.get_user() re-checks is_active on every request (not just at
+        # login), so an existing session is treated as logged-out immediately -
+        # no session-invalidation middleware needed.
+        self.client.force_login(self.alice)
+
+        self.alice.is_active = False
+        self.alice.save(update_fields=["is_active"])
+
+        response = self.client.get(reverse("profile", args=["alice"]))
+        self.assertFalse(response.wsgi_request.user.is_authenticated)
+
+    def test_staff_sees_suspend_button_on_others_profiles(self):
+        self.client.force_login(self.staff)
+        response = self.client.get(reverse("profile", args=["alice"]))
+        self.assertContains(response, "Suspend")
+
+    def test_staff_sees_unsuspend_button_for_a_suspended_user(self):
+        self.alice.is_active = False
+        self.alice.save(update_fields=["is_active"])
+        self.client.force_login(self.staff)
+        response = self.client.get(reverse("profile", args=["alice"]))
+        self.assertContains(response, "Unsuspend")
+
+    def test_non_staff_does_not_see_suspend_button(self):
+        self.client.force_login(self.bob)
+        response = self.client.get(reverse("profile", args=["alice"]))
+        self.assertNotContains(response, "Suspend")
+
+    def test_non_staff_does_not_see_moderation_nav_link(self):
+        self.client.force_login(self.bob)
+        response = self.client.get(reverse("feed"))
+        self.assertNotContains(response, reverse("moderation-queue"))
+
+    def test_staff_sees_moderation_nav_link(self):
+        self.client.force_login(self.staff)
+        response = self.client.get(reverse("feed"))
+        self.assertContains(response, reverse("moderation-queue"))
+
+
 class MuteBlockProfilePageTests(TestCase):
     def setUp(self):
         self.alice = User.objects.create_user(username="alice", password="correct-horse-battery-staple")

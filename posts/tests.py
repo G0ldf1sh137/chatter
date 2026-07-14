@@ -766,6 +766,106 @@ class ReportTests(TestCase):
         self.assertFalse(Report.objects.exists())
 
 
+class ModerationDashboardTests(TestCase):
+    def setUp(self):
+        self.staff = make_user("staff")
+        self.staff.is_staff = True
+        self.staff.save()
+        self.alice = make_user("alice")
+        self.bob = make_user("bob")
+        self.post = Post.objects.create(author=self.alice, body="a post")
+        self.comment = Comment.objects.create(author=self.alice, post=self.post, body="a comment")
+
+    def test_anonymous_gets_redirected_from_queue(self):
+        response = self.client.get(reverse("moderation-queue"))
+        self.assertEqual(response.status_code, 302)
+        self.assertIn(reverse("login"), response.url)
+
+    def test_non_staff_gets_404_from_queue(self):
+        self.client.force_login(self.bob)
+        response = self.client.get(reverse("moderation-queue"))
+        self.assertEqual(response.status_code, 403)
+
+    def test_non_staff_cannot_remove_or_dismiss(self):
+        report = Report.objects.create(reporter=self.bob, post=self.post, comment=None, reason="spam")
+        self.client.force_login(self.bob)
+
+        self.client.post(reverse("moderation-report-remove", args=[report.pk]))
+        self.client.post(reverse("moderation-report-dismiss", args=[report.pk]))
+
+        report.refresh_from_db()
+        self.assertEqual(report.status, Report.Status.OPEN)
+        self.post.refresh_from_db()
+        self.assertFalse(self.post.deleted)
+
+    def test_queue_lists_only_open_reports(self):
+        open_report = Report.objects.create(reporter=self.bob, post=self.post, comment=None, reason="spam")
+        Report.objects.create(
+            reporter=self.bob, post=self.post, comment=self.comment, reason="rude", status=Report.Status.RESOLVED
+        )
+        self.client.force_login(self.staff)
+
+        response = self.client.get(reverse("moderation-queue"))
+
+        self.assertEqual(list(response.context["reports"]), [open_report])
+
+    def test_remove_post_report_soft_deletes_post_and_resolves_its_reports(self):
+        report = Report.objects.create(reporter=self.bob, post=self.post, comment=None, reason="spam")
+        comment_report = Report.objects.create(reporter=self.bob, post=self.post, comment=self.comment, reason="rude")
+        self.client.force_login(self.staff)
+
+        self.client.post(reverse("moderation-report-remove", args=[report.pk]))
+
+        self.post.refresh_from_db()
+        self.assertTrue(self.post.deleted)
+        self.assertEqual(self.post.body, "")
+        report.refresh_from_db()
+        self.assertEqual(report.status, Report.Status.RESOLVED)
+        # A report on a *comment* under this post shares post_id but not comment_id -
+        # removing the post itself shouldn't silently resolve unrelated comment reports.
+        comment_report.refresh_from_db()
+        self.assertEqual(comment_report.status, Report.Status.OPEN)
+
+    def test_remove_comment_report_soft_deletes_comment_and_resolves_its_reports_only(self):
+        post_report = Report.objects.create(reporter=self.bob, post=self.post, comment=None, reason="spam")
+        report = Report.objects.create(reporter=self.bob, post=self.post, comment=self.comment, reason="rude")
+        self.client.force_login(self.staff)
+
+        self.client.post(reverse("moderation-report-remove", args=[report.pk]))
+
+        self.comment.refresh_from_db()
+        self.assertTrue(self.comment.deleted)
+        self.assertEqual(self.comment.body, "")
+        report.refresh_from_db()
+        self.assertEqual(report.status, Report.Status.RESOLVED)
+        self.post.refresh_from_db()
+        self.assertFalse(self.post.deleted)
+        post_report.refresh_from_db()
+        self.assertEqual(post_report.status, Report.Status.OPEN)
+
+    def test_remove_bulk_resolves_duplicate_reports_on_same_target(self):
+        report = Report.objects.create(reporter=self.bob, post=self.post, comment=None, reason="spam")
+        carol = make_user("carol")
+        duplicate = Report.objects.create(reporter=carol, post=self.post, comment=None, reason="also spam")
+        self.client.force_login(self.staff)
+
+        self.client.post(reverse("moderation-report-remove", args=[report.pk]))
+
+        duplicate.refresh_from_db()
+        self.assertEqual(duplicate.status, Report.Status.RESOLVED)
+
+    def test_dismiss_resolves_report_without_deleting_content(self):
+        report = Report.objects.create(reporter=self.bob, post=self.post, comment=None, reason="spam")
+        self.client.force_login(self.staff)
+
+        self.client.post(reverse("moderation-report-dismiss", args=[report.pk]))
+
+        report.refresh_from_db()
+        self.assertEqual(report.status, Report.Status.RESOLVED)
+        self.post.refresh_from_db()
+        self.assertFalse(self.post.deleted)
+
+
 class PostImageTests(TestCase):
     def setUp(self):
         self.author = make_user("alice")

@@ -180,6 +180,11 @@ def redirect_back(request, fallback):
     return redirect(fallback)
 
 
+class StaffRequiredMixin(LoginRequiredMixin, UserPassesTestMixin):
+    def test_func(self):
+        return self.request.user.is_staff
+
+
 # Initial page size for both the feed and a post's top-level comments -
 # infinite_scroll.js requests further pages as the user scrolls near the
 # bottom, rather than loading everything (or a manual pager) upfront.
@@ -875,6 +880,51 @@ class CommentReportView(LoginRequiredMixin, View):
                 defaults={"reason": request.POST.get("reason", "").strip()},
             )
         return redirect_back(request, f"{comment.post.get_absolute_url()}#comment-{comment.pk}")
+
+
+class ModerationQueueView(StaffRequiredMixin, ListView):
+    model = Report
+    template_name = "posts/moderation_queue.html"
+    context_object_name = "reports"
+    paginate_by = POSTS_PAGE_SIZE
+
+    def get_queryset(self):
+        return Report.objects.filter(status=Report.Status.OPEN).select_related(
+            "reporter", "post", "post__author", "comment", "comment__author"
+        )
+
+
+class ModerationReportRemoveView(StaffRequiredMixin, View):
+    def post(self, request, pk):
+        report = get_object_or_404(Report, pk=pk)
+        if report.comment_id:
+            comment = report.comment
+            comment.body = ""
+            comment.deleted = True
+            comment.save(update_fields=["body", "deleted"])
+            comment.revisions.all().delete()
+        else:
+            post = report.post
+            post.body = ""
+            post.deleted = True
+            if post.image:
+                post.image.delete(save=False)
+            post.save(update_fields=["body", "deleted", "image"])
+            Profile.objects.filter(pinned_post=post).update(pinned_post=None)
+            post.revisions.all().delete()
+        Report.objects.filter(post_id=report.post_id, comment_id=report.comment_id).update(
+            status=Report.Status.RESOLVED
+        )
+        return redirect("moderation-queue")
+
+
+class ModerationReportDismissView(StaffRequiredMixin, View):
+    def post(self, request, pk):
+        report = get_object_or_404(Report, pk=pk)
+        Report.objects.filter(post_id=report.post_id, comment_id=report.comment_id).update(
+            status=Report.Status.RESOLVED
+        )
+        return redirect("moderation-queue")
 
 
 class PostVoteView(LoginRequiredMixin, View):

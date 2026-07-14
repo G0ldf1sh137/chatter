@@ -27,4 +27,6 @@ urlpatterns = [
     path("users/<str:username>/unmute/", views.UnmuteView.as_view(), name="unmute"),
     path("users/<str:username>/block/", views.BlockView.as_view(), name="block"),
     path("users/<str:username>/unblock/", views.UnblockView.as_view(), name="unblock"),
+    path("users/<str:username>/suspend/", views.SuspendUserView.as_view(), name="suspend-user"),
+    path("users/<str:username>/unsuspend/", views.UnsuspendUserView.as_view(), name="unsuspend-user"),
 ]

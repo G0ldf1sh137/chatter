@@ -96,6 +96,19 @@
                             <button type="submit" class="mt-0 rounded-full border border-border bg-transparent px-4 py-1.5 text-sm text-downvote transition-colors hover:bg-surface-hover">Block</button>
                         </form>
                     {% endif %}
+                    {% if viewer_is_staff %}
+                        {% if profile_user.is_active %}
+                            <form method="post" action="{% url 'suspend-user' profile_user.username %}" class="inline">
+                                {% csrf_token %}
+                                <button type="submit" class="mt-0 rounded-full border border-border bg-transparent px-4 py-1.5 text-sm text-downvote transition-colors hover:bg-surface-hover">Suspend</button>
+                            </form>
+                        {% else %}
+                            <form method="post" action="{% url 'unsuspend-user' profile_user.username %}" class="inline">
+                                {% csrf_token %}
+                                <button type="submit" class="mt-0 rounded-full border border-border bg-transparent px-4 py-1.5 text-sm text-fg transition-colors hover:bg-surface-hover">Unsuspend</button>
+                            </form>
+                        {% endif %}
+                    {% endif %}
                 </div>
             {% endif %}
         </div>

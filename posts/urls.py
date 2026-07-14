@@ -73,4 +73,15 @@ urlpatterns = [
         views.NotificationDismissView.as_view(),
         name="notification-dismiss",
     ),
+    path("moderation/", views.ModerationQueueView.as_view(), name="moderation-queue"),
+    path(
+        "moderation/reports/<uuid:pk>/remove/",
+        views.ModerationReportRemoveView.as_view(),
+        name="moderation-report-remove",
+    ),
+    path(
+        "moderation/reports/<uuid:pk>/dismiss/",
+        views.ModerationReportDismissView.as_view(),
+        name="moderation-report-dismiss",
+    ),
 ]

@@ -14,7 +14,7 @@ from django.views.generic import CreateView, DetailView, FormView, ListView, Tem
 from games import stats as game_stats
 from games.models import Match
 from posts.models import CommentVote, Post, PostVote, Repost
-from posts.views import annotate_reposted, annotate_saved, annotate_votes
+from posts.views import StaffRequiredMixin, annotate_reposted, annotate_saved, annotate_votes
 
 from .emails import send_verification_email
 from .forms import ProfileForm, RegistrationForm, ResendVerificationForm, UserProfileForm
@@ -151,6 +151,7 @@ class ProfileView(DetailView):
             context["is_muted"] = Mute.objects.filter(muter=self.request.user, muted=profile_user).exists()
             context["is_blocked"] = Block.objects.filter(blocker=self.request.user, blocked=profile_user).exists()
             context["is_blocked_either_way"] = is_blocked_either_way(self.request.user, profile_user)
+            context["viewer_is_staff"] = self.request.user.is_staff
 
         ttt_wins, ttt_losses, ttt_draws = game_stats.match_record(profile_user, Match.Game.TIC_TAC_TOE)
         context["ttt_record"] = {"wins": ttt_wins, "losses": ttt_losses, "draws": ttt_draws}
@@ -315,6 +316,23 @@ class UnblockView(LoginRequiredMixin, View):
     def post(self, request, username):
         target = get_object_or_404(User, username=username)
         Block.objects.filter(blocker=request.user, blocked=target).delete()
+        return redirect("profile", username=username)
+
+
+class SuspendUserView(StaffRequiredMixin, View):
+    def post(self, request, username):
+        target = get_object_or_404(User, username=username)
+        if target != request.user:
+            target.is_active = False
+            target.save(update_fields=["is_active"])
+        return redirect("profile", username=username)
+
+
+class UnsuspendUserView(StaffRequiredMixin, View):
+    def post(self, request, username):
+        target = get_object_or_404(User, username=username)
+        target.is_active = True
+        target.save(update_fields=["is_active"])
         return redirect("profile", username=username)
 
 
