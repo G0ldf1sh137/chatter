@@ -97,6 +97,34 @@ class CommentVote(Vote):
         return f"{self.user} {self.get_value_display()}d Comment({self.comment_id})"
 
 
+class Reaction(models.Model):
+    class Emoji(models.TextChoices):
+        THUMBSUP = "thumbsup", "👍"
+        HEART = "heart", "❤️"
+        LAUGH = "laugh", "😂"
+        PARTY = "party", "🎉"
+        WOW = "wow", "😮"
+        SAD = "sad", "😢"
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    emoji = models.CharField(max_length=10, choices=Emoji.choices)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        abstract = True
+
+
+class PostReaction(Reaction):
+    post = models.ForeignKey(Post, on_delete=models.CASCADE, related_name="reactions")
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=["user", "post"], name="unique_post_reaction")]
+
+    def __str__(self):
+        return f"{self.user} reacted {self.emoji} to Post({self.post_id})"
+
+
 class Conversation(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     # Always stored with user1_id < user2_id (see views.get_or_create_conversation)

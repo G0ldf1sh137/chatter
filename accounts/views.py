@@ -93,7 +93,7 @@ class ProfileView(DetailView):
         context = super().get_context_data(**kwargs)
         profile_user = context["profile_user"]
         context["profile"], _ = Profile.objects.get_or_create(user=profile_user)
-        posts = annotate_votes(profile_user.posts.all(), PostVote, "post", self.request.user)
+        posts = annotate_votes(profile_user.posts.all().prefetch_related("reactions"), PostVote, "post", self.request.user)
         posts = annotate_saved(posts, self.request.user)
         context["posts"] = posts[:PROFILE_ITEM_LIMIT]
         context["post_count"] = profile_user.posts.count()

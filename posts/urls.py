@@ -13,6 +13,7 @@ urlpatterns = [
     path("posts/<uuid:pk>/delete/", views.PostDeleteView.as_view(), name="post-delete"),
     path("posts/<uuid:pk>/save/", views.PostSaveView.as_view(), name="post-save"),
     path("posts/<uuid:pk>/unsave/", views.PostUnsaveView.as_view(), name="post-unsave"),
+    path("posts/<uuid:pk>/react/", views.PostReactionView.as_view(), name="post-react"),
     path("saved/", views.SavedPostsView.as_view(), name="saved-posts"),
     path("tags/", views.TagIndexView.as_view(), name="tag-index"),
     path("tags/search/", views.TagSearchView.as_view(), name="tag-search"),

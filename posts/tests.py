@@ -2,7 +2,7 @@ import shutil
 import tempfile
 from datetime import timedelta
 
-from django.contrib.auth.models import User
+from django.contrib.auth.models import AnonymousUser, User
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.db import IntegrityError
 from django.test import TestCase, override_settings
@@ -14,10 +14,24 @@ from accounts.models import Block, Follow, Mute
 from .hashtags import extract_hashtag_names
 from .markdown import render_markdown
 from .mentions import extract_mentioned_users
-from .models import Comment, CommentVote, Conversation, Message, Notification, Post, PostVote, Report, SavedPost, Tag
+from .models import (
+    Comment,
+    CommentVote,
+    Conversation,
+    Message,
+    Notification,
+    Post,
+    PostReaction,
+    PostVote,
+    Report,
+    SavedPost,
+    Tag,
+)
+from .templatetags.post_extras import group_reactions
 from .views import (
     build_comment_tree,
     get_or_create_conversation,
+    toggle_reaction,
     toggle_vote,
     unread_message_count,
     unread_notification_count,
@@ -928,6 +942,114 @@ class VoteTests(TestCase):
         self.post.body = "edited"
         self.post.save()
         self.assertEqual(PostVote.objects.filter(user=self.author, post=self.post).count(), 1)
+
+
+class ToggleReactionTests(TestCase):
+    def setUp(self):
+        self.author = make_user("alice")
+        self.reactor = make_user("bob")
+        self.post = Post.objects.create(author=self.author, body="hello")
+
+    def test_reacting_creates_a_row(self):
+        toggle_reaction(PostReaction, {"post": self.post}, self.reactor, PostReaction.Emoji.THUMBSUP)
+        reaction = PostReaction.objects.get(user=self.reactor, post=self.post)
+        self.assertEqual(reaction.emoji, PostReaction.Emoji.THUMBSUP)
+
+    def test_reacting_with_the_same_emoji_again_removes_it(self):
+        toggle_reaction(PostReaction, {"post": self.post}, self.reactor, PostReaction.Emoji.THUMBSUP)
+        toggle_reaction(PostReaction, {"post": self.post}, self.reactor, PostReaction.Emoji.THUMBSUP)
+        self.assertFalse(PostReaction.objects.filter(user=self.reactor, post=self.post).exists())
+
+    def test_reacting_with_a_different_emoji_switches_it_in_place(self):
+        toggle_reaction(PostReaction, {"post": self.post}, self.reactor, PostReaction.Emoji.THUMBSUP)
+        toggle_reaction(PostReaction, {"post": self.post}, self.reactor, PostReaction.Emoji.HEART)
+        self.assertEqual(PostReaction.objects.filter(user=self.reactor, post=self.post).count(), 1)
+        reaction = PostReaction.objects.get(user=self.reactor, post=self.post)
+        self.assertEqual(reaction.emoji, PostReaction.Emoji.HEART)
+
+
+class PostReactionViewTests(TestCase):
+    def setUp(self):
+        self.author = make_user("alice")
+        self.reactor = make_user("bob")
+        self.post = Post.objects.create(author=self.author, body="hello")
+
+    def test_authenticated_user_can_react(self):
+        self.client.force_login(self.reactor)
+        self.client.post(reverse("post-react", args=[self.post.pk]), {"emoji": "thumbsup"})
+        self.assertTrue(PostReaction.objects.filter(user=self.reactor, post=self.post, emoji="thumbsup").exists())
+
+    def test_invalid_emoji_is_ignored(self):
+        self.client.force_login(self.reactor)
+        self.client.post(reverse("post-react", args=[self.post.pk]), {"emoji": "not-a-real-emoji"})
+        self.assertFalse(PostReaction.objects.filter(user=self.reactor, post=self.post).exists())
+
+    def test_anonymous_redirected_to_login(self):
+        response = self.client.post(reverse("post-react", args=[self.post.pk]), {"emoji": "thumbsup"})
+        self.assertEqual(response.status_code, 302)
+        self.assertIn(reverse("login"), response.url)
+        self.assertFalse(PostReaction.objects.exists())
+
+    def test_author_can_react_to_own_post(self):
+        self.client.force_login(self.author)
+        self.client.post(reverse("post-react", args=[self.post.pk]), {"emoji": "party"})
+        self.assertTrue(PostReaction.objects.filter(user=self.author, post=self.post, emoji="party").exists())
+
+
+class GroupReactionsFilterTests(TestCase):
+    def setUp(self):
+        self.author = make_user("alice")
+        self.viewer = make_user("bob")
+        self.other = make_user("carol")
+        self.post = Post.objects.create(author=self.author, body="hello")
+
+    def test_counts_are_correct_per_emoji(self):
+        PostReaction.objects.create(user=self.viewer, post=self.post, emoji="thumbsup")
+        PostReaction.objects.create(user=self.other, post=self.post, emoji="thumbsup")
+        result = group_reactions(self.post.reactions.all(), self.viewer)
+        thumbsup = next(r for r in result if r["value"] == "thumbsup")
+        self.assertEqual(thumbsup["count"], 2)
+
+    def test_mine_is_set_only_for_the_viewers_own_reaction(self):
+        PostReaction.objects.create(user=self.viewer, post=self.post, emoji="heart")
+        PostReaction.objects.create(user=self.other, post=self.post, emoji="thumbsup")
+        result = group_reactions(self.post.reactions.all(), self.viewer)
+        mine_flags = {r["value"]: r["mine"] for r in result}
+        self.assertTrue(mine_flags["heart"])
+        self.assertFalse(mine_flags["thumbsup"])
+
+    def test_anonymous_viewer_never_gets_mine_true(self):
+        PostReaction.objects.create(user=self.other, post=self.post, emoji="thumbsup")
+        anonymous = AnonymousUser()
+        result = group_reactions(self.post.reactions.all(), anonymous)
+        self.assertFalse(any(r["mine"] for r in result))
+
+    def test_returns_all_six_emoji_even_with_zero_count(self):
+        result = group_reactions(self.post.reactions.all(), self.viewer)
+        self.assertEqual(len(result), 6)
+        self.assertTrue(all(r["count"] == 0 for r in result))
+
+
+class PostReactionRenderingTests(TestCase):
+    def setUp(self):
+        self.author = make_user("alice")
+        self.reactor = make_user("bob")
+        self.post = Post.objects.create(author=self.author, body="hello")
+        PostReaction.objects.create(user=self.reactor, post=self.post, emoji="thumbsup")
+
+    def test_feed_shows_reaction_count_and_highlights_mine(self):
+        self.client.force_login(self.reactor)
+        response = self.client.get(reverse("feed"))
+        self.assertContains(response, "👍 1")
+
+    def test_post_detail_shows_reaction_count(self):
+        self.client.force_login(self.author)
+        response = self.client.get(reverse("post-detail", args=[self.post.pk]))
+        self.assertContains(response, "👍 1")
+
+    def test_anonymous_visitor_sees_no_reaction_buttons(self):
+        response = self.client.get(reverse("post-detail", args=[self.post.pk]))
+        self.assertNotContains(response, "post-react")
 
 
 class MarkdownRenderingTests(TestCase):

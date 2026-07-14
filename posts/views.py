@@ -18,7 +18,19 @@ from accounts.models import Block, Mute, is_blocked_either_way, is_muted_or_bloc
 from .forms import CommentEditForm, CommentForm, MessageForm, PostForm
 from .hashtags import sync_post_tags
 from .mentions import extract_mentioned_users
-from .models import Comment, CommentVote, Conversation, Message, Notification, Post, PostVote, Report, SavedPost, Tag
+from .models import (
+    Comment,
+    CommentVote,
+    Conversation,
+    Message,
+    Notification,
+    Post,
+    PostReaction,
+    PostVote,
+    Report,
+    SavedPost,
+    Tag,
+)
 from .ranking import rank_posts
 
 
@@ -100,6 +112,17 @@ def toggle_vote(vote_model, lookup, user, value):
         return "flipped"
 
 
+def toggle_reaction(reaction_model, lookup, user, emoji):
+    existing = reaction_model.objects.filter(user=user, **lookup).first()
+    if existing is None:
+        reaction_model.objects.create(user=user, emoji=emoji, **lookup)
+    elif existing.emoji == emoji:
+        existing.delete()
+    else:
+        existing.emoji = emoji
+        existing.save(update_fields=["emoji"])
+
+
 def redirect_back(request, fallback):
     referer = request.META.get("HTTP_REFERER")
     if referer and url_has_allowed_host_and_scheme(referer, allowed_hosts={request.get_host()}):
@@ -156,7 +179,7 @@ class FeedView(ListView):
         return sort if sort in SORT_CHOICES else SORT_DEFAULT
 
     def get_base_queryset(self):
-        queryset = Post.objects.select_related("author", "author__profile")
+        queryset = Post.objects.select_related("author", "author__profile").prefetch_related("reactions")
         hidden = hidden_author_ids(self.request.user)
         if hidden:
             queryset = queryset.exclude(author_id__in=hidden)
@@ -215,7 +238,7 @@ class SearchView(TemplateView):
 
         posts = Post.objects.filter(body__icontains=query, deleted=False).select_related(
             "author", "author__profile"
-        )
+        ).prefetch_related("reactions")
         comments = Comment.objects.filter(body__icontains=query, deleted=False).select_related(
             "author", "author__profile", "post"
         )
@@ -261,7 +284,7 @@ class PostDetailView(DetailView):
     context_object_name = "post"
 
     def get_queryset(self):
-        queryset = Post.objects.select_related("author", "author__profile")
+        queryset = Post.objects.select_related("author", "author__profile").prefetch_related("reactions")
         queryset = annotate_votes(queryset, PostVote, "post", self.request.user)
         return annotate_saved(queryset, self.request.user)
 
@@ -363,7 +386,7 @@ class SavedPostsView(LoginRequiredMixin, ListView):
     def get_queryset(self):
         queryset = Post.objects.filter(saved_by__user=self.request.user).select_related(
             "author", "author__profile"
-        )
+        ).prefetch_related("reactions")
         queryset = queryset.order_by("-saved_by__created_at")
         queryset = annotate_votes(queryset, PostVote, "post", self.request.user)
         return annotate_saved(queryset, self.request.user)
@@ -420,7 +443,7 @@ class TagDetailView(ListView):
         self.tag_name = self.kwargs["name"].lower()
         queryset = Post.objects.filter(tags__name=self.tag_name, deleted=False).select_related(
             "author", "author__profile"
-        )
+        ).prefetch_related("reactions")
         hidden = hidden_author_ids(self.request.user)
         if hidden:
             queryset = queryset.exclude(author_id__in=hidden)
@@ -524,6 +547,15 @@ class PostVoteView(LoginRequiredMixin, View):
         action = toggle_vote(PostVote, {"post": post}, request.user, self.value)
         if self.value == PostVote.UP and action in ("created", "flipped"):
             create_notification(Notification.Kind.UPVOTE, post.author, request.user, post)
+        return redirect_back(request, post.get_absolute_url())
+
+
+class PostReactionView(LoginRequiredMixin, View):
+    def post(self, request, pk):
+        post = get_object_or_404(Post, pk=pk)
+        emoji = request.POST.get("emoji")
+        if emoji in PostReaction.Emoji.values:
+            toggle_reaction(PostReaction, {"post": post}, request.user, emoji)
         return redirect_back(request, post.get_absolute_url())
 
 

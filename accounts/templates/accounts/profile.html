@@ -130,6 +130,7 @@
                         {% if post.image %}
                             <img src="{{ post.image.url }}" alt="" class="mt-2 max-h-64 w-full rounded-xl object-cover">
                         {% endif %}
+                        {% include "_post_reactions.html" %}
                     </div>
                 </div>
             </article>

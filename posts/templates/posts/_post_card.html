@@ -19,6 +19,9 @@
                     {% endif %}
                 {% endif %}
             </a>
+            {% if not post.deleted %}
+                {% include "_post_reactions.html" %}
+            {% endif %}
         </div>
     </div>
 </article>
