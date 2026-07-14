@@ -1,10 +1,18 @@
 {% load post_extras user_extras %}
 <div class="p-4 sm:p-5" id="comment-{{ comment.pk }}">
+    {% if comment.revisions.exists %}
+        <input type="checkbox" id="comment-history-toggle-{{ comment.pk }}" class="peer/comment-history hidden">
+    {% endif %}
     <div class="mb-1.5 flex flex-wrap items-center gap-1.5 text-sm text-muted">
         {% include "_avatar.html" with avatar_user=comment.author %}
         <a href="{% url 'profile' comment.author.username %}" class="font-medium text-fg no-underline hover:text-accent">{{ comment.author.username|at_username }}</a>
         <span>&middot; {{ comment.created_at }}</span>
-        {% if comment.edited %}<span class="italic">&middot; edited</span>{% endif %}
+        {% if comment.edited %}
+            <span class="italic">&middot; edited</span>
+            {% if comment.revisions.exists %}
+                <label for="comment-history-toggle-{{ comment.pk }}" class="cursor-pointer text-accent hover:underline">(history)</label>
+            {% endif %}
+        {% endif %}
         {% include "_comment_vote.html" %}
     </div>
     {% if comment.deleted %}
@@ -12,6 +20,17 @@
     {% else %}
         <div class="prose prose-sm max-w-none dark:prose-invert">{{ comment.body|markdown }}</div>
         {% include "_comment_reactions.html" %}
+    {% endif %}
+    {% if comment.revisions.exists %}
+        <div class="mt-2 hidden space-y-2 rounded-lg border border-border p-2 peer-checked/comment-history:block">
+            <p class="text-xs font-medium text-muted">Edit history</p>
+            {% for revision in comment.revisions.all %}
+                <div class="border-t border-border pt-1.5 first:border-t-0 first:pt-0">
+                    <p class="text-xs text-muted">{{ revision.created_at }}</p>
+                    <div class="prose prose-sm max-w-none dark:prose-invert">{{ revision.body|markdown }}</div>
+                </div>
+            {% endfor %}
+        </div>
     {% endif %}
     {% if user.is_authenticated %}
         <input type="checkbox" id="reply-toggle-{{ comment.pk }}" class="peer/reply hidden">

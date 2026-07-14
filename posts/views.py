@@ -23,6 +23,7 @@ from .mentions import extract_mentioned_users
 from .models import (
     Comment,
     CommentReaction,
+    CommentRevision,
     CommentVote,
     Conversation,
     Message,
@@ -471,7 +472,9 @@ class PostDetailView(DetailView):
         return sort if sort in SORT_CHOICES else SORT_DEFAULT
 
     def get_comment_tree(self):
-        comments = self.object.comments.select_related("author", "author__profile").prefetch_related("reactions")
+        comments = self.object.comments.select_related("author", "author__profile").prefetch_related(
+            "reactions", "revisions"
+        )
         comments = annotate_votes(comments, CommentVote, "comment", self.request.user)
         return build_comment_tree(list(comments), sort=self.get_sort())
 
@@ -602,6 +605,7 @@ class PostDeleteView(LoginRequiredMixin, UserPassesTestMixin, View):
             post.image.delete(save=False)
         post.save(update_fields=["body", "deleted", "image"])
         Profile.objects.filter(pinned_post=post).update(pinned_post=None)
+        post.revisions.all().delete()
         return redirect(post.get_absolute_url())
 
 
@@ -820,10 +824,12 @@ class CommentEditView(LoginRequiredMixin, View):
         if comment.author_id != request.user.id or comment.deleted:
             raise Http404
 
+        original_body = comment.body
         form = CommentEditForm(request.POST, instance=comment)
         if form.is_valid():
             if form.has_changed():
                 form.instance.edited = True
+                CommentRevision.objects.create(comment=comment, body=original_body)
             form.save()
         return redirect(f"{comment.post.get_absolute_url()}#comment-{comment.pk}")
 
@@ -836,6 +842,7 @@ class CommentDeleteView(LoginRequiredMixin, View):
         comment.body = ""
         comment.deleted = True
         comment.save(update_fields=["body", "deleted"])
+        comment.revisions.all().delete()
         return redirect(f"{comment.post.get_absolute_url()}#comment-{comment.pk}")
 
 

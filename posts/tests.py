@@ -18,6 +18,7 @@ from .mentions import extract_mentioned_users
 from .models import (
     Comment,
     CommentReaction,
+    CommentRevision,
     CommentVote,
     Conversation,
     Message,
@@ -341,6 +342,51 @@ class PostRevisionTests(TestCase):
         self.assertContains(response, "<code>original</code>")
 
 
+class CommentRevisionTests(TestCase):
+    def setUp(self):
+        self.author = make_user("alice")
+        self.post = Post.objects.create(author=self.author, body="a post")
+        self.comment = Comment.objects.create(author=self.author, post=self.post, body="original")
+        self.client.force_login(self.author)
+
+    def test_editing_body_creates_a_revision_with_the_old_text(self):
+        self.client.post(reverse("comment-edit", args=[self.comment.pk]), {"body": "updated"})
+        revision = CommentRevision.objects.get(comment=self.comment)
+        self.assertEqual(revision.body, "original")
+        self.comment.refresh_from_db()
+        self.assertEqual(self.comment.body, "updated")
+
+    def test_second_edit_creates_a_second_revision_newest_first(self):
+        self.client.post(reverse("comment-edit", args=[self.comment.pk]), {"body": "second version"})
+        self.client.post(reverse("comment-edit", args=[self.comment.pk]), {"body": "third version"})
+        bodies = list(CommentRevision.objects.filter(comment=self.comment).values_list("body", flat=True))
+        self.assertEqual(bodies, ["second version", "original"])
+
+    def test_history_toggle_only_renders_with_at_least_one_revision(self):
+        response = self.client.get(reverse("post-detail", args=[self.post.pk]))
+        self.assertNotContains(response, "(history)")
+
+        self.client.post(reverse("comment-edit", args=[self.comment.pk]), {"body": "updated"})
+        response = self.client.get(reverse("post-detail", args=[self.post.pk]))
+        self.assertContains(response, "(history)")
+
+    def test_revision_body_renders_as_markdown(self):
+        self.client.post(reverse("comment-edit", args=[self.comment.pk]), {"body": "`original`"})
+        response = self.client.get(reverse("post-detail", args=[self.post.pk]))
+        self.assertContains(response, "<code>original</code>")
+
+    def test_editing_a_reply_creates_history_independent_of_its_parent(self):
+        reply = Comment.objects.create(author=self.author, post=self.post, body="reply original", parent=self.comment)
+        self.client.post(reverse("comment-edit", args=[reply.pk]), {"body": "reply updated"})
+
+        self.assertFalse(CommentRevision.objects.filter(comment=self.comment).exists())
+        reply_revision = CommentRevision.objects.get(comment=reply)
+        self.assertEqual(reply_revision.body, "reply original")
+
+        response = self.client.get(reverse("post-detail", args=[self.post.pk]))
+        self.assertContains(response, "reply original")
+
+
 class MuteBlockFeedTests(TestCase):
     def setUp(self):
         self.alice = make_user("alice")
@@ -455,6 +501,15 @@ class PostDeleteTests(TestCase):
 
         profile.refresh_from_db()
         self.assertIsNone(profile.pinned_post)
+
+    def test_deleting_a_post_clears_its_revision_history(self):
+        self.client.force_login(self.author)
+        self.client.post(reverse("post-edit", args=[self.post.pk]), {"body": "edited once"})
+        self.assertTrue(PostRevision.objects.filter(post=self.post).exists())
+
+        self.client.post(reverse("post-delete", args=[self.post.pk]))
+
+        self.assertFalse(PostRevision.objects.filter(post=self.post).exists())
 
 
 class PostPinViewTests(TestCase):
@@ -975,6 +1030,15 @@ class CommentDeleteTests(TestCase):
 
         self.assertTrue(Comment.objects.filter(pk=reply.pk).exists())
         self.assertContains(response, "a reply")
+
+    def test_deleting_a_comment_clears_its_revision_history(self):
+        self.client.force_login(self.author)
+        self.client.post(reverse("comment-edit", args=[self.comment.pk]), {"body": "edited once"})
+        self.assertTrue(CommentRevision.objects.filter(comment=self.comment).exists())
+
+        self.client.post(reverse("comment-delete", args=[self.comment.pk]))
+
+        self.assertFalse(CommentRevision.objects.filter(comment=self.comment).exists())
 
 
 class CommentPaginationTests(TestCase):

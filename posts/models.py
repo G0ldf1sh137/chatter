@@ -77,6 +77,19 @@ class Comment(models.Model):
         return f"Comment({self.pk}) by {self.author} on Post({self.post_id})"
 
 
+class CommentRevision(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    comment = models.ForeignKey(Comment, on_delete=models.CASCADE, related_name="revisions")
+    body = models.TextField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"Revision of Comment({self.comment_id}) at {self.created_at}"
+
+
 class Vote(models.Model):
     UP = 1
     DOWN = -1
